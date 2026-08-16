@@ -627,12 +627,48 @@ export function createLiveController({ refreshManifest, appendSegment, targetLat
         heading: "Timed Text",
         body: [
           "Subtitles are media too: they have language, timing, payload, and rendering rules. Some streams carry text in separate files, while others mux subtitles into fragmented media.",
-          "WebVTT is browser-friendly for sidecar captions. TTML and IMSC are common in broadcast workflows and often need conversion or custom rendering in simple web players."
+          "A subtitle renderer does the same high-level job as an audio/video renderer: it watches media time, finds active cues, and paints the right output for that moment."
         ],
         points: [
-          "Sidecar text is easy to add with a track element or TextTrack API.",
-          "Segmented subtitles follow the same manifest timing ideas as audio and video.",
-          "Accessibility depends on correct language, labels, and caption kind."
+          "Sidecar text is stored outside the audio/video container.",
+          "Embedded or segmented subtitles can be carried through the same manifest and segment model as media.",
+          "Accessibility depends on correct language, labels, timing, and caption kind."
+        ]
+      },
+      {
+        heading: "WebVTT",
+        body: [
+          "WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a WEBVTT header, and then lists cues with start time, end time, and cue text.",
+          "The browser can fetch, parse, synchronize, and render WebVTT for you through a track element or the TextTrack API. That makes it the right first practical subtitle step."
+        ],
+        points: [
+          "WebVTT is easy to hand-author and inspect.",
+          "It supports cue settings for placement and alignment, but browser styling is intentionally constrained.",
+          "It works well for sidecar subtitles and captions when you do not need complex layout."
+        ]
+      },
+      {
+        heading: "TTML",
+        body: [
+          "TTML, the Timed Text Markup Language, is XML-based and more expressive than WebVTT. It can describe regions, styles, timing, layout, nested spans, and richer broadcast-style subtitle behavior.",
+          "That expressiveness comes with cost. A simple browser player cannot hand TTML to a native track element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs."
+        ],
+        points: [
+          "TTML separates timing, styling, layout, and text content in XML.",
+          "It is useful when subtitles need precise placement, styling, or broadcast workflow compatibility.",
+          "A learning player should parse a small subset rather than trying to implement the whole specification."
+        ]
+      },
+      {
+        heading: "IMSC",
+        body: [
+          "IMSC is a constrained profile of TTML designed for interoperable subtitles and captions. It narrows the large TTML feature space into profiles that streaming, broadcast, and online services can implement more predictably.",
+          "For this tutorial, treat IMSC as TTML with rules. The practical lab will parse a small text-profile subset: timed paragraphs, basic regions, simple styling, and text content. That is enough to understand the renderer loop without pulling in IMSC.js."
+        ],
+        points: [
+          "IMSC documents are XML and commonly use TTML namespaces.",
+          "IMSC text profile focuses on subtitle text; image profile can carry pre-rendered subtitle images.",
+          "A custom renderer maps active timed elements onto absolutely positioned HTML over the video."
         ]
       }
     ],
@@ -648,6 +684,28 @@ Big Buck Bunny starts in a quiet field.
 
 00:00:05.500 --> 00:00:08.000
 Captions are synchronized to media time.`
+      },
+      {
+        title: "A Small IMSC Shape",
+        explain: "IMSC is XML. This subset has one region and two timed paragraphs that a small renderer can understand.",
+        code: `
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <head>
+    <layout>
+      <region xml:id="bottom" />
+    </layout>
+  </head>
+  <body>
+    <div>
+      <p begin="00:00:01.000" end="00:00:04.000" region="bottom">
+        Big Buck Bunny starts in a quiet field.
+      </p>
+      <p begin="00:00:05.500" end="00:00:08.000" region="bottom">
+        IMSC cues can carry richer layout information than WebVTT.
+      </p>
+    </div>
+  </body>
+</tt>`
       }
     ],
     demo: {
@@ -706,6 +764,149 @@ export function showSubtitle(video, language) {
       title: "Cue Switcher",
       mode: "timeline",
       text: "The media timeline keeps running while text tracks independently switch rendering mode."
+    }
+  },
+  {
+    slug: "imsc-practical",
+    title: "Render IMSC Subtitles",
+    kind: "Practical",
+    visual: "timeline",
+    summary: "Replace native WebVTT rendering with a small custom IMSC renderer layered over the video.",
+    target: "The tutorial player fetches a simple IMSC document, parses timed paragraphs, and paints active cues.",
+    checkpoint: "A viewer sees IMSC subtitle text rendered by your JavaScript instead of the browser TextTrack renderer.",
+    reference: "https://www.w3.org/TR/ttml-imsc1.2/",
+    sections: [
+      {
+        heading: "Render A Useful Subset",
+        body: [
+          "IMSC is large enough that a full implementation should use a dedicated renderer. This lab deliberately does not do that. It parses only the subset needed to understand the moving parts: paragraph timing, region assignment, text content, and a simple overlay.",
+          "The renderer listens to timeupdate and seeking events, checks which cues are active at video.currentTime, and updates an absolutely positioned layer above the video."
+        ],
+        points: [
+          "Use DOMParser to parse the XML document.",
+          "Convert begin and end attributes into seconds.",
+          "Render active p elements into an overlay instead of creating native TextTrack cues."
+        ]
+      },
+      {
+        heading: "What This Does Not Implement",
+        body: [
+          "This lab ignores most of IMSC: complex styling inheritance, writing modes, ruby text, images, animation, frame-based timing, and full region layout. Those are important in production, but they would hide the core player idea.",
+          "The useful pattern is the same as the DASH lesson: parse a standard format conservatively, represent the small subset you need, then wire that representation to playback time."
+        ],
+        points: [
+          "Unsupported styling should fail harmlessly.",
+          "Parsing and rendering stay separate so you can expand the subset later.",
+          "The overlay should not block video controls or pointer interactions."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "imsc-renderer.js",
+        explain: "This parser walks TTML/IMSC p elements, extracts timing, and renders active cues into a video overlay.",
+        code: `
+export async function installImscRenderer(video, url) {
+  const cues = await loadImscCues(url);
+  const overlay = createOverlay(video);
+
+  function render() {
+    const now = video.currentTime;
+    const active = cues.filter((cue) => cue.begin <= now && now < cue.end);
+    overlay.replaceChildren(...active.map(renderCue));
+  }
+
+  video.addEventListener("timeupdate", render);
+  video.addEventListener("seeking", render);
+  video.addEventListener("emptied", () => overlay.replaceChildren());
+  render();
+}
+
+async function loadImscCues(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
+
+  const xml = await response.text();
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  return [...doc.getElementsByTagNameNS("*", "p")].map((node) => ({
+    begin: parseClock(node.getAttribute("begin")),
+    end: parseClock(node.getAttribute("end")),
+    region: node.getAttribute("region") ?? "default",
+    text: node.textContent.trim().replace(/\\s+/g, " ")
+  }));
+}
+
+function createOverlay(video) {
+  let stage = video.parentElement;
+  if (!stage?.classList.contains("video-stage")) {
+    stage = document.createElement("div");
+    video.before(stage);
+    stage.append(video);
+  }
+  stage.classList.add("video-stage");
+
+  const overlay = document.createElement("div");
+  overlay.className = "imsc-overlay";
+  stage.append(overlay);
+  return overlay;
+}
+
+function renderCue(cue) {
+  const element = document.createElement("div");
+  element.className = \`imsc-cue imsc-region-\${cue.region}\`;
+  element.textContent = cue.text;
+  return element;
+}
+
+function parseClock(value) {
+  const match = /^(\\d+):(\\d{2}):(\\d{2}(?:\\.\\d+)?)$/.exec(value ?? "");
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}`
+      },
+      {
+        title: "imsc.css",
+        explain: "The custom renderer needs a stage around the video and an overlay that does not intercept controls.",
+        code: `
+.video-stage {
+  position: relative;
+  width: fit-content;
+}
+
+.imsc-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 5%;
+  pointer-events: none;
+}
+
+.imsc-cue {
+  max-width: 80%;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.78);
+  color: white;
+  font: 600 1.1rem/1.35 system-ui, sans-serif;
+  text-align: center;
+}`
+      },
+      {
+        title: "Using The Renderer",
+        explain: "Remove the WebVTT track setup and install the custom IMSC overlay instead.",
+        code: `
+import { installImscRenderer } from "./imsc-renderer.js";
+
+const video = document.querySelector("#video");
+await installImscRenderer(video, "./sample.ttml");`
+      }
+    ],
+    demo: {
+      title: "Custom Subtitle Overlay",
+      mode: "timeline",
+      text: "The renderer maps active IMSC paragraphs onto HTML above the video instead of using native WebVTT tracks."
     }
   },
   {
