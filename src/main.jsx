@@ -9,11 +9,10 @@ import {
   ExternalLink,
   FlaskConical,
   Play,
-  Radio,
   ShieldCheck
 } from "lucide-react";
 import { lessons } from "./data/lessons.js";
-import { BufferQueue, PacketFlow, SegmentTimeline } from "./components/Diagrams.jsx";
+import { BufferQueue, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
 import "./styles.css";
 
@@ -57,7 +56,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Tutorial lessons">
-        <a className="brand" href="#/fundamentals">
+        <a className="brand" href={`#/${lessons[0].slug}`}>
           <span className="brand-mark"><Play size={18} fill="currentColor" /></span>
           <span>MSE From Scratch</span>
         </a>
@@ -115,6 +114,8 @@ function Lesson({ lesson, index, onComplete, progress }) {
       {lesson.visual === "packets" && <PacketFlow />}
       {lesson.visual === "buffer" && <BufferQueue />}
       {lesson.visual === "timeline" && <SegmentTimeline />}
+      {lesson.visual === "video" && <VideoFundamentalsDiagram />}
+      {lesson.visual === "file" && <MediaFileDiagram />}
 
       <section className="content-grid">
         <div className="lesson-body">

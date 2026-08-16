@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Boxes, Clock, Gauge, RadioTower } from "lucide-react";
+import { ArrowRight, Boxes, Clock, Film, Gauge, Monitor, RadioTower } from "lucide-react";
 
 export function PacketFlow() {
   return (
@@ -54,6 +54,68 @@ export function SegmentTimeline() {
         <div><b>360p</b><span /></div>
         <div><b>720p</b><span /></div>
         <div><b>1080p</b><span /></div>
+      </div>
+    </section>
+  );
+}
+
+export function VideoFundamentalsDiagram() {
+  return (
+    <section className="diagram video-fundamentals" aria-label="Video fundamentals diagram">
+      <div className="screen-model">
+        <div className="screen-frame">
+          <span className="pixel-grid" />
+          <strong>1920 x 1080</strong>
+          <small>16:9 frame</small>
+        </div>
+      </div>
+      <div className="video-metrics">
+        <div>
+          <Monitor size={22} />
+          <strong>Resolution</strong>
+          <span>Spatial samples per frame</span>
+        </div>
+        <div>
+          <Clock size={22} />
+          <strong>Frame rate</strong>
+          <span>Pictures presented each second</span>
+        </div>
+        <div>
+          <Gauge size={22} />
+          <strong>Dynamic range</strong>
+          <span>Detail between dark and bright</span>
+        </div>
+      </div>
+      <div className="colour-strip" aria-label="Colour gamut strip">
+        <span>Rec.709</span>
+        <span>P3</span>
+        <span>Rec.2020</span>
+      </div>
+    </section>
+  );
+}
+
+export function MediaFileDiagram() {
+  const gop = ["I", "B", "B", "P", "B", "B", "P", "B", "B", "I"];
+
+  return (
+    <section className="diagram media-file-diagram" aria-label="Media file and GOP diagram">
+      <div className="file-box">
+        <div><Boxes size={20} /> Header</div>
+        <div><Clock size={20} /> Metadata</div>
+        <div><Film size={20} /> Encoded samples</div>
+      </div>
+      <div className="track-stack">
+        <span>video track: H.264 samples</span>
+        <span>audio track: AAC samples</span>
+        <span>timing: decode time and presentation time</span>
+      </div>
+      <div className="gop-row">
+        {gop.map((frame, index) => (
+          <span key={`${frame}-${index}`} className={`frame-${frame.toLowerCase()}`}>
+            {frame}
+          </span>
+        ))}
       </div>
     </section>
   );

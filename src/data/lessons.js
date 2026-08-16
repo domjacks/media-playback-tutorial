@@ -2,45 +2,326 @@ export const bbbMpd = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-common_in
 
 export const lessons = [
   {
-    slug: "fundamentals",
-    title: "IP Media Streaming Fundamentals",
+    slug: "introduction",
+    title: "What You Will Build",
     kind: "Theory",
-    visual: "packets",
-    summary: "Start with what actually crosses the network and how those bytes become timed audio and video.",
-    target: "You can explain packets, encoded frames, containers, segments, bitrate, codecs, ABR, and buffering.",
-    checkpoint: "Trace a chunk of video from server bytes to a decoded frame on the media timeline.",
+    visual: "timeline",
+    summary: "A guided map of the tutorial, from media fundamentals to a working browser DASH player.",
+    target: "You understand the learning path and how each theory topic supports the player you will build.",
+    checkpoint: "Describe the route from media bytes to a browser player with DASH, live, subtitles, and optional DRM.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media",
     sections: [
       {
-        heading: "From Files To Flows",
+        heading: "The Destination",
         body: [
-          "A media file is stored as bytes, but streaming is experienced as a timed flow. TCP breaks those bytes into packets, retransmits missing data, and presents the browser with an ordered byte stream.",
-          "The browser does not decode packets directly. It receives container bytes, extracts encoded samples, decodes them with a codec, and schedules decoded frames or audio samples onto a media timeline."
+          "By the end of the tutorial you will have built a small browser media player from scratch. It will use the video element for presentation, Media Source Extensions for feeding media bytes, and a minimal DASH parser for discovering segments.",
+          "The goal is not to recreate dash.js or a production player. The goal is to learn the browser APIs and the media concepts that those libraries normally hide."
         ],
         points: [
-          "TCP handles reliability and ordering; your player handles when and what to request.",
-          "A codec such as H.264, AAC, VP9, or Opus defines how compressed samples become raw media.",
-          "A container such as fragmented MP4 groups metadata and media samples into boxes the browser can parse."
+          "First you will learn what video and audio actually describe.",
+          "Then you will learn how media files package encoded samples.",
+          "After that you will connect files, segments, manifests, buffers, and playback APIs."
         ]
       },
       {
-        heading: "Segments And Quality",
+        heading: "The Tutorial Arc",
         body: [
-          "Adaptive streaming cuts media into short segments. Each segment covers a fixed time range, often two to six seconds, and can be encoded at multiple bitrates.",
-          "ABR means adaptive bitrate. A player estimates network and buffer health, then switches to a representation that should download quickly enough without starving playback."
+          "The early lessons are intentionally theory-heavy. MSE is easier to understand when you already know what a frame, codec, container, segment, timeline, and buffer mean.",
+          "The practical lessons build one browser ESM project step by step: first fixed MSE appends, then DASH VOD, then live refresh, subtitles, and an optional ClearKey DRM flow."
         ],
         points: [
-          "Higher bitrate usually improves quality but costs bandwidth and buffer time.",
-          "Lower bitrate is useful during congestion or when a small display does not need high detail.",
-          "The buffer is a timed queue, not just a byte count."
+          "Theory lessons explain the vocabulary before it appears in code.",
+          "Practical lessons keep the implementation small enough to inspect.",
+          "Each code sample is plain HTML and JavaScript modules that can run directly in a browser dev server."
         ]
       }
     ],
     snippets: [],
     demo: {
-      title: "Think In Timed Bytes",
+      title: "Learning Path",
+      mode: "timeline",
+      text: "The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming."
+    }
+  },
+  {
+    slug: "video-fundamentals",
+    title: "Video Fundamentals",
+    kind: "Theory",
+    visual: "video",
+    summary: "Understand the properties that define what a viewer sees before you think about files or streaming.",
+    target: "You can explain resolution, aspect ratio, frame rate, colour gamut, and dynamic range in player terms.",
+    checkpoint: "Given a video rendition, identify the viewing qualities that affect display, bandwidth, and compatibility.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs",
+    sections: [
+      {
+        heading: "Spatial Detail",
+        body: [
+          "Resolution is the number of pixels in each frame. A 1920 by 1080 video has more samples of the image than a 1280 by 720 video, so it can preserve more detail when displayed at the same size.",
+          "Aspect ratio is the shape of the picture, such as 16:9 or 4:3. Player layout should respect the encoded display shape so the image is not stretched or cropped by accident."
+        ],
+        points: [
+          "Resolution affects sharpness, decode cost, and bandwidth.",
+          "Display size and device pixel density decide whether extra resolution is visible.",
+          "Aspect ratio belongs to presentation; it is not the same thing as file size or bitrate."
+        ]
+      },
+      {
+        heading: "Time And Motion",
+        body: [
+          "Frame rate is how many pictures are shown per second. Common values include 24 fps for film-like motion, 25 or 30 fps for broadcast and web video, and 50 or 60 fps for sport, games, and very smooth motion.",
+          "Higher frame rates usually need more encoded samples per second. That can improve motion clarity, but it also raises decode work and often requires more bitrate for the same visual quality."
+        ],
+        points: [
+          "A 60 fps stream has twice as many frame times as a 30 fps stream.",
+          "The media timeline is continuous even though video frames are discrete.",
+          "Audio is usually sampled much more frequently than video and must stay synchronized with it."
+        ]
+      },
+      {
+        heading: "Colour And Brightness",
+        body: [
+          "Colour gamut describes the range of colours a video can represent. SDR web video often uses Rec.709, while wider-gamut HDR content may use Rec.2020 signalling with colours that many older displays cannot fully show.",
+          "Dynamic range describes the difference between dark and bright image detail. SDR targets a narrower range. HDR formats carry extra signalling so compatible displays can render brighter highlights and more shadow detail."
+        ],
+        points: [
+          "Colour metadata helps the browser and display map encoded values to visible colours.",
+          "HDR playback depends on the codec, container metadata, browser, OS, and display.",
+          "A player should surface compatibility failures clearly instead of pretending every rendition is equivalent."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Reading Video Metadata",
+        explain: "The video element exposes decoded presentation dimensions after metadata loads.",
+        code: `
+const video = document.querySelector("video");
+
+video.addEventListener("loadedmetadata", () => {
+  console.log(video.videoWidth, video.videoHeight);
+  console.log(video.duration);
+});`
+      }
+    ],
+    demo: {
+      title: "Picture Properties",
+      mode: "timeline",
+      text: "Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens."
+    }
+  },
+  {
+    slug: "media-files-codecs",
+    title: "Media Files And Codecs",
+    kind: "Theory",
+    visual: "file",
+    summary: "Learn what a media file contains and how codecs turn large raw signals into compressed samples.",
+    target: "You can separate containers, metadata, encoded samples, bitrates, codecs, and frame dependencies.",
+    checkpoint: "Explain why a player needs both container parsing and codec support.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Containers",
+    sections: [
+      {
+        heading: "What Makes Up A Media File",
+        body: [
+          "A media file is more than raw video and audio bytes. It normally contains structural headers, track metadata, timing information, codec configuration, and chunks of encoded media data.",
+          "The container is the file format that organizes those parts. MP4, WebM, MPEG-TS, and Matroska are containers. They can carry different codec payloads, which is why saying a file is MP4 does not fully describe whether a browser can play it."
+        ],
+        points: [
+          "Headers describe the container structure and where important information lives.",
+          "Metadata describes tracks, durations, timescales, language, dimensions, and codec setup.",
+          "Media data contains encoded audio and video samples ordered by decoding and presentation rules."
+        ]
+      },
+      {
+        heading: "Containers, Formats, And Bitrate",
+        body: [
+          "A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.",
+          "Bitrate is the amount of data used per second of media. A higher bitrate gives the encoder more room to preserve detail, but bitrate alone does not guarantee quality. Codec efficiency, source complexity, resolution, frame rate, and encoder settings all matter."
+        ],
+        points: [
+          "MP4 with H.264 video and AAC audio is broadly compatible on the web.",
+          "WebM with VP9 or AV1 can be efficient but support varies by device.",
+          "For streaming, average bitrate helps predict download time and ABR decisions."
+        ]
+      },
+      {
+        heading: "Video Codecs And Frame Dependencies",
+        body: [
+          "Video codecs exploit the fact that nearby frames are often similar. Instead of storing every frame independently, they store some complete reference frames and many predicted frames that describe changes from other frames.",
+          "A Group of Pictures, or GOP, is a run of frames built around these dependencies. I-frames are self-contained. P-frames predict from earlier frames. B-frames can predict from frames before and after their presentation time."
+        ],
+        points: [
+          "I-frames are larger but useful for startup, seeking, and recovery.",
+          "P-frames are smaller because they reuse previous reference information.",
+          "B-frames improve compression but can make decode order differ from presentation order."
+        ]
+      },
+      {
+        heading: "Audio Codecs",
+        body: [
+          "Audio codecs compress a continuous sampled signal rather than a sequence of pictures. AAC, Opus, and MP3 use psychoacoustic models to spend bits where human hearing is most sensitive.",
+          "Audio still has timing, frames, sample rates, channel layouts, and codec configuration. A player must keep audio and video clocks aligned even though their encoded structures are different."
+        ],
+        points: [
+          "Sample rate describes audio samples per second, commonly 44.1 kHz or 48 kHz.",
+          "Channel layout describes mono, stereo, surround, or object-based arrangements.",
+          "Audio buffer underruns are often more noticeable than small video quality drops."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Container Versus Codec",
+        explain: "A browser support check needs both the container MIME type and codec identifiers.",
+        code: `
+const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
+
+console.log(MediaSource.isTypeSupported(h264Aac));
+console.log(MediaSource.isTypeSupported(vp9Opus));`
+      }
+    ],
+    demo: {
+      title: "File Anatomy",
       mode: "packets",
-      text: "Watch the network packets assemble into fMP4 boxes, then into buffered seconds on the media timeline."
+      text: "A playable file combines container structure, metadata, codec setup, and encoded audio/video samples."
+    }
+  },
+  {
+    slug: "streaming-abr",
+    title: "Streaming, Segments, And ABR",
+    kind: "Theory",
+    visual: "packets",
+    summary: "Move from complete files to short timed chunks that a player can request, buffer, and switch between.",
+    target: "You can explain TCP delivery, segments, renditions, throughput, bitrate ladders, and ABR tradeoffs.",
+    checkpoint: "Trace one segment from an HTTP request to a buffered time range and an ABR decision.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Audio_and_video_delivery",
+    sections: [
+      {
+        heading: "From Files To Flows",
+        body: [
+          "On the network, media is delivered as bytes over HTTP, usually carried by TCP or by HTTP/3 over QUIC depending on the browser and server. The transport handles packetization, ordering, loss recovery, and congestion control.",
+          "Your player usually does not see IP packets directly. It sees fetch responses. The important player question is when to request the next byte range or segment, and which quality level to request."
+        ],
+        points: [
+          "Network packets are transport details; media segments are player-level units.",
+          "HTTP caching and CDNs work well when media is split into addressable segment files.",
+          "Segment duration affects latency, request overhead, and how quickly quality can switch."
+        ]
+      },
+      {
+        heading: "Segments",
+        body: [
+          "A segment covers a timed slice of media, often two to six seconds. It may be a standalone file or a byte range inside a larger file. For fragmented MP4, an initialization segment describes the track setup and media segments carry timed samples.",
+          "Segments should begin at useful random access points so playback can start or switch quality without decoding a long chain of missing dependencies."
+        ],
+        points: [
+          "Shorter segments can reduce live latency but increase request overhead.",
+          "Longer segments are efficient but make switching and recovery slower.",
+          "Aligned segment boundaries let a player switch representations at the same media time."
+        ]
+      },
+      {
+        heading: "Adaptive Bitrate",
+        body: [
+          "ABR is the player logic that chooses between multiple encoded representations. A representation is the same content encoded at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
+          "A simple ABR algorithm compares estimated throughput, current buffer depth, and representation bitrate. If the buffer is healthy and downloads are fast, it can move up. If downloads slow down or the buffer shrinks, it should move down before playback stalls."
+        ],
+        points: [
+          "The safest quality is the one that downloads comfortably faster than real time.",
+          "Buffer-based ABR protects playback smoothness; throughput-based ABR reacts to network capacity.",
+          "Good players avoid switching too often because visible quality oscillation is distracting."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "A Tiny ABR Heuristic",
+        explain: "This intentionally simple selector picks the highest representation below a conservative bandwidth budget.",
+        code: `
+function chooseRepresentation(representations, throughputBps, bufferSeconds) {
+  const safety = bufferSeconds > 12 ? 0.85 : 0.65;
+  const budget = throughputBps * safety;
+
+  return representations
+    .filter((rep) => rep.bandwidth <= budget)
+    .sort((a, b) => b.bandwidth - a.bandwidth)[0] ?? representations[0];
+}`
+      }
+    ],
+    demo: {
+      title: "Segment Delivery",
+      mode: "packets",
+      text: "Streaming players request timed chunks, watch download speed, and choose the next representation before the buffer runs dry."
+    }
+  },
+  {
+    slug: "players-timelines-buffers",
+    title: "Players, Timelines, And Buffers",
+    kind: "Theory",
+    visual: "buffer",
+    summary: "Build the mental model for playback state before using Media Source Extensions.",
+    target: "You understand media timelines, playheads, buffered ranges, seekable ranges, ready state, and stalls.",
+    checkpoint: "Use browser media properties to explain why playback can start, seek, continue, or stall.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement",
+    sections: [
+      {
+        heading: "The Media Timeline",
+        body: [
+          "A media element presents audio and video on a timeline measured in seconds. The playhead is the current playback position, exposed as currentTime. Duration is the known length for VOD, while live content may have a moving timeline instead of a fixed end.",
+          "Decoded output must be scheduled against this timeline. Video frames have presentation times. Audio samples fill precise intervals. Synchronization means the browser advances both tracks using the same media clock."
+        ],
+        points: [
+          "currentTime is the playhead position.",
+          "duration is stable for VOD but can be Infinity or shifting for live.",
+          "PlaybackRate changes how quickly the playhead advances through media time."
+        ]
+      },
+      {
+        heading: "Buffered Ranges",
+        body: [
+          "The buffered property is a TimeRanges object. It does not say how many bytes are downloaded; it says which time intervals the media element can play without more network data.",
+          "Buffers can contain gaps. A player may have 0-10 seconds and 20-30 seconds buffered, but it will still stall when the playhead reaches 10 seconds unless the missing range is filled or the user seeks."
+        ],
+        points: [
+          "Buffer depth usually means buffered end minus currentTime.",
+          "Appending bytes does not guarantee a continuous range if timestamps do not line up.",
+          "Eviction removes old data so memory does not grow forever."
+        ]
+      },
+      {
+        heading: "Seekable Ranges And Live Windows",
+        body: [
+          "Seekable ranges describe where the browser or player believes seeking is allowed. For a normal MP4 file, that may be most of the file once metadata is known. For live streams, it is usually a sliding window of recent media.",
+          "A live player tracks the live edge, which is the newest available media time. It usually plays behind that edge by a target latency so downloads, decode, and small network delays have room to recover."
+        ],
+        points: [
+          "Seekable is about what can be requested or reached, not only what is already buffered.",
+          "Live windows move forward as old segments expire and new segments appear.",
+          "A stall happens when the playhead reaches a time that is not buffered and cannot be decoded yet."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Inspecting Timeline State",
+        explain: "These properties are the foundation for the player decisions used later in the tutorial.",
+        code: `
+function describeRanges(label, ranges) {
+  for (let i = 0; i < ranges.length; i += 1) {
+    console.log(label, ranges.start(i), ranges.end(i));
+  }
+}
+
+const video = document.querySelector("video");
+console.log("playhead", video.currentTime);
+describeRanges("buffered", video.buffered);
+describeRanges("seekable", video.seekable);`
+      }
+    ],
+    demo: {
+      title: "Timed Queues",
+      mode: "buffer",
+      text: "A player succeeds when the playhead stays inside buffered, seekable, decodable media time."
     }
   },
   {
