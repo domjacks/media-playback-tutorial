@@ -12,8 +12,9 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { lessons } from "./data/lessons.js";
-import { BufferQueue, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
+import { BufferQueue, CodecCompressionDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
+import { PlayerShowcase } from "./components/PlayerShowcase.jsx";
 import "./styles.css";
 
 const storageKey = "mse-tutorial-progress";
@@ -116,6 +117,7 @@ function Lesson({ lesson, index, onComplete, progress }) {
       {lesson.visual === "timeline" && <SegmentTimeline />}
       {lesson.visual === "video" && <VideoFundamentalsDiagram />}
       {lesson.visual === "file" && <MediaFileDiagram />}
+      {lesson.visual === "codec" && <CodecCompressionDiagram />}
 
       <section className="content-grid">
         <div className="lesson-body">
@@ -144,6 +146,7 @@ function Lesson({ lesson, index, onComplete, progress }) {
       </section>
 
       {lesson.demo && <DemoPanel demo={lesson.demo} />}
+      {lesson.showcase === "player" && <PlayerShowcase />}
 
       {lesson.snippets.map((snippet) => (
         <CodeSnippet key={snippet.title} snippet={snippet} />

@@ -1,4 +1,4 @@
-export const bbbMpd = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-common_init.mpd";
+export const bbbMpd = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd";
 
 export const lessons = [
   {
@@ -110,13 +110,13 @@ video.addEventListener("loadedmetadata", () => {
     }
   },
   {
-    slug: "media-files-codecs",
-    title: "Media Files And Codecs",
+    slug: "media-files-containers",
+    title: "Media Files And Containers",
     kind: "Theory",
     visual: "file",
-    summary: "Learn what a media file contains and how codecs turn large raw signals into compressed samples.",
-    target: "You can separate containers, metadata, encoded samples, bitrates, codecs, and frame dependencies.",
-    checkpoint: "Explain why a player needs both container parsing and codec support.",
+    summary: "Learn what a media file contains and how containers organize tracks, timing, metadata, and media data.",
+    target: "You can separate file structure, container metadata, tracks, samples, and codec identifiers.",
+    checkpoint: "Explain why a player needs container parsing before it can feed encoded samples to a decoder.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Containers",
     sections: [
       {
@@ -135,12 +135,65 @@ video.addEventListener("loadedmetadata", () => {
         heading: "Containers, Formats, And Bitrate",
         body: [
           "A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.",
-          "Bitrate is the amount of data used per second of media. A higher bitrate gives the encoder more room to preserve detail, but bitrate alone does not guarantee quality. Codec efficiency, source complexity, resolution, frame rate, and encoder settings all matter."
+          "Bitrate is the amount of data used per second of media. The container records enough timing information for the browser to place those encoded samples onto a media timeline."
         ],
         points: [
           "MP4 with H.264 video and AAC audio is broadly compatible on the web.",
           "WebM with VP9 or AV1 can be efficient but support varies by device.",
           "For streaming, average bitrate helps predict download time and ABR decisions."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Container Versus Codec",
+        explain: "A browser support check needs both the container MIME type and codec identifiers.",
+        code: `
+const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
+
+console.log(MediaSource.isTypeSupported(h264Aac));
+console.log(MediaSource.isTypeSupported(vp9Opus));`
+      }
+    ],
+    demo: {
+      title: "File Anatomy",
+      mode: "packets",
+      text: "A playable file combines container structure, metadata, track timing, and encoded audio/video samples."
+    }
+  },
+  {
+    slug: "codecs-compression",
+    title: "Codecs And Compression",
+    kind: "Theory",
+    visual: "codec",
+    summary: "See why raw camera video is enormous and how codecs reduce it with sampling, prediction, and frame dependencies.",
+    target: "You can calculate raw video data rate and explain why I-frames, P-frames, B-frames, and audio codecs exist.",
+    checkpoint: "Work through the 1920x1080, 10-bit, 25 fps example and explain why a compressed bitrate is necessary.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs",
+    sections: [
+      {
+        heading: "Raw Video Is Huge",
+        body: [
+          "A camera does not start with H.264 or AV1. It starts with samples that describe light. In this example, each frame has a Y plane at 1920 by 1080, a Cb plane at 960 by 1080, and a Cr plane at 960 by 1080.",
+          "Y is luma, the brightness detail. Cb and Cr are chroma difference samples. They are 960 pixels wide here because each chroma sample is shared across a pair of horizontal luma samples, so the colour information is sampled at half the horizontal resolution."
+        ],
+        points: [
+          "Y samples per frame: 1920 x 1080 = 2,073,600.",
+          "Cb samples per frame: 960 x 1080 = 1,036,800.",
+          "Cr samples per frame: 960 x 1080 = 1,036,800."
+        ]
+      },
+      {
+        heading: "The Maths",
+        body: [
+          "Add the three planes together and one frame contains 4,147,200 component samples. At 10 bits per sample, that is 41,472,000 bits for one frame.",
+          "At 25 frames per second, the stream is 1,036,800,000 bits per second. Divide by 8 bits in a byte and you get 129,600,000 bytes per second, before audio, headers, metadata, or transport overhead."
+        ],
+        points: [
+          "That is about 129.6 MB/s, or about 123.6 MiB/s.",
+          "It is also about 1.04 Gbit/s.",
+          "This is why web video is compressed before it is stored, streamed, or played."
         ]
       },
       {
@@ -170,7 +223,25 @@ video.addEventListener("loadedmetadata", () => {
     ],
     snippets: [
       {
-        title: "Container Versus Codec",
+        title: "Raw Video Data Rate",
+        explain: "This calculation shows the uncompressed byte rate for the example camera signal.",
+        code: `
+const y = 1920 * 1080;
+const cb = 960 * 1080;
+const cr = 960 * 1080;
+const bitsPerSample = 10;
+const framesPerSecond = 25;
+const bitsPerByte = 8;
+
+const samplesPerFrame = y + cb + cr;
+const bitsPerFrame = samplesPerFrame * bitsPerSample;
+const bytesPerSecond = (bitsPerFrame * framesPerSecond) / bitsPerByte;
+
+console.log(samplesPerFrame); // 4147200
+console.log(bytesPerSecond);  // 129600000`
+      },
+      {
+        title: "Codec Support Check",
         explain: "A browser support check needs both the container MIME type and codec identifiers.",
         code: `
 const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
@@ -181,31 +252,31 @@ console.log(MediaSource.isTypeSupported(vp9Opus));`
       }
     ],
     demo: {
-      title: "File Anatomy",
+      title: "Compression Pressure",
       mode: "packets",
-      text: "A playable file combines container structure, metadata, codec setup, and encoded audio/video samples."
+      text: "Raw samples quickly become hundreds of megabytes per second, so codecs reduce the signal before streaming."
     }
   },
   {
-    slug: "streaming-abr",
-    title: "Streaming, Segments, And ABR",
+    slug: "streaming-segments",
+    title: "Streaming And Segments",
     kind: "Theory",
     visual: "packets",
-    summary: "Move from complete files to short timed chunks that a player can request, buffer, and switch between.",
-    target: "You can explain TCP delivery, segments, renditions, throughput, bitrate ladders, and ABR tradeoffs.",
-    checkpoint: "Trace one segment from an HTTP request to a buffered time range and an ABR decision.",
+    summary: "Move from complete files to short timed chunks that a player can request and buffer.",
+    target: "You can explain HTTP delivery, segments, renditions, initialization data, and timed media chunks.",
+    checkpoint: "Trace one segment from an HTTP request to a buffered time range.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Audio_and_video_delivery",
     sections: [
       {
         heading: "From Files To Flows",
         body: [
           "On the network, media is delivered as bytes over HTTP, usually carried by TCP or by HTTP/3 over QUIC depending on the browser and server. The transport handles packetization, ordering, loss recovery, and congestion control.",
-          "Your player usually does not see IP packets directly. It sees fetch responses. The important player question is when to request the next byte range or segment, and which quality level to request."
+          "Your player usually does not see IP packets directly. It sees fetch responses. The important player question at this stage is when to request the next byte range or segment so playback has enough future media."
         ],
         points: [
           "Network packets are transport details; media segments are player-level units.",
           "HTTP caching and CDNs work well when media is split into addressable segment files.",
-          "Segment duration affects latency, request overhead, and how quickly quality can switch."
+          "Segment duration affects latency, request overhead, cacheability, and recovery time."
         ]
       },
       {
@@ -221,37 +292,38 @@ console.log(MediaSource.isTypeSupported(vp9Opus));`
         ]
       },
       {
-        heading: "Adaptive Bitrate",
+        heading: "Renditions Without Adaptation Yet",
         body: [
-          "ABR is the player logic that chooses between multiple encoded representations. A representation is the same content encoded at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
-          "A simple ABR algorithm compares estimated throughput, current buffer depth, and representation bitrate. If the buffer is healthy and downloads are fast, it can move up. If downloads slow down or the buffer shrinks, it should move down before playback stalls."
+          "Streaming media is commonly encoded into multiple renditions. Each rendition represents the same content at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
+          "For now, think of those renditions as available choices. The player will learn how to choose between them after the DASH lesson, once it has a manifest parser that can actually see every Representation."
         ],
         points: [
-          "The safest quality is the one that downloads comfortably faster than real time.",
-          "Buffer-based ABR protects playback smoothness; throughput-based ABR reacts to network capacity.",
-          "Good players avoid switching too often because visible quality oscillation is distracting."
+          "A rendition is useful only if its codec and container are supported by the browser.",
+          "Representations need aligned segment timing before a player can switch cleanly.",
+          "The manifest is where the player discovers these choices."
         ]
       }
     ],
     snippets: [
       {
-        title: "A Tiny ABR Heuristic",
-        explain: "This intentionally simple selector picks the highest representation below a conservative bandwidth budget.",
+        title: "Segment Request Loop",
+        explain: "Before ABR, the core streaming loop is simply request a segment, append it, then move to the next segment.",
         code: `
-function chooseRepresentation(representations, throughputBps, bufferSeconds) {
-  const safety = bufferSeconds > 12 ? 0.85 : 0.65;
-  const budget = throughputBps * safety;
+async function appendSegments(sourceBuffer, segments) {
+  const queue = [...segments];
 
-  return representations
-    .filter((rep) => rep.bandwidth <= budget)
-    .sort((a, b) => b.bandwidth - a.bandwidth)[0] ?? representations[0];
+  sourceBuffer.addEventListener("updateend", async () => {
+    if (!queue.length) return;
+    const segment = queue.shift();
+    sourceBuffer.appendBuffer(await fetchBytes(segment.url));
+  });
 }`
       }
     ],
     demo: {
       title: "Segment Delivery",
       mode: "packets",
-      text: "Streaming players request timed chunks, watch download speed, and choose the next representation before the buffer runs dry."
+      text: "Streaming players request timed chunks and append enough future media to keep playback moving."
     }
   },
   {
@@ -330,19 +402,19 @@ describeRanges("seekable", video.seekable);`
     kind: "Practical",
     visual: "buffer",
     summary: "Use Media Source Extensions to append initialization and media segments into a video element.",
-    target: "A plain HTML page and ESM module append Big Buck Bunny bytes to a SourceBuffer.",
-    checkpoint: "The video element plays media that JavaScript fetched and appended.",
-    reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API",
+    target: "A plain HTML page and ESM module append remote Big Buck Bunny audio/video bytes to SourceBuffers.",
+    checkpoint: "The video element plays audio and video that JavaScript fetched and appended.",
+    reference: "https://rdmedia.bbc.co.uk/bbb/",
     sections: [
       {
         heading: "The MSE Shape",
         body: [
-          "A normal video element can fetch a single URL by itself. MSE lets JavaScript provide the bytes instead. You create a MediaSource, attach it to the video, add a SourceBuffer for a codec string, then append bytes in order.",
+          "A normal video element can fetch a single URL by itself. MSE lets JavaScript provide the bytes instead. You create a MediaSource, attach it to the video, add one SourceBuffer per track type, then append bytes in order.",
           "The initialization segment describes tracks, timescales, and codec metadata. Media segments carry the timed samples. The browser needs the init segment before it can understand the following media fragments."
         ],
         points: [
           "Only append while the SourceBuffer is not updating.",
-          "Use a precise MIME type and codec string supported by the browser.",
+          "Use precise MIME types and codec strings supported by the browser.",
           "Call endOfStream when you have appended all bytes for a small VOD demo."
         ]
       }
@@ -357,34 +429,53 @@ describeRanges("seekable", video.seekable);`
       },
       {
         title: "player.js",
-        explain: "The append queue waits for updateend before appending the next chunk, which avoids InvalidStateError.",
+        explain: "The append queue waits for updateend before appending the next chunk. This first version hardcodes a few verified BBC DASH segment URLs.",
         code: `
 const video = document.querySelector("#video");
-const mime = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
-const files = [
-  "./bbb/init.mp4",
-  "./bbb/segment-1.m4s",
-  "./bbb/segment-2.m4s",
-  "./bbb/segment-3.m4s"
+const base = "https://vod-dash-ww-rd-live.akamaized.net/bbb/2";
+const tracks = [
+  {
+    mime: 'video/mp4; codecs="avc1.64001f"',
+    files: [
+      \`\${base}/avc1/896x504p25/IS.mp4\`,
+      \`\${base}/avc1/896x504p25/000001.m4s\`,
+      \`\${base}/avc1/896x504p25/000002.m4s\`,
+      \`\${base}/avc1/896x504p25/000003.m4s\`
+    ]
+  },
+  {
+    mime: 'audio/mp4; codecs="mp4a.40.2"',
+    files: [
+      \`\${base}/audio/160kbps/IS.mp4\`,
+      \`\${base}/audio/128kbps/000001.m4s\`,
+      \`\${base}/audio/128kbps/000002.m4s\`,
+      \`\${base}/audio/128kbps/000003.m4s\`
+    ]
+  }
 ];
 
 const mediaSource = new MediaSource();
 video.src = URL.createObjectURL(mediaSource);
 
 mediaSource.addEventListener("sourceopen", async () => {
-  const sourceBuffer = mediaSource.addSourceBuffer(mime);
-  const queue = await Promise.all(files.map(fetchBytes));
+  await Promise.all(tracks.map(async (track) => {
+    const sourceBuffer = mediaSource.addSourceBuffer(track.mime);
+    const queue = await Promise.all(track.files.map(fetchBytes));
+    await appendAll(sourceBuffer, queue);
+  }));
 
-  sourceBuffer.addEventListener("updateend", () => {
-    if (queue.length) {
-      sourceBuffer.appendBuffer(queue.shift());
-    } else if (mediaSource.readyState === "open") {
-      mediaSource.endOfStream();
-    }
-  });
-
-  sourceBuffer.appendBuffer(queue.shift());
+  mediaSource.endOfStream();
 });
+
+function appendAll(sourceBuffer, queue) {
+  return new Promise((resolve) => {
+    sourceBuffer.addEventListener("updateend", () => {
+      if (!queue.length) return resolve();
+      sourceBuffer.appendBuffer(queue.shift());
+    });
+    sourceBuffer.appendBuffer(queue.shift());
+  });
+}
 
 async function fetchBytes(url) {
   const response = await fetch(url);
@@ -445,16 +536,16 @@ MPD
     title: "Parse DASH VOD",
     kind: "Practical",
     visual: "timeline",
-    summary: "Update the MSE player so it fetches an MPD and appends the segments described by the manifest.",
-    target: "A browser ESM player fetches a simple Big Buck Bunny MPD and plays through listed segments.",
-    checkpoint: "Playback starts from manifest-derived initialization and media URLs.",
+    summary: "Update the MSE player so it fetches an MPD and appends the audio/video segments described by the manifest.",
+    target: "A browser ESM player fetches the BBC Big Buck Bunny MPD and plays audio plus video from manifest-derived segments.",
+    checkpoint: "Playback starts from manifest-derived video and audio initialization/media URLs.",
     reference: bbbMpd,
     sections: [
       {
         heading: "Parser Boundaries",
         body: [
-          "A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one Representation, and SegmentTemplate URLs using $Number$ replacement.",
-          "The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD segments."
+          "A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, BaseURL, and SegmentTemplate URLs using $Number$ replacement.",
+          "The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments."
         ],
         points: [
           "Use DOMParser instead of string splitting XML.",
@@ -466,44 +557,74 @@ MPD
     snippets: [
       {
         title: "dash.js",
-        explain: "This parser intentionally supports a small DASH subset so every field is easy to follow.",
+        explain: "This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, BaseURL, and SegmentTemplate.",
         code: `
 export async function loadDashVod(mpdUrl) {
-  const xml = await fetchText(mpdUrl);
+  const response = await fetch(mpdUrl);
+  if (!response.ok) throw new Error(\`Failed to fetch \${mpdUrl}\`);
+  const xml = await response.text();
   const doc = new DOMParser().parseFromString(xml, "application/xml");
-  const representation = doc.querySelector("AdaptationSet[mimeType='video/mp4'] Representation");
-  const adaptation = representation.closest("AdaptationSet");
-  const template = representation.querySelector("SegmentTemplate") ?? adaptation.querySelector("SegmentTemplate");
-  const base = doc.querySelector("BaseURL")?.textContent?.trim() ?? "";
-
-  const timescale = Number(template.getAttribute("timescale") ?? 1);
-  const duration = Number(template.getAttribute("duration"));
-  const startNumber = Number(template.getAttribute("startNumber") ?? 1);
-  const mediaPresentationDuration = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
-  const segmentCount = Math.ceil(mediaPresentationDuration / (duration / timescale));
-  const codecs = [adaptation.getAttribute("codecs"), representation.getAttribute("codecs")]
-    .filter(Boolean)
-    .join(", ");
+  const videoSet = findAdaptation(doc, "video/mp4");
+  const audioSet = findAdaptation(doc, "audio/mp4");
+  const video = parseAdaptation(videoSet, doc, response.url);
+  const audio = parseAdaptation(audioSet, doc, response.url);
 
   return {
-    mime: \`\${adaptation.getAttribute("mimeType")}; codecs="\${codecs}"\`,
-    init: resolve(template.getAttribute("initialization"), mpdUrl, base, representation.id),
-    segments: Array.from({ length: segmentCount }, (_, index) => {
-      const number = startNumber + index;
-      return resolve(template.getAttribute("media"), mpdUrl, base, representation.id, number);
-    })
+    video: chooseLowest(video),
+    audio: chooseHighest(audio),
+    representations: { video, audio }
   };
 }
 
-function resolve(pattern, mpdUrl, base, id, number = "") {
-  const path = pattern.replace("$RepresentationID$", id).replace("$Number$", number);
-  return new URL(base + path, mpdUrl).href;
+function findAdaptation(doc, mimeType) {
+  return [...doc.querySelectorAll("AdaptationSet")]
+    .find((set) => set.getAttribute("mimeType") === mimeType);
 }
 
-async function fetchText(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  return response.text();
+function parseAdaptation(adaptation, doc, mpdUrl) {
+  const template = adaptation.querySelector("SegmentTemplate");
+  const baseUrl = new URL(adaptation.querySelector("BaseURL").textContent.trim(), mpdUrl).href;
+  const timescale = Number(template.getAttribute("timescale") ?? 1);
+  const duration = Number(template.getAttribute("duration"));
+  const startNumber = Number(template.getAttribute("startNumber") ?? 1);
+  const segmentSeconds = duration / timescale;
+  const totalSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
+  const segmentCount = Math.min(36, Math.ceil(totalSeconds / segmentSeconds));
+
+  return [...adaptation.querySelectorAll("Representation")].map((representation) => {
+    const codecs = [adaptation.getAttribute("codecs"), representation.getAttribute("codecs")]
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      id: representation.id,
+      bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
+      mime: \`\${adaptation.getAttribute("mimeType")}; codecs="\${codecs}"\`,
+      init: new URL(format(template.getAttribute("initialization"), representation.id), baseUrl).href,
+      segments: Array.from({ length: segmentCount }, (_, index) => {
+        const number = startNumber + index;
+        return {
+          number,
+          url: new URL(format(template.getAttribute("media"), representation.id, number), baseUrl).href
+        };
+      })
+    };
+  });
+}
+
+function format(pattern, id, number = "") {
+  return pattern
+    .replaceAll("$RepresentationID$", id)
+    .replace(/\\$Number%0(\\d+)d\\$/g, (_, width) => String(number).padStart(Number(width), "0"))
+    .replaceAll("$Number$", number);
+}
+
+function chooseLowest(representations) {
+  return [...representations].sort((a, b) => a.bandwidth - b.bandwidth)[0];
+}
+
+function chooseHighest(representations) {
+  return [...representations].sort((a, b) => a.bandwidth - b.bandwidth).at(-1);
 }
 
 function parseIsoDuration(value) {
@@ -514,31 +635,50 @@ function parseIsoDuration(value) {
       },
       {
         title: "player.js With DASH",
-        explain: "The player no longer knows segment filenames. It asks the manifest parser for appendable URLs.",
+        explain: "The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations.",
         code: `
 import { loadDashVod } from "./dash.js";
 
 const mpdUrl = "${bbbMpd}";
 const video = document.querySelector("#video");
-const manifest = await loadDashVod(mpdUrl);
+const dash = await loadDashVod(mpdUrl);
 
-if (!MediaSource.isTypeSupported(manifest.mime)) {
-  throw new Error(\`Unsupported MIME type: \${manifest.mime}\`);
+if (!MediaSource.isTypeSupported(dash.video.mime)) {
+  throw new Error(\`Unsupported video type: \${dash.video.mime}\`);
+}
+if (!MediaSource.isTypeSupported(dash.audio.mime)) {
+  throw new Error(\`Unsupported audio type: \${dash.audio.mime}\`);
 }
 
 const mediaSource = new MediaSource();
 video.src = URL.createObjectURL(mediaSource);
 
 mediaSource.addEventListener("sourceopen", async () => {
-  const sourceBuffer = mediaSource.addSourceBuffer(manifest.mime);
-  const urls = [manifest.init, ...manifest.segments];
-  const appendNext = async () => {
-    if (!urls.length) return mediaSource.endOfStream();
-    sourceBuffer.appendBuffer(await fetchBytes(urls.shift()));
-  };
-  sourceBuffer.addEventListener("updateend", appendNext);
-  appendNext();
+  const videoBuffer = mediaSource.addSourceBuffer(dash.video.mime);
+  const audioBuffer = mediaSource.addSourceBuffer(dash.audio.mime);
+
+  await Promise.all([
+    appendTrack(videoBuffer, [dash.video.init, ...dash.video.segments.map((segment) => segment.url)]),
+    appendTrack(audioBuffer, [dash.audio.init, ...dash.audio.segments.map((segment) => segment.url)])
+  ]);
+
+  mediaSource.endOfStream();
 });
+
+function appendTrack(sourceBuffer, urls) {
+  const queue = [...urls];
+  return new Promise((resolve) => {
+    sourceBuffer.addEventListener("updateend", () => {
+      if (!queue.length) return resolve();
+      appendUrl(sourceBuffer, queue.shift());
+    });
+    appendUrl(sourceBuffer, queue.shift());
+  });
+}
+
+async function appendUrl(sourceBuffer, url) {
+  sourceBuffer.appendBuffer(await fetchBytes(url));
+}
 
 async function fetchBytes(url) {
   const response = await fetch(url);
@@ -551,6 +691,133 @@ async function fetchBytes(url) {
       title: "MPD Loader",
       mode: "timeline",
       text: "Manifest fields become concrete segment requests, then each response feeds the same MSE append queue."
+    }
+  },
+  {
+    slug: "adaptive-bitrate",
+    title: "Adaptive Bitrate",
+    kind: "Practical",
+    visual: "timeline",
+    summary: "Use the DASH representations you parsed to choose a quality level from network and buffer signals.",
+    target: "The DASH player selects the initial video representation with a small ABR algorithm instead of always hardcoding one quality.",
+    checkpoint: "The player can explain why it picked a startup representation and can choose a safer one when conditions are poor.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/Network_Information_API",
+    sections: [
+      {
+        heading: "What ABR Decides",
+        body: [
+          "Adaptive bitrate is the player logic that decides which representation to request. DASH gives the player a ladder of representations; ABR chooses a rung based on current conditions.",
+          "The main tradeoff is simple: higher bitrate can look better, but it takes longer to download. A player should prefer smooth playback over visual quality because a stall is more disruptive than a temporary quality drop."
+        ],
+        points: [
+          "Throughput says how quickly recent media requests downloaded.",
+          "Buffer depth says how much time the player has before it stalls.",
+          "Representation bandwidth says roughly how many bits per second that quality needs."
+        ]
+      },
+      {
+        heading: "A Basic Algorithm",
+        body: [
+          "A useful first algorithm chooses the highest representation whose declared bandwidth fits inside a conservative throughput budget. The safety margin protects against network variation and request overhead.",
+          "Buffer depth changes how aggressive the player can be. If there is a large buffer, the player can use more of the measured throughput. If the buffer is shallow, it should be more cautious."
+        ],
+        points: [
+          "Sort representations by bandwidth from low to high.",
+          "Estimate throughput from downloaded segment bytes divided by download time.",
+          "Pick the highest representation below throughput multiplied by a safety factor."
+        ]
+      },
+      {
+        heading: "Startup ABR Versus Switching",
+        body: [
+          "This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching SourceBuffer streams mid-playback.",
+          "A full player repeats the decision throughout playback. It can switch at aligned segment boundaries, but it must handle codec compatibility, buffered ranges, quality oscillation, and audio/video coordination."
+        ],
+        points: [
+          "Startup ABR is simple and still useful.",
+          "Mid-stream ABR needs aligned segments and careful append scheduling.",
+          "Avoid switching up too quickly and switch down before the buffer becomes dangerous."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Expose Representations From The Parser",
+        explain: "Instead of returning one Representation, return a list the ABR selector can choose from.",
+        code: `
+function parseRepresentations(adaptation, template, mpdUrl, base, segmentCount, segmentSeconds, startNumber) {
+  return [...adaptation.querySelectorAll("Representation")].map((representation) => ({
+    id: representation.id,
+    bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
+    mime: \`\${adaptation.getAttribute("mimeType")}; codecs="\${representation.getAttribute("codecs")}"\`,
+    init: resolve(template.getAttribute("initialization"), mpdUrl, base, representation.id),
+    segments: Array.from({ length: segmentCount }, (_, index) => {
+      const number = startNumber + index;
+      return {
+        number,
+        start: index * segmentSeconds,
+        end: (index + 1) * segmentSeconds,
+        url: resolve(template.getAttribute("media"), mpdUrl, base, representation.id, number)
+      };
+    })
+  }));
+}`
+      },
+      {
+        title: "ABR Helpers In dash.js",
+        explain: "The parser module also exports the small startup ABR helper used by the player.",
+        code: `
+export function estimateInitialThroughput() {
+  const downlinkMbps = navigator.connection?.downlink;
+  return downlinkMbps ? downlinkMbps * 1_000_000 : 2_500_000;
+}
+
+export function chooseRepresentation(representations, { throughputBps, bufferSeconds }) {
+  const sorted = [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
+  const safety = bufferSeconds > 12 ? 0.85 : bufferSeconds > 6 ? 0.75 : 0.6;
+  const budget = throughputBps * safety;
+
+  return sorted.filter((rep) => rep.bandwidth <= budget).at(-1) ?? sorted[0];
+}
+
+export async function measureFetch(url) {
+  const startedAt = performance.now();
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
+  const bytes = await response.arrayBuffer();
+  const seconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
+
+  return {
+    bytes,
+    throughputBps: (bytes.byteLength * 8) / seconds
+  };
+}`
+      },
+      {
+        title: "Update The Player",
+        explain: "Choose the startup video representation before creating SourceBuffers, then append that selected video plus the selected audio representation.",
+        code: `
+import { estimateInitialThroughput, loadDashVod, measureFetch } from "./dash.js";
+
+const throughputBps = estimateInitialThroughput();
+const dash = await loadDashVod(mpdUrl, { throughputBps, bufferSeconds: 0 });
+
+const videoBuffer = mediaSource.addSourceBuffer(dash.video.mime);
+const audioBuffer = mediaSource.addSourceBuffer(dash.audio.mime);
+
+const videoQueue = [dash.video.init, ...dash.video.segments.map((segment) => segment.url)];
+const audioQueue = [dash.audio.init, ...dash.audio.segments.map((segment) => segment.url)];
+
+await Promise.all([
+  appendTrack(videoBuffer, videoQueue),
+  appendTrack(audioBuffer, audioQueue)
+]);`
+      }
+    ],
+    demo: {
+      title: "ABR Decision Loop",
+      mode: "timeline",
+      text: "The player compares representation bandwidth with measured throughput and buffer depth before choosing quality."
     }
   },
   {
@@ -999,6 +1266,61 @@ function createClearKeyLicense(keys) {
       title: "EME Lifecycle",
       mode: "packets",
       text: "The encrypted event bridges media bytes to a key session while the video element stays the playback surface."
+    }
+  },
+  {
+    slug: "putting-it-all-together",
+    title: "Putting It All Together",
+    kind: "Practical",
+    visual: "timeline",
+    summary: "Run the finished in-app player: DASH manifest parsing, audio/video MSE appends, playback controls, ABR startup selection, and custom subtitles.",
+    target: "A working browser player loads a Big Buck Bunny DASH stream with audio, video, and subtitle cues.",
+    checkpoint: "The stream loads through Media Source Extensions and the subtitle overlay updates as playback time changes.",
+    reference: bbbMpd,
+    showcase: "player",
+    sections: [
+      {
+        heading: "The Final Shape",
+        body: [
+          "This page brings the main pieces together inside the tutorial app. The player fetches a DASH MPD, chooses a conservative startup video representation, resolves the audio/video initialization and media segment URLs, and appends them to separate SourceBuffers.",
+          "The subtitle layer uses the same timing idea as the IMSC lab. It watches the media playhead and renders the active cue into an overlay above the video."
+        ],
+        points: [
+          "The audio and video bytes come from DASH and MSE, not from assigning a single MP4 URL to video.src.",
+          "The subtitle renderer is custom HTML layered over the video.",
+          "The player reports manifest, codec, CORS, and fetch errors in the page so failures are inspectable."
+        ]
+      },
+      {
+        heading: "What To Build Next",
+        body: [
+          "This final version is still intentionally small. A production player would add mid-stream audio/video adaptation coordination, gap handling, retry logic, live edge management, full subtitle styling, and real DRM license integration.",
+          "The important thing is that the architecture now has clear boundaries: manifest parsing, segment loading, append scheduling, timeline observation, subtitle rendering, and UI state are separate enough to improve one at a time."
+        ],
+        points: [
+          "Add mid-stream representation switching at aligned segment boundaries.",
+          "Use buffer depth and measured throughput to keep updating the ABR choice while playback continues.",
+          "Expand the IMSC subset only for features your content actually uses."
+        ]
+      }
+    ],
+    snippets: [
+      {
+        title: "Final Player Responsibilities",
+        explain: "The in-app demo below is the same architecture the tutorial has built up in small pieces.",
+        code: `
+1. Fetch the DASH MPD.
+2. Parse audio/video representations, codec strings, init segments, and media segment URLs.
+3. Create MediaSource plus audio and video SourceBuffers.
+4. Append init and media segments for both tracks in updateend order.
+5. Watch video.currentTime and render active subtitle cues.
+6. Surface unsupported codec, CORS, and network failures in the UI.`
+      }
+    ],
+    demo: {
+      title: "Complete Playback Loop",
+      mode: "timeline",
+      text: "Manifest parsing feeds segment loading, segment loading feeds MSE, and the media timeline drives subtitles."
     }
   }
 ];

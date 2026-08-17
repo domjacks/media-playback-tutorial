@@ -96,10 +96,8 @@ export function VideoFundamentalsDiagram() {
 }
 
 export function MediaFileDiagram() {
-  const gop = ["I", "B", "B", "P", "B", "B", "P", "B", "B", "I"];
-
   return (
-    <section className="diagram media-file-diagram" aria-label="Media file and GOP diagram">
+    <section className="diagram media-file-diagram" aria-label="Media file structure diagram">
       <div className="file-box">
         <div><Boxes size={20} /> Header</div>
         <div><Clock size={20} /> Metadata</div>
@@ -109,6 +107,33 @@ export function MediaFileDiagram() {
         <span>video track: H.264 samples</span>
         <span>audio track: AAC samples</span>
         <span>timing: decode time and presentation time</span>
+      </div>
+    </section>
+  );
+}
+
+export function CodecCompressionDiagram() {
+  const gop = ["I", "B", "B", "P", "B", "B", "P", "B", "B", "I"];
+
+  return (
+    <section className="diagram codec-diagram" aria-label="Codec compression and raw data rate diagram">
+      <div className="sample-maths">
+        <div>
+          <strong>Y</strong>
+          <span>1920 x 1080</span>
+        </div>
+        <div>
+          <strong>Cb</strong>
+          <span>960 x 1080</span>
+        </div>
+        <div>
+          <strong>Cr</strong>
+          <span>960 x 1080</span>
+        </div>
+        <div className="math-total">
+          <strong>129,600,000 bytes/s</strong>
+          <span>25 fps x 10 bits per sample / 8</span>
+        </div>
       </div>
       <div className="gop-row">
         {gop.map((frame, index) => (
