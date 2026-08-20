@@ -648,7 +648,7 @@ async function appendSegments(sourceBuffer, segments) {
       },
       {
         type: "text",
-        heading: "Renditions Without Adaptation Yet",
+        heading: "Renditions",
         body: [
           "Streaming media is commonly encoded into multiple renditions. Each rendition represents the same content at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
           "For now, think of those renditions as available choices. The player will learn how to choose between them after the DASH lesson, once it has a manifest parser that can actually see every Representation."
