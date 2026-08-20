@@ -5,13 +5,13 @@ export const lessons = [
     slug: "introduction",
     title: "What You Will Build",
     kind: "Theory",
-    visual: "timeline",
     summary: "A guided map of the tutorial, from media fundamentals to a working browser DASH player.",
     target: "You understand the learning path and how each theory topic supports the player you will build.",
     checkpoint: "Describe the route from media bytes to a browser player with DASH, live, subtitles, and optional DRM.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "The Destination",
         body: [
           "By the end of the tutorial you will have built a small browser media player from scratch. It will use the video element for presentation, Media Source Extensions for feeding media bytes, and a minimal DASH parser for discovering segments.",
@@ -24,6 +24,11 @@ export const lessons = [
         ]
       },
       {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "text",
         heading: "The Tutorial Arc",
         body: [
           "The early lessons are intentionally theory-heavy. MSE is easier to understand when you already know what a frame, codec, container, segment, timeline, and buffer mean.",
@@ -34,26 +39,26 @@ export const lessons = [
           "Practical lessons keep the implementation small enough to inspect.",
           "Each code sample is plain HTML and JavaScript modules that can run directly in a browser dev server."
         ]
+      },
+      {
+        type: "demo",
+        title: "Learning Path",
+        mode: "timeline",
+        text: "The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming."
       }
-    ],
-    snippets: [],
-    demo: {
-      title: "Learning Path",
-      mode: "timeline",
-      text: "The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming."
-    }
+    ]
   },
   {
     slug: "video-fundamentals",
     title: "Video Fundamentals",
     kind: "Theory",
-    visual: "video",
     summary: "Understand the properties that define what a viewer sees before you think about files or streaming.",
     target: "You can explain resolution, aspect ratio, frame rate, colour gamut, and dynamic range in player terms.",
     checkpoint: "Given a video rendition, identify the viewing qualities that affect display, bandwidth, and compatibility.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Spatial Detail",
         body: [
           "Resolution is the number of pixels in each frame. A 1920 by 1080 video has more samples of the image than a 1280 by 720 video, so it can preserve more detail when displayed at the same size.",
@@ -66,6 +71,23 @@ export const lessons = [
         ]
       },
       {
+        type: "diagram",
+        visual: "video"
+      },
+      {
+        type: "code",
+        title: "Reading Video Metadata",
+        explain: "The video element exposes decoded presentation dimensions after metadata loads.",
+        code: `
+const video = document.querySelector("video");
+
+video.addEventListener("loadedmetadata", () => {
+  console.log(video.videoWidth, video.videoHeight);
+  console.log(video.duration);
+});`
+      },
+      {
+        type: "text",
         heading: "Time And Motion",
         body: [
           "Frame rate is how many pictures are shown per second. Common values include 24 fps for film-like motion, 25 or 30 fps for broadcast and web video, and 50 or 60 fps for sport, games, and very smooth motion.",
@@ -78,6 +100,7 @@ export const lessons = [
         ]
       },
       {
+        type: "text",
         heading: "Colour And Brightness",
         body: [
           "Colour gamut describes the range of colours a video can represent. SDR web video often uses Rec.709, while wider-gamut HDR content may use Rec.2020 signalling with colours that many older displays cannot fully show.",
@@ -88,38 +111,26 @@ export const lessons = [
           "HDR playback depends on the codec, container metadata, browser, OS, and display.",
           "A player should surface compatibility failures clearly instead of pretending every rendition is equivalent."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
-        title: "Reading Video Metadata",
-        explain: "The video element exposes decoded presentation dimensions after metadata loads.",
-        code: `
-const video = document.querySelector("video");
-
-video.addEventListener("loadedmetadata", () => {
-  console.log(video.videoWidth, video.videoHeight);
-  console.log(video.duration);
-});`
+        type: "demo",
+        title: "Picture Properties",
+        mode: "timeline",
+        text: "Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens."
       }
-    ],
-    demo: {
-      title: "Picture Properties",
-      mode: "timeline",
-      text: "Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens."
-    }
+    ]
   },
   {
     slug: "media-files-containers",
     title: "Media Files And Containers",
     kind: "Theory",
-    visual: "file",
     summary: "Learn what a media file contains and how containers organize tracks, timing, metadata, and media data.",
     target: "You can separate file structure, container metadata, tracks, samples, and codec identifiers.",
     checkpoint: "Explain why a player needs container parsing before it can feed encoded samples to a decoder.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Containers",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "What Makes Up A Media File",
         body: [
           "A media file is more than raw video and audio bytes. It normally contains structural headers, track metadata, timing information, codec configuration, and chunks of encoded media data.",
@@ -132,6 +143,22 @@ video.addEventListener("loadedmetadata", () => {
         ]
       },
       {
+        type: "diagram",
+        visual: "file"
+      },
+      {
+        type: "code",
+        title: "Container Versus Codec",
+        explain: "A browser support check needs both the container MIME type and codec identifiers.",
+        code: `
+const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
+
+console.log(MediaSource.isTypeSupported(h264Aac));
+console.log(MediaSource.isTypeSupported(vp9Opus));`
+      },
+      {
+        type: "text",
         heading: "Containers, Formats, And Bitrate",
         body: [
           "A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.",
@@ -142,37 +169,26 @@ video.addEventListener("loadedmetadata", () => {
           "WebM with VP9 or AV1 can be efficient but support varies by device.",
           "For streaming, average bitrate helps predict download time and ABR decisions."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
-        title: "Container Versus Codec",
-        explain: "A browser support check needs both the container MIME type and codec identifiers.",
-        code: `
-const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
-const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
-
-console.log(MediaSource.isTypeSupported(h264Aac));
-console.log(MediaSource.isTypeSupported(vp9Opus));`
+        type: "demo",
+        title: "File Anatomy",
+        mode: "packets",
+        text: "A playable file combines container structure, metadata, track timing, and encoded audio/video samples."
       }
-    ],
-    demo: {
-      title: "File Anatomy",
-      mode: "packets",
-      text: "A playable file combines container structure, metadata, track timing, and encoded audio/video samples."
-    }
+    ]
   },
   {
     slug: "codecs-compression",
     title: "Codecs And Compression",
     kind: "Theory",
-    visual: "codec",
     summary: "See why raw camera video is enormous and how codecs reduce it with sampling, prediction, and frame dependencies.",
     target: "You can calculate raw video data rate and explain why I-frames, P-frames, B-frames, and audio codecs exist.",
     checkpoint: "Work through the 1920x1080, 10-bit, 25 fps example and explain why a compressed bitrate is necessary.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Raw Video Is Huge",
         body: [
           "A camera does not start with H.264 or AV1. It starts with samples that describe light. In this example, each frame has a Y plane at 1920 by 1080, a Cb plane at 960 by 1080, and a Cr plane at 960 by 1080.",
@@ -185,44 +201,11 @@ console.log(MediaSource.isTypeSupported(vp9Opus));`
         ]
       },
       {
-        heading: "The Maths",
-        body: [
-          "Add the three planes together and one frame contains 4,147,200 component samples. At 10 bits per sample, that is 41,472,000 bits for one frame.",
-          "At 25 frames per second, the stream is 1,036,800,000 bits per second. Divide by 8 bits in a byte and you get 129,600,000 bytes per second, before audio, headers, metadata, or transport overhead."
-        ],
-        points: [
-          "That is about 129.6 MB/s, or about 123.6 MiB/s.",
-          "It is also about 1.04 Gbit/s.",
-          "This is why web video is compressed before it is stored, streamed, or played."
-        ]
+        type: "diagram",
+        visual: "codec"
       },
       {
-        heading: "Video Codecs And Frame Dependencies",
-        body: [
-          "Video codecs exploit the fact that nearby frames are often similar. Instead of storing every frame independently, they store some complete reference frames and many predicted frames that describe changes from other frames.",
-          "A Group of Pictures, or GOP, is a run of frames built around these dependencies. I-frames are self-contained. P-frames predict from earlier frames. B-frames can predict from frames before and after their presentation time."
-        ],
-        points: [
-          "I-frames are larger but useful for startup, seeking, and recovery.",
-          "P-frames are smaller because they reuse previous reference information.",
-          "B-frames improve compression but can make decode order differ from presentation order."
-        ]
-      },
-      {
-        heading: "Audio Codecs",
-        body: [
-          "Audio codecs compress a continuous sampled signal rather than a sequence of pictures. AAC, Opus, and MP3 use psychoacoustic models to spend bits where human hearing is most sensitive.",
-          "Audio still has timing, frames, sample rates, channel layouts, and codec configuration. A player must keep audio and video clocks aligned even though their encoded structures are different."
-        ],
-        points: [
-          "Sample rate describes audio samples per second, commonly 44.1 kHz or 48 kHz.",
-          "Channel layout describes mono, stereo, surround, or object-based arrangements.",
-          "Audio buffer underruns are often more noticeable than small video quality drops."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "Raw Video Data Rate",
         explain: "This calculation shows the uncompressed byte rate for the example camera signal.",
         code: `
@@ -241,6 +224,46 @@ console.log(samplesPerFrame); // 4147200
 console.log(bytesPerSecond);  // 129600000`
       },
       {
+        type: "text",
+        heading: "The Maths",
+        body: [
+          "Add the three planes together and one frame contains 4,147,200 component samples. At 10 bits per sample, that is 41,472,000 bits for one frame.",
+          "At 25 frames per second, the stream is 1,036,800,000 bits per second. Divide by 8 bits in a byte and you get 129,600,000 bytes per second, before audio, headers, metadata, or transport overhead."
+        ],
+        points: [
+          "That is about 129.6 MB/s, or about 123.6 MiB/s.",
+          "It is also about 1.04 Gbit/s.",
+          "This is why web video is compressed before it is stored, streamed, or played."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Video Codecs And Frame Dependencies",
+        body: [
+          "Video codecs exploit the fact that nearby frames are often similar. Instead of storing every frame independently, they store some complete reference frames and many predicted frames that describe changes from other frames.",
+          "A Group of Pictures, or GOP, is a run of frames built around these dependencies. I-frames are self-contained. P-frames predict from earlier frames. B-frames can predict from frames before and after their presentation time."
+        ],
+        points: [
+          "I-frames are larger but useful for startup, seeking, and recovery.",
+          "P-frames are smaller because they reuse previous reference information.",
+          "B-frames improve compression but can make decode order differ from presentation order."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Audio Codecs",
+        body: [
+          "Audio codecs compress a continuous sampled signal rather than a sequence of pictures. AAC, Opus, and MP3 use psychoacoustic models to spend bits where human hearing is most sensitive.",
+          "Audio still has timing, frames, sample rates, channel layouts, and codec configuration. A player must keep audio and video clocks aligned even though their encoded structures are different."
+        ],
+        points: [
+          "Sample rate describes audio samples per second, commonly 44.1 kHz or 48 kHz.",
+          "Channel layout describes mono, stereo, surround, or object-based arrangements.",
+          "Audio buffer underruns are often more noticeable than small video quality drops."
+        ]
+      },
+      {
+        type: "code",
         title: "Codec Support Check",
         explain: "A browser support check needs both the container MIME type and codec identifiers.",
         code: `
@@ -249,25 +272,26 @@ const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
 
 console.log(MediaSource.isTypeSupported(h264Aac));
 console.log(MediaSource.isTypeSupported(vp9Opus));`
+      },
+      {
+        type: "demo",
+        title: "Compression Pressure",
+        mode: "packets",
+        text: "Raw samples quickly become hundreds of megabytes per second, so codecs reduce the signal before streaming."
       }
-    ],
-    demo: {
-      title: "Compression Pressure",
-      mode: "packets",
-      text: "Raw samples quickly become hundreds of megabytes per second, so codecs reduce the signal before streaming."
-    }
+    ]
   },
   {
     slug: "fragmented-mp4-cmaf",
     title: "Fragmented MP4 And CMAF",
     kind: "Theory",
-    visual: "fmp4",
     summary: "Bridge the gap between encoded samples and the small appendable media pieces used by MSE, DASH, HLS, and CMAF.",
     target: "You understand init segments, media segments, MP4 boxes, timestamps, and why CMAF exists.",
     checkpoint: "Explain why MSE needs initialization data before media fragments and how a segment maps onto media time.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Containers",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Why Fragment MP4",
         body: [
           "A normal MP4 file is usually designed as one complete object. That is fine when the browser can fetch the file directly, but streaming players need smaller timed pieces that can be requested, appended, cached, and switched between.",
@@ -280,45 +304,11 @@ console.log(MediaSource.isTypeSupported(vp9Opus));`
         ]
       },
       {
-        heading: "Boxes You Will See",
-        body: [
-          "MP4 is made of boxes. Each box has a type and a payload. You do not need to hand-parse every box for this tutorial, but knowing the common names makes MSE errors easier to reason about.",
-          "An init segment normally includes ftyp and moov. A media segment normally includes moof and mdat. The moof box describes the fragment timing and sample layout. The mdat box carries the encoded sample bytes."
-        ],
-        points: [
-          "ftyp identifies the MP4 brand and compatibility.",
-          "moov contains movie and track metadata, including codec setup.",
-          "moof contains fragment metadata such as decode time and sample runs.",
-          "mdat contains the encoded audio or video samples."
-        ]
+        type: "diagram",
+        visual: "fmp4"
       },
       {
-        heading: "Timestamps And Timeline Mapping",
-        body: [
-          "A media fragment is not just bytes; it is bytes for a time range. The container tells the browser how sample decode times and presentation times map onto the media element timeline.",
-          "This is why append order and timestamp continuity matter. If two fragments have a timing gap or overlap, the video element can expose disjoint buffered ranges or stall when the playhead reaches the gap."
-        ],
-        points: [
-          "Track timescales convert integer timestamps into seconds.",
-          "Decode time is when the decoder needs a sample; presentation time is when the viewer should see or hear it.",
-          "B-frames can make decode order differ from presentation order."
-        ]
-      },
-      {
-        heading: "Where CMAF Fits",
-        body: [
-          "CMAF, the Common Media Application Format, standardizes a constrained fMP4 style for streaming. Its goal is to let DASH and HLS reuse the same encoded media segments instead of requiring completely separate packaging.",
-          "CMAF also defines chunks, which are smaller pieces inside a fragment. Low-latency streaming can send chunks before the whole segment is complete, reducing the time between capture and playback."
-        ],
-        points: [
-          "CMAF is not a player API; it is a media packaging format.",
-          "DASH and HLS can both reference CMAF media.",
-          "For this tutorial, CMAF explains why the same fMP4 fragments can appear in multiple streaming protocols."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "fMP4 Mental Model",
         explain: "You will append this order repeatedly when using MSE: setup first, then timed fragments.",
         code: `
@@ -337,6 +327,47 @@ Media segment
     encoded audio or video samples`
       },
       {
+        type: "text",
+        heading: "Boxes You Will See",
+        body: [
+          "MP4 is made of boxes. Each box has a type and a payload. You do not need to hand-parse every box for this tutorial, but knowing the common names makes MSE errors easier to reason about.",
+          "An init segment normally includes ftyp and moov. A media segment normally includes moof and mdat. The moof box describes the fragment timing and sample layout. The mdat box carries the encoded sample bytes."
+        ],
+        points: [
+          "ftyp identifies the MP4 brand and compatibility.",
+          "moov contains movie and track metadata, including codec setup.",
+          "moof contains fragment metadata such as decode time and sample runs.",
+          "mdat contains the encoded audio or video samples."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Timestamps And Timeline Mapping",
+        body: [
+          "A media fragment is not just bytes; it is bytes for a time range. The container tells the browser how sample decode times and presentation times map onto the media element timeline.",
+          "This is why append order and timestamp continuity matter. If two fragments have a timing gap or overlap, the video element can expose disjoint buffered ranges or stall when the playhead reaches the gap."
+        ],
+        points: [
+          "Track timescales convert integer timestamps into seconds.",
+          "Decode time is when the decoder needs a sample; presentation time is when the viewer should see or hear it.",
+          "B-frames can make decode order differ from presentation order."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Where CMAF Fits",
+        body: [
+          "CMAF, the Common Media Application Format, standardizes a constrained fMP4 style for streaming. Its goal is to let DASH and HLS reuse the same encoded media segments instead of requiring completely separate packaging.",
+          "CMAF also defines chunks, which are smaller pieces inside a fragment. Low-latency streaming can send chunks before the whole segment is complete, reducing the time between capture and playback."
+        ],
+        points: [
+          "CMAF is not a player API; it is a media packaging format.",
+          "DASH and HLS can both reference CMAF media.",
+          "For this tutorial, CMAF explains why the same fMP4 fragments can appear in multiple streaming protocols."
+        ]
+      },
+      {
+        type: "code",
         title: "Buffered Ranges Depend On Timestamps",
         explain: "After appending bytes, inspect buffered time rather than assuming downloaded bytes equal playable media.",
         code: `
@@ -345,26 +376,26 @@ function logBuffered(video) {
     console.log(video.buffered.start(i), video.buffered.end(i));
   }
 }`
+      },
+      {
+        type: "demo",
+        title: "Appendable Fragments",
+        mode: "timeline",
+        text: "fMP4 turns encoded samples into timed fragments that MSE can append and expose as buffered media ranges."
       }
-    ],
-    demo: {
-      title: "Appendable Fragments",
-      mode: "timeline",
-      text: "fMP4 turns encoded samples into timed fragments that MSE can append and expose as buffered media ranges."
-    }
+    ]
   },
   {
     slug: "players-timelines-buffers",
     title: "Players, Timelines, And Buffers",
     kind: "Theory",
-    visual: "buffer",
-    diagrams: ["buffer", "av-sync"],
     summary: "Build the mental model for playback state before using Media Source Extensions.",
     target: "You understand media timelines, playheads, buffered ranges, seekable ranges, ready state, and stalls.",
     checkpoint: "Use browser media properties to explain why playback can start, seek, continue, or stall.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "The Media Timeline",
         body: [
           "A media element presents audio and video on a timeline measured in seconds. The playhead is the current playback position, exposed as currentTime. Duration is the known length for VOD, while live content may have a moving timeline instead of a fixed end.",
@@ -377,44 +408,15 @@ function logBuffered(video) {
         ]
       },
       {
-        heading: "One Timeline, Multiple Buffers",
-        body: [
-          "A media element has one currentTime even when audio and video arrive through separate SourceBuffers. The browser synchronizes decoded audio samples and video frames against that shared media timeline.",
-          "That means the player must keep both tracks fed. If video is buffered to 20 seconds but audio is only buffered to 8 seconds, playback can still stall around 8 seconds because the media element cannot present complete synchronized output."
-        ],
-        points: [
-          "Separate SourceBuffers do not create separate playheads.",
-          "Audio and video timestamps must describe the same media timeline.",
-          "A healthy buffer means the playhead has enough audio and video ahead of it."
-        ]
+        type: "diagram",
+        visual: "buffer"
       },
       {
-        heading: "Buffered Ranges",
-        body: [
-          "The buffered property is a TimeRanges object. It does not say how many bytes are downloaded; it says which time intervals the media element can play without more network data.",
-          "Buffers can contain gaps. A player may have 0-10 seconds and 20-30 seconds buffered, but it will still stall when the playhead reaches 10 seconds unless the missing range is filled or the user seeks."
-        ],
-        points: [
-          "Buffer depth usually means buffered end minus currentTime.",
-          "Appending bytes does not guarantee a continuous range if timestamps do not line up.",
-          "Eviction removes old data so memory does not grow forever."
-        ]
+        type: "diagram",
+        visual: "av-sync"
       },
       {
-        heading: "Seekable Ranges And Live Windows",
-        body: [
-          "Seekable ranges describe where the browser or player believes seeking is allowed. For a normal MP4 file, that may be most of the file once metadata is known. For live streams, it is usually a sliding window of recent media.",
-          "A live player tracks the live edge, which is the newest available media time. It usually plays behind that edge by a target latency so downloads, decode, and small network delays have room to recover."
-        ],
-        points: [
-          "Seekable is about what can be requested or reached, not only what is already buffered.",
-          "Live windows move forward as old segments expire and new segments appear.",
-          "A stall happens when the playhead reaches a time that is not buffered and cannot be decoded yet."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "Inspecting Timeline State",
         explain: "These properties are the foundation for the player decisions used later in the tutorial.",
         code: `
@@ -428,25 +430,65 @@ const video = document.querySelector("video");
 console.log("playhead", video.currentTime);
 describeRanges("buffered", video.buffered);
 describeRanges("seekable", video.seekable);`
+      },
+      {
+        type: "text",
+        heading: "One Timeline, Multiple Buffers",
+        body: [
+          "A media element has one currentTime even when audio and video arrive through separate SourceBuffers. The browser synchronizes decoded audio samples and video frames against that shared media timeline.",
+          "That means the player must keep both tracks fed. If video is buffered to 20 seconds but audio is only buffered to 8 seconds, playback can still stall around 8 seconds because the media element cannot present complete synchronized output."
+        ],
+        points: [
+          "Separate SourceBuffers do not create separate playheads.",
+          "Audio and video timestamps must describe the same media timeline.",
+          "A healthy buffer means the playhead has enough audio and video ahead of it."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Buffered Ranges",
+        body: [
+          "The buffered property is a TimeRanges object. It does not say how many bytes are downloaded; it says which time intervals the media element can play without more network data.",
+          "Buffers can contain gaps. A player may have 0-10 seconds and 20-30 seconds buffered, but it will still stall when the playhead reaches 10 seconds unless the missing range is filled or the user seeks."
+        ],
+        points: [
+          "Buffer depth usually means buffered end minus currentTime.",
+          "Appending bytes does not guarantee a continuous range if timestamps do not line up.",
+          "Eviction removes old data so memory does not grow forever."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Seekable Ranges And Live Windows",
+        body: [
+          "Seekable ranges describe where the browser or player believes seeking is allowed. For a normal MP4 file, that may be most of the file once metadata is known. For live streams, it is usually a sliding window of recent media.",
+          "A live player tracks the live edge, which is the newest available media time. It usually plays behind that edge by a target latency so downloads, decode, and small network delays have room to recover."
+        ],
+        points: [
+          "Seekable is about what can be requested or reached, not only what is already buffered.",
+          "Live windows move forward as old segments expire and new segments appear.",
+          "A stall happens when the playhead reaches a time that is not buffered and cannot be decoded yet."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Timed Queues",
+        mode: "buffer",
+        text: "A player succeeds when the playhead stays inside buffered, seekable, decodable media time."
       }
-    ],
-    demo: {
-      title: "Timed Queues",
-      mode: "buffer",
-      text: "A player succeeds when the playhead stays inside buffered, seekable, decodable media time."
-    }
+    ]
   },
   {
     slug: "progressive-download",
     title: "Progressive Download Playback",
     kind: "Practical",
-    visual: "buffer",
     summary: "Play a normal MP4 with the video element before taking control of media bytes with MSE.",
     target: "A plain HTML page plays a progressively downloaded MP4 using video.src and browser-native fetching.",
     checkpoint: "The video element loads metadata, exposes buffered/seekable ranges, and plays without custom fetch or SourceBuffer code.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Let The Browser Be The Player",
         body: [
           "The simplest web media player is a video element with a src. You give the browser a URL to a media resource, and the browser handles fetching, buffering, demuxing, decoding, A/V sync, seeking, and controls.",
@@ -459,32 +501,11 @@ describeRanges("seekable", video.seekable);`
         ]
       },
       {
-        heading: "What The Browser Expects",
-        body: [
-          "The URL should point to a browser-supported media file, such as MP4 with H.264/AAC or WebM with VP9/Opus. The server should send the correct Content-Type and ideally support byte ranges so seeking does not require downloading the entire file.",
-          "For MP4, metadata placement matters. If the important movie metadata is near the beginning of the file, the browser can discover duration, tracks, and dimensions quickly. If metadata is only at the end, startup can be slower."
-        ],
-        points: [
-          "A single src works when the browser can handle the container and codecs by itself.",
-          "The video element populates properties like duration, videoWidth, buffered, seekable, and readyState.",
-          "You do not get to choose individual qualities, segments, or append order."
-        ]
+        type: "diagram",
+        visual: "buffer"
       },
       {
-        heading: "Why This Comes Before MSE",
-        body: [
-          "Progressive playback teaches the baseline media element lifecycle. MSE keeps the same video element and media timeline, but replaces browser-managed file fetching with JavaScript-managed byte appends.",
-          "If progressive download is enough for your product, use it. Reach for MSE when you need manifest-driven streaming, adaptive bitrate, custom buffering strategy, live playback, or tighter integration with timed side data."
-        ],
-        points: [
-          "Progressive: one URL, browser-managed bytes.",
-          "MSE: one media element, JavaScript-managed bytes.",
-          "DASH/HLS: manifests describe which bytes should be fetched."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "index.html",
         explain: "A progressive player can be this small: the browser sees src and starts its own load algorithm.",
         code: `
@@ -499,6 +520,20 @@ describeRanges("seekable", video.seekable);`
 <script type="module" src="./player.js"></script>`
       },
       {
+        type: "text",
+        heading: "What The Browser Expects",
+        body: [
+          "The URL should point to a browser-supported media file, such as MP4 with H.264/AAC or WebM with VP9/Opus. The server should send the correct Content-Type and ideally support byte ranges so seeking does not require downloading the entire file.",
+          "For MP4, metadata placement matters. If the important movie metadata is near the beginning of the file, the browser can discover duration, tracks, and dimensions quickly. If metadata is only at the end, startup can be slower."
+        ],
+        points: [
+          "A single src works when the browser can handle the container and codecs by itself.",
+          "The video element populates properties like duration, videoWidth, buffered, seekable, and readyState.",
+          "You do not get to choose individual qualities, segments, or append order."
+        ]
+      },
+      {
+        type: "code",
         title: "player.js",
         explain: "This code observes what the browser is doing instead of fetching media bytes itself.",
         code: `
@@ -525,6 +560,20 @@ function logRanges(label, ranges) {
 }`
       },
       {
+        type: "text",
+        heading: "Why This Comes Before MSE",
+        body: [
+          "Progressive playback teaches the baseline media element lifecycle. MSE keeps the same video element and media timeline, but replaces browser-managed file fetching with JavaScript-managed byte appends.",
+          "If progressive download is enough for your product, use it. Reach for MSE when you need manifest-driven streaming, adaptive bitrate, custom buffering strategy, live playback, or tighter integration with timed side data."
+        ],
+        points: [
+          "Progressive: one URL, browser-managed bytes.",
+          "MSE: one media element, JavaScript-managed bytes.",
+          "DASH/HLS: manifests describe which bytes should be fetched."
+        ]
+      },
+      {
+        type: "code",
         title: "What src Triggers",
         explain: "Setting src starts a browser-owned pipeline. Later MSE lessons replace only the fetch/demux input side.",
         code: `
@@ -534,25 +583,26 @@ video.src = url
   -> browser detects tracks and codecs
   -> browser decodes audio/video samples
   -> video.currentTime advances on one shared timeline`
+      },
+      {
+        type: "demo",
+        title: "Browser-Managed Playback",
+        mode: "buffer",
+        text: "With progressive download, the browser owns network loading and buffering while JavaScript observes media state."
       }
-    ],
-    demo: {
-      title: "Browser-Managed Playback",
-      mode: "buffer",
-      text: "With progressive download, the browser owns network loading and buffering while JavaScript observes media state."
-    }
+    ]
   },
   {
     slug: "streaming-segments",
     title: "Streaming And Segments",
     kind: "Theory",
-    visual: "packets",
     summary: "Move from complete files to short timed chunks that a player can request and buffer.",
     target: "You can explain HTTP delivery, segments, renditions, initialization data, and timed media chunks.",
     checkpoint: "Trace one segment from an HTTP request to a buffered time range.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Audio_and_video_delivery",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "From Files To Flows",
         body: [
           "On the network, media is delivered as bytes over HTTP, usually carried by TCP or by HTTP/3 over QUIC depending on the browser and server. The transport handles packetization, ordering, loss recovery, and congestion control.",
@@ -565,32 +615,11 @@ video.src = url
         ]
       },
       {
-        heading: "Segments",
-        body: [
-          "A segment covers a timed slice of media, often two to six seconds. It may be a standalone file or a byte range inside a larger file. For fragmented MP4, an initialization segment describes the track setup and media segments carry timed samples.",
-          "Segments should begin at useful random access points so playback can start or switch quality without decoding a long chain of missing dependencies."
-        ],
-        points: [
-          "Shorter segments can reduce live latency but increase request overhead.",
-          "Longer segments are efficient but make switching and recovery slower.",
-          "Aligned segment boundaries let a player switch representations at the same media time."
-        ]
+        type: "diagram",
+        visual: "packets"
       },
       {
-        heading: "Renditions Without Adaptation Yet",
-        body: [
-          "Streaming media is commonly encoded into multiple renditions. Each rendition represents the same content at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
-          "For now, think of those renditions as available choices. The player will learn how to choose between them after the DASH lesson, once it has a manifest parser that can actually see every Representation."
-        ],
-        points: [
-          "A rendition is useful only if its codec and container are supported by the browser.",
-          "Representations need aligned segment timing before a player can switch cleanly.",
-          "The manifest is where the player discovers these choices."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "Segment Request Loop",
         explain: "Before ABR, the core streaming loop is simply request a segment, append it, then move to the next segment.",
         code: `
@@ -603,26 +632,52 @@ async function appendSegments(sourceBuffer, segments) {
     sourceBuffer.appendBuffer(await fetchBytes(segment.url));
   });
 }`
+      },
+      {
+        type: "text",
+        heading: "Segments",
+        body: [
+          "A segment covers a timed slice of media, often two to six seconds. It may be a standalone file or a byte range inside a larger file. For fragmented MP4, an initialization segment describes the track setup and media segments carry timed samples.",
+          "Segments should begin at useful random access points so playback can start or switch quality without decoding a long chain of missing dependencies."
+        ],
+        points: [
+          "Shorter segments can reduce live latency but increase request overhead.",
+          "Longer segments are efficient but make switching and recovery slower.",
+          "Aligned segment boundaries let a player switch representations at the same media time."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Renditions Without Adaptation Yet",
+        body: [
+          "Streaming media is commonly encoded into multiple renditions. Each rendition represents the same content at a particular resolution, bitrate, codec profile, frame rate, or channel layout.",
+          "For now, think of those renditions as available choices. The player will learn how to choose between them after the DASH lesson, once it has a manifest parser that can actually see every Representation."
+        ],
+        points: [
+          "A rendition is useful only if its codec and container are supported by the browser.",
+          "Representations need aligned segment timing before a player can switch cleanly.",
+          "The manifest is where the player discovers these choices."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Segment Delivery",
+        mode: "packets",
+        text: "Streaming players request timed chunks and append enough future media to keep playback moving."
       }
-    ],
-    demo: {
-      title: "Segment Delivery",
-      mode: "packets",
-      text: "Streaming players request timed chunks and append enough future media to keep playback moving."
-    }
+    ]
   },
   {
     slug: "mse-basics",
     title: "Build A Tiny MSE Player",
     kind: "Practical",
-    visual: "buffer",
-    diagrams: ["buffer", "av-sync"],
     summary: "Use Media Source Extensions to append initialization and media segments into a video element.",
     target: "A plain HTML page and ESM module append remote Big Buck Bunny audio/video bytes to SourceBuffers.",
     checkpoint: "The video element plays audio and video that JavaScript fetched and appended.",
     reference: "https://rdmedia.bbc.co.uk/bbb/",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Start With The Same Video Element",
         body: [
           "A progressive player gives the video element a src that points directly at a media file. An MSE player still uses the video element for playback, decoding, controls, timing, and A/V sync, but JavaScript supplies the media bytes.",
@@ -635,6 +690,31 @@ async function appendSegments(sourceBuffer, segments) {
         ]
       },
       {
+        type: "diagram",
+        visual: "buffer"
+      },
+      {
+        type: "diagram",
+        visual: "av-sync"
+      },
+      {
+        type: "code",
+        title: "index.html",
+        explain: "This file keeps the user app deliberately small: one video element and one browser ESM entrypoint.",
+        code: `
+<video id="video" controls width="800"></video>
+<script type="module" src="./player.js"></script>`
+      },
+      {
+        type: "code",
+        title: "Create MediaSource",
+        explain: "MediaSource is the browser object that will receive media bytes from your JavaScript.",
+        code: `
+const video = document.querySelector("#video");
+const mediaSource = new MediaSource();`
+      },
+      {
+        type: "text",
         heading: "Create And Attach A MediaSource",
         body: [
           "MediaSource is the object that represents a JavaScript-fed media stream. You attach it to the video element by creating an object URL and assigning that URL to video.src.",
@@ -647,46 +727,7 @@ async function appendSegments(sourceBuffer, segments) {
         ]
       },
       {
-        heading: "Append Init Before Media",
-        body: [
-          "Fragmented MP4 separates track setup from timed media data. The initialization segment describes codec setup, timescale, and track metadata. The media segments then carry timed samples.",
-          "The browser needs the initialization segment first. After that, each media segment extends the buffered time range for its track."
-        ],
-        points: [
-          "Init segments usually have names such as IS.mp4 or init.mp4.",
-          "Media segments often have names such as 000001.m4s.",
-          "Audio and video segments must describe the same media timeline."
-        ]
-      },
-      {
-        heading: "Respect The Append Queue",
-        body: [
-          "A SourceBuffer can process only one append at a time. While sourceBuffer.updating is true, another appendBuffer call will fail. The simplest beginner-safe pattern is to append one chunk, wait for updateend, then append the next chunk.",
-          "In this first MSE player, the segment list is hardcoded. The DASH lesson replaces those hardcoded URLs with a manifest parser."
-        ],
-        points: [
-          "Only append while the SourceBuffer is not updating.",
-          "Use precise MIME types and codec strings supported by the browser.",
-          "Call endOfStream when all audio and video bytes have been appended."
-        ]
-      }
-    ],
-    snippets: [
-      {
-        title: "index.html",
-        explain: "This file keeps the user app deliberately small: one video element and one browser ESM entrypoint.",
-        code: `
-<video id="video" controls width="800"></video>
-<script type="module" src="./player.js"></script>`
-      },
-      {
-        title: "Create MediaSource",
-        explain: "MediaSource is the browser object that will receive media bytes from your JavaScript.",
-        code: `
-const video = document.querySelector("#video");
-const mediaSource = new MediaSource();`
-      },
-      {
+        type: "code",
         title: "Attach It To The Video Element",
         explain: "The object URL lets the video element treat your MediaSource as its media resource.",
         code: `
@@ -697,6 +738,7 @@ mediaSource.addEventListener("sourceopen", async () => {
 });`
       },
       {
+        type: "code",
         title: "Describe The Tracks",
         explain: "This lab uses one video track and one audio track from the BBC Big Buck Bunny DASH stream. The first file for each track is the initialization segment.",
         code: `
@@ -723,6 +765,20 @@ const tracks = [
 ];`
       },
       {
+        type: "text",
+        heading: "Append Init Before Media",
+        body: [
+          "Fragmented MP4 separates track setup from timed media data. The initialization segment describes codec setup, timescale, and track metadata. The media segments then carry timed samples.",
+          "The browser needs the initialization segment first. After that, each media segment extends the buffered time range for its track."
+        ],
+        points: [
+          "Init segments usually have names such as IS.mp4 or init.mp4.",
+          "Media segments often have names such as 000001.m4s.",
+          "Audio and video segments must describe the same media timeline."
+        ]
+      },
+      {
+        type: "code",
         title: "Add SourceBuffers",
         explain: "Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append.",
         code: `
@@ -732,6 +788,7 @@ const sourceBuffers = tracks.map((track) => ({
 }));`
       },
       {
+        type: "code",
         title: "Append A Queue",
         explain: "appendBuffer is asynchronous. This helper waits for updateend before feeding the next chunk to the same SourceBuffer.",
         code: `
@@ -746,6 +803,20 @@ function appendAll(sourceBuffer, queue) {
 }`
       },
       {
+        type: "text",
+        heading: "Respect The Append Queue",
+        body: [
+          "A SourceBuffer can process only one append at a time. While sourceBuffer.updating is true, another appendBuffer call will fail. The simplest beginner-safe pattern is to append one chunk, wait for updateend, then append the next chunk.",
+          "In this first MSE player, the segment list is hardcoded. The DASH lesson replaces those hardcoded URLs with a manifest parser."
+        ],
+        points: [
+          "Only append while the SourceBuffer is not updating.",
+          "Use precise MIME types and codec strings supported by the browser.",
+          "Call endOfStream when all audio and video bytes have been appended."
+        ]
+      },
+      {
+        type: "code",
         title: "Fetch And Append Bytes",
         explain: "Once the MediaSource is open, create the SourceBuffers, fetch each init/media segment, append each track queue, then close the stream.",
         code: `
@@ -766,6 +837,7 @@ async function fetchBytes(url) {
 }`
       },
       {
+        type: "code",
         title: "Complete player.js",
         explain: "This complete file is runnable as-is beside the index.html from the first snippet.",
         code: `
@@ -821,25 +893,26 @@ async function fetchBytes(url) {
   if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
   return response.arrayBuffer();
 }`
+      },
+      {
+        type: "demo",
+        title: "SourceBuffer Queue",
+        mode: "buffer",
+        text: "Append operations are serialized. The browser parses each fragment and expands the playable timeline."
       }
-    ],
-    demo: {
-      title: "SourceBuffer Queue",
-      mode: "buffer",
-      text: "Append operations are serialized. The browser parses each fragment and expands the playable timeline."
-    }
+    ]
   },
   {
     slug: "protocols",
     title: "DASH And HLS Theory",
     kind: "Theory",
-    visual: "timeline",
     summary: "Replace hardcoded segment lists with manifests that describe time, quality, codecs, and URLs.",
     target: "You understand why DASH MPDs and HLS playlists exist and what a player reads from them.",
     checkpoint: "Given a manifest, identify representations, init segments, media segment templates, and durations.",
     reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Why Protocols Exist",
         body: [
           "The previous demo hardcoded every segment. That works for a lab, but not for real media. A streaming protocol gives the player a manifest so it can discover available qualities, languages, timing, and segment URLs.",
@@ -850,10 +923,13 @@ async function fetchBytes(url) {
           "HLS vocabulary: master playlist, media playlist, rendition, variant, EXTINF.",
           "Both protocols let the player react to bandwidth, latency, and device capability."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "code",
         title: "A Tiny MPD Mental Model",
         explain: "This is the shape your parser will walk in the next lesson.",
         code: `
@@ -862,26 +938,26 @@ MPD
     AdaptationSet mimeType="video/mp4"
       Representation bandwidth="..."
         SegmentTemplate initialization="..." media="..." duration="..."`
+      },
+      {
+        type: "demo",
+        title: "Manifest To Timeline",
+        mode: "timeline",
+        text: "A manifest maps segment numbers to timeline ranges so the player can request just enough future media."
       }
-    ],
-    demo: {
-      title: "Manifest To Timeline",
-      mode: "timeline",
-      text: "A manifest maps segment numbers to timeline ranges so the player can request just enough future media."
-    }
+    ]
   },
   {
     slug: "dash-vod",
     title: "Parse DASH VOD",
     kind: "Practical",
-    visual: "timeline",
-    diagrams: ["timeline", "av-sync"],
     summary: "Update the MSE player so it fetches an MPD and appends the audio/video segments described by the manifest.",
     target: "A browser ESM player fetches the BBC Big Buck Bunny MPD and plays audio plus video from manifest-derived segments.",
     checkpoint: "Playback starts from manifest-derived video and audio initialization/media URLs.",
-    reference: bbbMpd,
-    sections: [
+    reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd",
+    blocks: [
       {
+        type: "text",
         heading: "Parser Boundaries",
         body: [
           "A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, BaseURL, and SegmentTemplate URLs using $Number$ replacement.",
@@ -892,10 +968,17 @@ MPD
           "Resolve segment URLs with new URL(relative, manifestUrl).",
           "Keep append sequencing isolated from manifest parsing."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "diagram",
+        visual: "av-sync"
+      },
+      {
+        type: "code",
         title: "dash.js",
         explain: "This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, BaseURL, and SegmentTemplate.",
         code: `
@@ -974,12 +1057,13 @@ function parseIsoDuration(value) {
 }`
       },
       {
+        type: "code",
         title: "player.js With DASH",
         explain: "The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations.",
         code: `
 import { loadDashVod } from "./dash.js";
 
-const mpdUrl = "${bbbMpd}";
+const mpdUrl = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd";
 const video = document.querySelector("#video");
 const dash = await loadDashVod(mpdUrl);
 
@@ -1025,25 +1109,26 @@ async function fetchBytes(url) {
   if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
   return response.arrayBuffer();
 }`
+      },
+      {
+        type: "demo",
+        title: "MPD Loader",
+        mode: "timeline",
+        text: "Manifest fields become concrete segment requests, then each response feeds the same MSE append queue."
       }
-    ],
-    demo: {
-      title: "MPD Loader",
-      mode: "timeline",
-      text: "Manifest fields become concrete segment requests, then each response feeds the same MSE append queue."
-    }
+    ]
   },
   {
     slug: "adaptive-bitrate",
     title: "Adaptive Bitrate",
     kind: "Practical",
-    visual: "timeline",
     summary: "Use the DASH representations you parsed to choose a quality level from network and buffer signals.",
     target: "The DASH player selects the initial video representation with a small ABR algorithm instead of always hardcoding one quality.",
     checkpoint: "The player can explain why it picked a startup representation and can choose a safer one when conditions are poor.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/Network_Information_API",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "What ABR Decides",
         body: [
           "Adaptive bitrate is the player logic that decides which representation to request. DASH gives the player a ladder of representations; ABR chooses a rung based on current conditions.",
@@ -1056,32 +1141,11 @@ async function fetchBytes(url) {
         ]
       },
       {
-        heading: "A Basic Algorithm",
-        body: [
-          "A useful first algorithm chooses the highest representation whose declared bandwidth fits inside a conservative throughput budget. The safety margin protects against network variation and request overhead.",
-          "Buffer depth changes how aggressive the player can be. If there is a large buffer, the player can use more of the measured throughput. If the buffer is shallow, it should be more cautious."
-        ],
-        points: [
-          "Sort representations by bandwidth from low to high.",
-          "Estimate throughput from downloaded segment bytes divided by download time.",
-          "Pick the highest representation below throughput multiplied by a safety factor."
-        ]
+        type: "diagram",
+        visual: "timeline"
       },
       {
-        heading: "Startup ABR Versus Switching",
-        body: [
-          "This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching SourceBuffer streams mid-playback.",
-          "A full player repeats the decision throughout playback. It can switch at aligned segment boundaries, but it must handle codec compatibility, buffered ranges, quality oscillation, and audio/video coordination."
-        ],
-        points: [
-          "Startup ABR is simple and still useful.",
-          "Mid-stream ABR needs aligned segments and careful append scheduling.",
-          "Avoid switching up too quickly and switch down before the buffer becomes dangerous."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "Expose Representations From The Parser",
         explain: "Instead of returning one Representation, return a list the ABR selector can choose from.",
         code: `
@@ -1104,6 +1168,20 @@ function parseRepresentations(adaptation, template, mpdUrl, base, segmentCount, 
 }`
       },
       {
+        type: "text",
+        heading: "A Basic Algorithm",
+        body: [
+          "A useful first algorithm chooses the highest representation whose declared bandwidth fits inside a conservative throughput budget. The safety margin protects against network variation and request overhead.",
+          "Buffer depth changes how aggressive the player can be. If there is a large buffer, the player can use more of the measured throughput. If the buffer is shallow, it should be more cautious."
+        ],
+        points: [
+          "Sort representations by bandwidth from low to high.",
+          "Estimate throughput from downloaded segment bytes divided by download time.",
+          "Pick the highest representation below throughput multiplied by a safety factor."
+        ]
+      },
+      {
+        type: "code",
         title: "ABR Helpers In dash.js",
         explain: "The parser module also exports the small startup ABR helper used by the player.",
         code: `
@@ -1134,6 +1212,20 @@ export async function measureFetch(url) {
 }`
       },
       {
+        type: "text",
+        heading: "Startup ABR Versus Switching",
+        body: [
+          "This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching SourceBuffer streams mid-playback.",
+          "A full player repeats the decision throughout playback. It can switch at aligned segment boundaries, but it must handle codec compatibility, buffered ranges, quality oscillation, and audio/video coordination."
+        ],
+        points: [
+          "Startup ABR is simple and still useful.",
+          "Mid-stream ABR needs aligned segments and careful append scheduling.",
+          "Avoid switching up too quickly and switch down before the buffer becomes dangerous."
+        ]
+      },
+      {
+        type: "code",
         title: "Update The Player",
         explain: "Choose the startup video representation before creating SourceBuffers, then append that selected video plus the selected audio representation.",
         code: `
@@ -1152,25 +1244,26 @@ await Promise.all([
   appendTrack(videoBuffer, videoQueue),
   appendTrack(audioBuffer, audioQueue)
 ]);`
+      },
+      {
+        type: "demo",
+        title: "ABR Decision Loop",
+        mode: "timeline",
+        text: "The player compares representation bandwidth with measured throughput and buffer depth before choosing quality."
       }
-    ],
-    demo: {
-      title: "ABR Decision Loop",
-      mode: "timeline",
-      text: "The player compares representation bandwidth with measured throughput and buffer depth before choosing quality."
-    }
+    ]
   },
   {
     slug: "live",
     title: "Add Live Playback",
     kind: "Practical",
-    visual: "buffer",
     summary: "Adapt the DASH player for dynamic manifests, live edge, latency, and buffer cleanup.",
     target: "The player refreshes a dynamic MPD and appends newly available segments near the live edge.",
     checkpoint: "You can describe live edge, availability window, target latency, and safe buffer eviction.",
     reference: "https://reference.dashif.org/dash.js/latest/samples/live-streaming/live-delay-comparison.html",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Live Is Moving VOD",
         body: [
           "A live manifest changes over time. Segments expire from the back of the availability window and new segments appear near the live edge.",
@@ -1181,10 +1274,13 @@ await Promise.all([
           "Start a few segments behind the newest available segment.",
           "Remove old buffered ranges after playback has moved past them."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
+        type: "diagram",
+        visual: "buffer"
+      },
+      {
+        type: "code",
         title: "live.js",
         explain: "This sketch shows the control loop: refresh manifest, compute available numbers, append missing segments.",
         code: `
@@ -1212,25 +1308,26 @@ export function createLiveController({ refreshManifest, appendSegment, targetLat
     stop: () => clearTimeout(timer)
   };
 }`
+      },
+      {
+        type: "demo",
+        title: "Live Window",
+        mode: "buffer",
+        text: "The live window slides forward while playback follows a few segments behind the edge."
       }
-    ],
-    demo: {
-      title: "Live Window",
-      mode: "buffer",
-      text: "The live window slides forward while playback follows a few segments behind the edge."
-    }
+    ]
   },
   {
     slug: "subtitle-theory",
     title: "Subtitles In Streaming",
     kind: "Theory",
-    visual: "timeline",
     summary: "Learn where timed text comes from and how browsers display cues alongside media.",
     target: "You understand sidecar subtitles, embedded text tracks, WebVTT, TTML, IMSC, languages, and cue timing.",
     checkpoint: "Choose a subtitle format and explain how cues align with media time.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebVTT_API",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Timed Text",
         body: [
           "Subtitles are media too: they have language, timing, payload, and rendering rules. Some streams carry text in separate files, while others mux subtitles into fragmented media.",
@@ -1243,44 +1340,11 @@ export function createLiveController({ refreshManifest, appendSegment, targetLat
         ]
       },
       {
-        heading: "WebVTT",
-        body: [
-          "WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a WEBVTT header, and then lists cues with start time, end time, and cue text.",
-          "The browser can fetch, parse, synchronize, and render WebVTT for you through a track element or the TextTrack API. That makes it the right first practical subtitle step."
-        ],
-        points: [
-          "WebVTT is easy to hand-author and inspect.",
-          "It supports cue settings for placement and alignment, but browser styling is intentionally constrained.",
-          "It works well for sidecar subtitles and captions when you do not need complex layout."
-        ]
+        type: "diagram",
+        visual: "timeline"
       },
       {
-        heading: "TTML",
-        body: [
-          "TTML, the Timed Text Markup Language, is XML-based and more expressive than WebVTT. It can describe regions, styles, timing, layout, nested spans, and richer broadcast-style subtitle behavior.",
-          "That expressiveness comes with cost. A simple browser player cannot hand TTML to a native track element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs."
-        ],
-        points: [
-          "TTML separates timing, styling, layout, and text content in XML.",
-          "It is useful when subtitles need precise placement, styling, or broadcast workflow compatibility.",
-          "A learning player should parse a small subset rather than trying to implement the whole specification."
-        ]
-      },
-      {
-        heading: "IMSC",
-        body: [
-          "IMSC is a constrained profile of TTML designed for interoperable subtitles and captions. It narrows the large TTML feature space into profiles that streaming, broadcast, and online services can implement more predictably.",
-          "For this tutorial, treat IMSC as TTML with rules. The practical lab will parse a small text-profile subset: timed paragraphs, basic regions, simple styling, and text content. That is enough to understand the renderer loop without pulling in IMSC.js."
-        ],
-        points: [
-          "IMSC documents are XML and commonly use TTML namespaces.",
-          "IMSC text profile focuses on subtitle text; image profile can carry pre-rendered subtitle images.",
-          "A custom renderer maps active timed elements onto absolutely positioned HTML over the video."
-        ]
-      }
-    ],
-    snippets: [
-      {
+        type: "code",
         title: "sample.vtt",
         explain: "WebVTT is plain text: each cue has a time range and cue text.",
         code: `
@@ -1293,6 +1357,46 @@ Big Buck Bunny starts in a quiet field.
 Captions are synchronized to media time.`
       },
       {
+        type: "text",
+        heading: "WebVTT",
+        body: [
+          "WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a WEBVTT header, and then lists cues with start time, end time, and cue text.",
+          "The browser can fetch, parse, synchronize, and render WebVTT for you through a track element or the TextTrack API. That makes it the right first practical subtitle step."
+        ],
+        points: [
+          "WebVTT is easy to hand-author and inspect.",
+          "It supports cue settings for placement and alignment, but browser styling is intentionally constrained.",
+          "It works well for sidecar subtitles and captions when you do not need complex layout."
+        ]
+      },
+      {
+        type: "text",
+        heading: "TTML",
+        body: [
+          "TTML, the Timed Text Markup Language, is XML-based and more expressive than WebVTT. It can describe regions, styles, timing, layout, nested spans, and richer broadcast-style subtitle behavior.",
+          "That expressiveness comes with cost. A simple browser player cannot hand TTML to a native track element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs."
+        ],
+        points: [
+          "TTML separates timing, styling, layout, and text content in XML.",
+          "It is useful when subtitles need precise placement, styling, or broadcast workflow compatibility.",
+          "A learning player should parse a small subset rather than trying to implement the whole specification."
+        ]
+      },
+      {
+        type: "text",
+        heading: "IMSC",
+        body: [
+          "IMSC is a constrained profile of TTML designed for interoperable subtitles and captions. It narrows the large TTML feature space into profiles that streaming, broadcast, and online services can implement more predictably.",
+          "For this tutorial, treat IMSC as TTML with rules. The practical lab will parse a small text-profile subset: timed paragraphs, basic regions, simple styling, and text content. That is enough to understand the renderer loop without pulling in IMSC.js."
+        ],
+        points: [
+          "IMSC documents are XML and commonly use TTML namespaces.",
+          "IMSC text profile focuses on subtitle text; image profile can carry pre-rendered subtitle images.",
+          "A custom renderer maps active timed elements onto absolutely positioned HTML over the video."
+        ]
+      },
+      {
+        type: "code",
         title: "A Small IMSC Shape",
         explain: "IMSC is XML. This subset has one region and two timed paragraphs that a small renderer can understand.",
         code: `
@@ -1313,25 +1417,26 @@ Captions are synchronized to media time.`
     </div>
   </body>
 </tt>`
+      },
+      {
+        type: "demo",
+        title: "Subtitle Cues",
+        mode: "timeline",
+        text: "Text cues occupy timed ranges just like media segments, but render as captions instead of decoded frames."
       }
-    ],
-    demo: {
-      title: "Subtitle Cues",
-      mode: "timeline",
-      text: "Text cues occupy timed ranges just like media segments, but render as captions instead of decoded frames."
-    }
+    ]
   },
   {
     slug: "subtitle-practical",
     title: "Add Subtitle Support",
     kind: "Practical",
-    visual: "timeline",
     summary: "Attach sidecar WebVTT captions and control active subtitle tracks from JavaScript.",
     target: "The tutorial player loads and toggles WebVTT subtitle tracks.",
     checkpoint: "A viewer can switch captions on and off while playback continues.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/TextTrack",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Use The Platform First",
         body: [
           "For sidecar WebVTT, the browser already has a renderer. Create track elements, set kind, label, srclang, and src, then toggle TextTrack mode.",
@@ -1342,10 +1447,13 @@ Captions are synchronized to media time.`
           "Set one track to showing and the others to disabled.",
           "Keep subtitle state separate from SourceBuffer state."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "code",
         title: "subtitles.js",
         explain: "Track elements let the browser fetch, parse, synchronize, and render WebVTT.",
         code: `
@@ -1365,25 +1473,26 @@ export function showSubtitle(video, language) {
     track.mode = track.language === language ? "showing" : "disabled";
   }
 }`
+      },
+      {
+        type: "demo",
+        title: "Cue Switcher",
+        mode: "timeline",
+        text: "The media timeline keeps running while text tracks independently switch rendering mode."
       }
-    ],
-    demo: {
-      title: "Cue Switcher",
-      mode: "timeline",
-      text: "The media timeline keeps running while text tracks independently switch rendering mode."
-    }
+    ]
   },
   {
     slug: "imsc-practical",
     title: "Render IMSC Subtitles",
     kind: "Practical",
-    visual: "timeline",
     summary: "Replace native WebVTT rendering with a small custom IMSC renderer layered over the video.",
     target: "The tutorial player fetches a simple IMSC document, parses timed paragraphs, and paints active cues.",
     checkpoint: "A viewer sees IMSC subtitle text rendered by your JavaScript instead of the browser TextTrack renderer.",
     reference: "https://www.w3.org/TR/ttml-imsc1.2/",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Render A Useful Subset",
         body: [
           "IMSC is large enough that a full implementation should use a dedicated renderer. This lab deliberately does not do that. It parses only the subset needed to understand the moving parts: paragraph timing, region assignment, text content, and a simple overlay.",
@@ -1396,20 +1505,11 @@ export function showSubtitle(video, language) {
         ]
       },
       {
-        heading: "What This Does Not Implement",
-        body: [
-          "This lab ignores most of IMSC: complex styling inheritance, writing modes, ruby text, images, animation, frame-based timing, and full region layout. Those are important in production, but they would hide the core player idea.",
-          "The useful pattern is the same as the DASH lesson: parse a standard format conservatively, represent the small subset you need, then wire that representation to playback time."
-        ],
-        points: [
-          "Unsupported styling should fail harmlessly.",
-          "Parsing and rendering stay separate so you can expand the subset later.",
-          "The overlay should not block video controls or pointer interactions."
-        ]
-      }
-    ],
-    snippets: [
+        type: "diagram",
+        visual: "timeline"
+      },
       {
+        type: "code",
         title: "imsc-renderer.js",
         explain: "This parser walks TTML/IMSC p elements, extracts timing, and renders active cues into a video overlay.",
         code: `
@@ -1472,6 +1572,7 @@ function parseClock(value) {
 }`
       },
       {
+        type: "code",
         title: "imsc.css",
         explain: "The custom renderer needs a stage around the video and an overlay that does not intercept controls.",
         code: `
@@ -1501,6 +1602,20 @@ function parseClock(value) {
 }`
       },
       {
+        type: "text",
+        heading: "What This Does Not Implement",
+        body: [
+          "This lab ignores most of IMSC: complex styling inheritance, writing modes, ruby text, images, animation, frame-based timing, and full region layout. Those are important in production, but they would hide the core player idea.",
+          "The useful pattern is the same as the DASH lesson: parse a standard format conservatively, represent the small subset you need, then wire that representation to playback time."
+        ],
+        points: [
+          "Unsupported styling should fail harmlessly.",
+          "Parsing and rendering stay separate so you can expand the subset later.",
+          "The overlay should not block video controls or pointer interactions."
+        ]
+      },
+      {
+        type: "code",
         title: "Using The Renderer",
         explain: "Remove the WebVTT track setup and install the custom IMSC overlay instead.",
         code: `
@@ -1508,25 +1623,26 @@ import { installImscRenderer } from "./imsc-renderer.js";
 
 const video = document.querySelector("#video");
 await installImscRenderer(video, "./sample.ttml");`
+      },
+      {
+        type: "demo",
+        title: "Custom Subtitle Overlay",
+        mode: "timeline",
+        text: "The renderer maps active IMSC paragraphs onto HTML above the video instead of using native WebVTT tracks."
       }
-    ],
-    demo: {
-      title: "Custom Subtitle Overlay",
-      mode: "timeline",
-      text: "The renderer maps active IMSC paragraphs onto HTML above the video instead of using native WebVTT tracks."
-    }
+    ]
   },
   {
     slug: "drm-theory",
     title: "DRM And EME",
     kind: "Theory",
-    visual: "packets",
     summary: "Understand encrypted media at the browser boundary without hiding the moving parts.",
     target: "You understand init data, key systems, MediaKeys, sessions, licenses, and ClearKey limitations.",
     checkpoint: "Explain why DRM is negotiated before encrypted samples can be decoded.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/Navigator/requestMediaKeySystemAccess",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Encrypted Media Extensions",
         body: [
           "EME does not decrypt media in your JavaScript. It lets JavaScript negotiate with a browser CDM, attach MediaKeys to a media element, and pass license messages between the CDM and a license service.",
@@ -1537,26 +1653,30 @@ await installImscRenderer(video, "./sample.ttml");`
           "A MediaKeySession produces a license request message.",
           "Playback can continue only after the session receives usable keys."
         ]
+      },
+      {
+        type: "diagram",
+        visual: "packets"
+      },
+      {
+        type: "demo",
+        title: "License Round Trip",
+        mode: "packets",
+        text: "Encrypted samples cause a key request, the license response unlocks decryption, then decoded frames resume."
       }
-    ],
-    snippets: [],
-    demo: {
-      title: "License Round Trip",
-      mode: "packets",
-      text: "Encrypted samples cause a key request, the license response unlocks decryption, then decoded frames resume."
-    }
+    ]
   },
   {
     slug: "drm-practical",
     title: "Add Optional ClearKey DRM",
     kind: "Practical",
-    visual: "packets",
     summary: "Wire a minimal ClearKey EME flow so users can see the browser DRM lifecycle.",
     target: "The player can attach MediaKeys and update a ClearKey session for compatible encrypted samples.",
     checkpoint: "The DRM code fails gracefully when key system support, secure context, or encrypted media is unavailable.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/API/MediaKeySession",
-    sections: [
+    blocks: [
       {
+        type: "text",
         heading: "Keep DRM Optional",
         body: [
           "DRM support varies by browser, OS, and security context. Treat the DRM lesson as an optional branch of the player, not as a requirement for the rest of playback.",
@@ -1567,10 +1687,13 @@ await installImscRenderer(video, "./sample.ttml");`
           "Attach MediaKeys to the video element.",
           "Listen for encrypted, create a session, generate a request, and update it with the license response."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
+        type: "diagram",
+        visual: "packets"
+      },
+      {
+        type: "code",
         title: "drm.js",
         explain: "This is the smallest useful EME shape. Production DRM replaces createClearKeyLicense with a license server fetch.",
         code: `
@@ -1600,26 +1723,26 @@ export async function installClearKey(video, keys) {
 function createClearKeyLicense(keys) {
   return new TextEncoder().encode(JSON.stringify({ keys, type: "temporary" }));
 }`
+      },
+      {
+        type: "demo",
+        title: "EME Lifecycle",
+        mode: "packets",
+        text: "The encrypted event bridges media bytes to a key session while the video element stays the playback surface."
       }
-    ],
-    demo: {
-      title: "EME Lifecycle",
-      mode: "packets",
-      text: "The encrypted event bridges media bytes to a key session while the video element stays the playback surface."
-    }
+    ]
   },
   {
     slug: "putting-it-all-together",
     title: "Putting It All Together",
     kind: "Practical",
-    visual: "timeline",
     summary: "Run the finished in-app player: DASH manifest parsing, audio/video MSE appends, playback controls, ABR startup selection, and custom subtitles.",
     target: "A working browser player loads a Big Buck Bunny DASH stream with audio, video, and subtitle cues.",
     checkpoint: "The stream loads through Media Source Extensions and the subtitle overlay updates as playback time changes.",
-    reference: bbbMpd,
-    showcase: "player",
-    sections: [
+    reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd",
+    blocks: [
       {
+        type: "text",
         heading: "The Final Shape",
         body: [
           "This page brings the main pieces together inside the tutorial app. The player fetches a DASH MPD, chooses a conservative startup video representation, resolves the audio/video initialization and media segment URLs, and appends them to separate SourceBuffers.",
@@ -1632,6 +1755,23 @@ function createClearKeyLicense(keys) {
         ]
       },
       {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "code",
+        title: "Final Player Responsibilities",
+        explain: "The in-app demo below is the same architecture the tutorial has built up in small pieces.",
+        code: `
+1. Fetch the DASH MPD.
+2. Parse audio/video representations, codec strings, init segments, and media segment URLs.
+3. Create MediaSource plus audio and video SourceBuffers.
+4. Append init and media segments for both tracks in updateend order.
+5. Watch video.currentTime and render active subtitle cues.
+6. Surface unsupported codec, CORS, and network failures in the UI.`
+      },
+      {
+        type: "text",
         heading: "What To Build Next",
         body: [
           "This final version is still intentionally small. A production player would add mid-stream audio/video adaptation coordination, gap handling, retry logic, live edge management, full subtitle styling, and real DRM license integration.",
@@ -1642,25 +1782,17 @@ function createClearKeyLicense(keys) {
           "Use buffer depth and measured throughput to keep updating the ABR choice while playback continues.",
           "Expand the IMSC subset only for features your content actually uses."
         ]
-      }
-    ],
-    snippets: [
+      },
       {
-        title: "Final Player Responsibilities",
-        explain: "The in-app demo below is the same architecture the tutorial has built up in small pieces.",
-        code: `
-1. Fetch the DASH MPD.
-2. Parse audio/video representations, codec strings, init segments, and media segment URLs.
-3. Create MediaSource plus audio and video SourceBuffers.
-4. Append init and media segments for both tracks in updateend order.
-5. Watch video.currentTime and render active subtitle cues.
-6. Surface unsupported codec, CORS, and network failures in the UI.`
+        type: "demo",
+        title: "Complete Playback Loop",
+        mode: "timeline",
+        text: "Manifest parsing feeds segment loading, segment loading feeds MSE, and the media timeline drives subtitles."
+      },
+      {
+        type: "showcase",
+        showcase: "player"
       }
-    ],
-    demo: {
-      title: "Complete Playback Loop",
-      mode: "timeline",
-      text: "Manifest parsing feeds segment loading, segment loading feeds MSE, and the media timeline drives subtitles."
-    }
+    ]
   }
 ];

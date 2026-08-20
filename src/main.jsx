@@ -46,6 +46,10 @@ function App() {
     }
   }, [lesson.slug]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [lesson.slug]);
+
   function markComplete() {
     setProgress((current) => {
       const next = { ...current, [lesson.slug]: true };
@@ -112,22 +116,10 @@ function Lesson({ lesson, index, onComplete, progress }) {
         </div>
       </header>
 
-      {(lesson.diagrams ?? [lesson.visual]).map((visual) => (
-        <Diagram key={visual} visual={visual} />
-      ))}
-
       <section className="content-grid">
         <div className="lesson-body">
-          {lesson.sections.map((section) => (
-            <section key={section.heading} className="text-section">
-              <h2>{section.heading}</h2>
-              {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-              {section.points && (
-                <ul>
-                  {section.points.map((point) => <li key={point}>{point}</li>)}
-                </ul>
-              )}
-            </section>
+          {lesson.blocks.map((block, blockIndex) => (
+            <LessonBlock key={`${block.type}-${block.title ?? block.heading ?? block.visual ?? blockIndex}`} block={block} />
           ))}
         </div>
         <aside className="lesson-aside">
@@ -142,19 +134,35 @@ function Lesson({ lesson, index, onComplete, progress }) {
         </aside>
       </section>
 
-      {lesson.demo && <DemoPanel demo={lesson.demo} />}
-      {lesson.showcase === "player" && <PlayerShowcase />}
-
-      {lesson.snippets.map((snippet) => (
-        <CodeSnippet key={snippet.title} snippet={snippet} />
-      ))}
-
       <footer className="pager">
         {previous ? <a href={`#/${previous.slug}`}><ChevronLeft size={18} /> {previous.title}</a> : <span />}
         <span className={progress[lesson.slug] ? "done" : ""}>{progress[lesson.slug] ? "Completed" : "In progress"}</span>
         {next ? <a href={`#/${next.slug}`}>{next.title} <ChevronRight size={18} /></a> : <span />}
       </footer>
     </article>
+  );
+}
+
+function LessonBlock({ block }) {
+  if (block.type === "text") return <TextBlock block={block} />;
+  if (block.type === "code") return <CodeSnippet snippet={block} />;
+  if (block.type === "diagram") return <Diagram visual={block.visual} />;
+  if (block.type === "demo") return <DemoPanel demo={block} />;
+  if (block.type === "showcase" && block.showcase === "player") return <PlayerShowcase />;
+  return null;
+}
+
+function TextBlock({ block }) {
+  return (
+    <section className="text-section">
+      <h2>{block.heading}</h2>
+      {block.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      {block.points && (
+        <ul>
+          {block.points.map((point) => <li key={point}>{point}</li>)}
+        </ul>
+      )}
+    </section>
   );
 }
 

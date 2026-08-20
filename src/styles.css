@@ -11,8 +11,15 @@
   box-sizing: border-box;
 }
 
+html,
+#root {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
+  overflow-x: hidden;
 }
 
 a {
@@ -132,6 +139,7 @@ button {
 }
 
 article {
+  width: 100%;
   max-width: 1120px;
   margin: 0 auto;
   padding: 44px clamp(18px, 5vw, 64px);
@@ -214,6 +222,8 @@ h1 {
 .diagram,
 .demo-panel,
 .snippet {
+  max-width: 100%;
+  min-width: 0;
   margin: 28px 0;
   border: 1px solid #d8dfda;
   border-radius: 8px;
@@ -760,6 +770,11 @@ h1 {
   grid-template-columns: minmax(0, 1fr) 300px;
   gap: 28px;
   align-items: start;
+  min-width: 0;
+}
+
+.lesson-body {
+  min-width: 0;
 }
 
 .text-section {
@@ -779,6 +794,7 @@ h1 {
 .snippet p,
 .demo-panel p {
   color: #4c5752;
+  overflow-wrap: anywhere;
 }
 
 .text-section ul {
@@ -962,9 +978,15 @@ h1 {
   gap: 20px;
   padding: 20px;
   border-bottom: 1px solid #d8dfda;
+  min-width: 0;
+}
+
+.snippet-head > div {
+  min-width: 0;
 }
 
 pre {
+  max-width: 100%;
   margin: 0;
   padding: 20px;
   overflow: auto;
@@ -1025,6 +1047,25 @@ code {
 
   article {
     padding: 28px 18px;
+  }
+
+  .lesson-hero {
+    min-height: auto;
+  }
+
+  .diagram {
+    overflow-x: auto;
+  }
+
+  .snippet-head {
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  pre {
+    padding: 16px;
+    font-size: 0.84rem;
   }
 
   .content-grid,
