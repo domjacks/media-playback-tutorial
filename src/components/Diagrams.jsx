@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Boxes, Clock, Film, Gauge, Monitor, RadioTower } from "lucide-react";
+import { ArrowRight, Boxes, Clock, Film, Gauge, Monitor, RadioTower, Volume2 } from "lucide-react";
 
 export function PacketFlow() {
   return (
@@ -141,6 +141,61 @@ export function CodecCompressionDiagram() {
             {frame}
           </span>
         ))}
+      </div>
+    </section>
+  );
+}
+
+export function Fmp4CmafDiagram() {
+  return (
+    <section className="diagram fmp4-diagram" aria-label="Fragmented MP4 and CMAF diagram">
+      <div className="fmp4-box init">
+        <strong>Initialization segment</strong>
+        <span>ftyp</span>
+        <span>moov</span>
+        <small>track setup, timescale, codec config</small>
+      </div>
+      <div className="fmp4-arrow">then append</div>
+      <div className="fmp4-box media">
+        <strong>Media segment</strong>
+        <span>moof</span>
+        <span>mdat</span>
+        <small>timing metadata plus encoded samples</small>
+      </div>
+      <div className="cmaf-lane">
+        <b>CMAF chunked delivery</b>
+        <i>chunk 1</i>
+        <i>chunk 2</i>
+        <i>chunk 3</i>
+        <i>chunk 4</i>
+      </div>
+    </section>
+  );
+}
+
+export function AvSyncDiagram() {
+  const ranges = ["0-4s", "4-8s", "8-12s", "12-16s"];
+
+  return (
+    <section className="diagram av-sync-diagram" aria-label="Audio and video SourceBuffers sharing one timeline">
+      <div className="sync-head">
+        <strong><Clock size={20} /> One media element timeline</strong>
+        <span>playhead 6.4s</span>
+      </div>
+      <div className="sync-rows">
+        <div className="sync-label"><Film size={20} /> Video SourceBuffer</div>
+        <div className="sync-track video-sync">
+          {ranges.map((range) => <span key={`v-${range}`}>{range}</span>)}
+          <i />
+        </div>
+        <div className="sync-label"><Volume2 size={20} /> Audio SourceBuffer</div>
+        <div className="sync-track audio-sync">
+          {ranges.map((range) => <span key={`a-${range}`}>{range}</span>)}
+          <i />
+        </div>
+      </div>
+      <div className="sync-note">
+        <span>Both buffers expose time ranges. Playback is smooth only when the playhead has decodable audio and video for the same media time.</span>
       </div>
     </section>
   );

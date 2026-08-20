@@ -12,7 +12,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { lessons } from "./data/lessons.js";
-import { BufferQueue, CodecCompressionDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
+import { AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
 import { PlayerShowcase } from "./components/PlayerShowcase.jsx";
 import "./styles.css";
@@ -112,12 +112,9 @@ function Lesson({ lesson, index, onComplete, progress }) {
         </div>
       </header>
 
-      {lesson.visual === "packets" && <PacketFlow />}
-      {lesson.visual === "buffer" && <BufferQueue />}
-      {lesson.visual === "timeline" && <SegmentTimeline />}
-      {lesson.visual === "video" && <VideoFundamentalsDiagram />}
-      {lesson.visual === "file" && <MediaFileDiagram />}
-      {lesson.visual === "codec" && <CodecCompressionDiagram />}
+      {(lesson.diagrams ?? [lesson.visual]).map((visual) => (
+        <Diagram key={visual} visual={visual} />
+      ))}
 
       <section className="content-grid">
         <div className="lesson-body">
@@ -159,6 +156,18 @@ function Lesson({ lesson, index, onComplete, progress }) {
       </footer>
     </article>
   );
+}
+
+function Diagram({ visual }) {
+  if (visual === "packets") return <PacketFlow />;
+  if (visual === "buffer") return <BufferQueue />;
+  if (visual === "timeline") return <SegmentTimeline />;
+  if (visual === "video") return <VideoFundamentalsDiagram />;
+  if (visual === "file") return <MediaFileDiagram />;
+  if (visual === "codec") return <CodecCompressionDiagram />;
+  if (visual === "fmp4") return <Fmp4CmafDiagram />;
+  if (visual === "av-sync") return <AvSyncDiagram />;
+  return null;
 }
 
 function CodeSnippet({ snippet }) {
