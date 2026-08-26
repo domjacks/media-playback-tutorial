@@ -124,12 +124,8 @@ function Lesson({ lesson, index, onComplete, progress }) {
         </div>
         <aside className="lesson-aside">
           <div className="aside-panel">
-            <h3>Build Target</h3>
-            <p>{lesson.target}</p>
-          </div>
-          <div className="aside-panel">
-            <h3>Checkpoint</h3>
-            <p>{lesson.checkpoint}</p>
+            <h3>Lesson Outcome</h3>
+            <p>{lesson.outcome}</p>
           </div>
         </aside>
       </section>
