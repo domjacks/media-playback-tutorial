@@ -34,12 +34,14 @@ button {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   min-height: 100vh;
+  background: linear-gradient(90deg, #111816 0 320px, #f6f7f4 320px 100%);
 }
 
 .sidebar {
   position: sticky;
   top: 0;
-  height: 100vh;
+  min-height: 100dvh;
+  max-height: 100dvh;
   overflow: auto;
   background: #111816;
   color: #eef7f1;
@@ -409,6 +411,83 @@ h1 {
   grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
   gap: 20px;
   align-items: center;
+}
+
+.audio-fundamentals {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(220px, 0.8fr);
+  gap: 20px;
+  align-items: stretch;
+}
+
+.wave-panel {
+  display: grid;
+  gap: 16px;
+  align-content: center;
+  min-height: 220px;
+  padding: 18px;
+  border-radius: 8px;
+  background: #edf2ef;
+}
+
+.wave-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 800;
+}
+
+.wave-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wave-head span {
+  color: #315c4a;
+}
+
+.waveform {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-height: 128px;
+}
+
+.waveform span {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #52b788, #d9f0ff);
+  animation: wavePulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes wavePulse {
+  from {
+    transform: scaleY(0.72);
+    opacity: 0.72;
+  }
+}
+
+.audio-metrics {
+  display: grid;
+  gap: 10px;
+}
+
+.audio-metrics div {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff1c7;
+}
+
+.audio-metrics span {
+  grid-column: 2;
+  color: #56615d;
 }
 
 .screen-model {
@@ -1034,10 +1113,13 @@ code {
 @media (max-width: 880px) {
   .app-shell {
     grid-template-columns: 1fr;
+    background: #f6f7f4;
   }
 
   .sidebar {
     position: relative;
+    min-height: 0;
+    max-height: none;
     height: auto;
   }
 
@@ -1071,7 +1153,8 @@ code {
   .content-grid,
   .demo-panel,
   .packet-flow,
-  .video-fundamentals {
+  .video-fundamentals,
+  .audio-fundamentals {
     grid-template-columns: 1fr;
   }
 

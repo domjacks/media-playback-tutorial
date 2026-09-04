@@ -5,7 +5,7 @@ export const lessons = [
     slug: "introduction",
     title: "What You Will Build",
     kind: "Theory",
-    summary: "A guided map of the tutorial, from media fundamentals to a working browser DASH player.",
+    summary: "An interactive tutorial to help learn the fundamentals of media playback. Follow the theory and and then implement a basic MSE-based DASH player.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media",
     blocks: [
       {
@@ -56,6 +56,15 @@ export const lessons = [
     blocks: [
       {
         type: "text",
+        heading: "Introduction",
+        body: ["Video is made up of a series of images over time. We call those images frames. Those frames are made up of a collection of dots known as pixels where each pixel is set to a specific colour."]
+      },
+      {
+        type: "diagram",
+        visual: "video"
+      },
+      {
+        type: "text",
         heading: "Spatial Detail",
         body: [
           "Resolution is the number of pixels in each frame. A 1920 by 1080 video has more samples of the image than a 1280 by 720 video, so it can preserve more detail when displayed at the same size.",
@@ -66,10 +75,6 @@ export const lessons = [
           "Display size and device pixel density decide whether extra resolution is visible.",
           "Aspect ratio belongs to presentation; it is not the same thing as file size or bitrate."
         ]
-      },
-      {
-        type: "diagram",
-        visual: "video"
       },
       {
         type: "code",
@@ -117,6 +122,94 @@ video.addEventListener("loadedmetadata", () => {
       }
     ],
     outcome: "You can explain resolution, aspect ratio, frame rate, colour gamut, and dynamic range in player terms."
+  },
+  {
+    slug: "audio-fundamentals",
+    title: "Audio Fundamentals",
+    kind: "Theory",
+    summary: "Understand how sound becomes timed samples before those samples are packaged, compressed, and synchronized with video.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Audio_codecs",
+    blocks: [
+      {
+        type: "text",
+        heading: "Sound As Samples",
+        body: [
+          "Sound is pressure changing over time. Digital audio stores measurements of that changing signal at regular intervals. Each measurement is a sample, and playback reconstructs the waveform by sending those samples to the audio device at the right rate.",
+          "This is different from video frames. Video gives the browser pictures at frame times. Audio gives it a dense stream of samples that must be played continuously. Small audio gaps are often more obvious to viewers than small video quality changes."
+        ],
+        points: [
+          "Sample rate is the number of audio samples per second.",
+          "48 kHz is common for video workflows; 44.1 kHz is common for music.",
+          "The media timeline still uses seconds, even though audio is stored as many tiny samples."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "audio"
+      },
+      {
+        type: "text",
+        heading: "Sample Rate And Bit Depth",
+        body: [
+          "Sample rate controls how often the waveform is measured. A 48 kHz track has 48,000 samples per second for each channel. Higher sample rates can represent higher frequencies, but they also create more data before compression.",
+          "Bit depth controls how much precision each sample has. A 16-bit sample can represent 65,536 possible values. A 24-bit sample has much finer precision and is useful during production, but distribution formats often compress audio so the final stream is described by bitrate rather than raw bit depth."
+        ],
+        points: [
+          "Raw stereo 48 kHz, 16-bit PCM is 48,000 x 2 channels x 16 bits = 1,536,000 bits/s.",
+          "That is about 192 KB/s before container overhead.",
+          "AAC or Opus can deliver understandable stereo audio at far lower bitrates."
+        ]
+      },
+      {
+        type: "code",
+        title: "Reading Audio State",
+        explain: "The media element does not expose sample rate directly, but it does expose audio track presence and playback state.",
+        code: `
+const video = document.querySelector("video");
+
+video.addEventListener("loadedmetadata", () => {
+  console.log("duration", video.duration);
+  console.log("audio tracks", video.audioTracks?.length ?? "not exposed");
+});
+
+video.addEventListener("volumechange", () => {
+  console.log("muted", video.muted, "volume", video.volume);
+});`
+      },
+      {
+        type: "text",
+        heading: "Channels, Layout, And Loudness",
+        body: [
+          "Channels describe how many independent audio signals are present and how they should be presented. Mono has one channel, stereo has left and right, and surround formats add more speakers or audio objects.",
+          "Loudness is separate from sample rate or bitrate. Two tracks can use the same codec and bitrate but sound very different in perceived loudness. Production workflows often normalize loudness so switching programmes, languages, or ads is not jarring."
+        ],
+        points: [
+          "A DASH audio Representation may advertise channel layout and sampling rate.",
+          "The browser handles decoding and output routing, but the player still chooses which audio track to fetch.",
+          "Language, accessibility, channel count, codec support, and bitrate can all affect audio track selection."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Audio And Sync",
+        body: [
+          "Audio is usually the track viewers notice first when playback goes wrong. If audio underruns, playback commonly stalls or produces silence. If audio and video timestamps drift apart, speech no longer matches the picture.",
+          "Later, when you append separate audio and video SourceBuffers, both tracks must land on one shared media timeline. The player needs enough audio and enough video buffered around the playhead for smooth synchronized playback."
+        ],
+        points: [
+          "Audio samples have timestamps just like video frames.",
+          "The media element advances one currentTime for both audio and video.",
+          "Streaming players often treat audio continuity as critical when deciding whether playback can continue."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Samples To Timeline",
+        mode: "timeline",
+        text: "Audio playback is a continuous timed sample stream that must stay aligned with video on the same media clock."
+      }
+    ],
+    outcome: "You can explain sample rate, bit depth, channels, loudness, and why audio continuity matters for synchronized playback."
   },
   {
     slug: "media-files-containers",
@@ -1371,6 +1464,93 @@ await Promise.all([
       }
     ],
     outcome: "The DASH player selects the initial video representation with a small ABR algorithm instead of always hardcoding one quality."
+  },
+  {
+    slug: "live-theory",
+    title: "Live Playback Theory",
+    kind: "Theory",
+    summary: "Understand how live streams differ from VOD before adding manifest refresh and live-edge logic.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Audio_and_video_delivery/Live_streaming_web_audio_and_video",
+    blocks: [
+      {
+        type: "text",
+        heading: "A Moving Presentation",
+        body: [
+          "VOD has a fixed beginning and end. Live playback has a moving availability window. New segments appear at the front of the window as the event continues, and old segments can disappear from the back as the server stops advertising them.",
+          "The viewer still watches normal media time through the video element, but the set of times that can be requested changes while playback is happening."
+        ],
+        points: [
+          "The live edge is the newest media time currently available.",
+          "The live window is the range of recent media times the server still makes available.",
+          "A live player usually starts behind the live edge, not exactly on it."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "text",
+        heading: "Latency And Safety",
+        body: [
+          "Live latency is the delay between capture and playback. Lower latency feels closer to real time, but it leaves less room for network delay, encoder delay, segment production, fetch time, append time, and decoding.",
+          "A player chooses a target latency so it can stay close to live without constantly stalling. For a simple segment-based player, that target is often expressed as a few segments behind the live edge."
+        ],
+        points: [
+          "Playing too close to the edge risks requesting a segment before it is complete or available.",
+          "Playing too far behind increases delay but usually improves stability.",
+          "The right target depends on segment duration, network conditions, and product expectations."
+        ]
+      },
+      {
+        type: "code",
+        title: "Live Edge Mental Model",
+        explain: "A simple player can think in segment numbers before dealing with wall-clock timing details.",
+        code: `
+const segmentDuration = 4;
+const newestSegmentNumber = 120;
+const targetLatencySegments = 3;
+
+const startSegmentNumber = newestSegmentNumber - targetLatencySegments;
+const approximateLatency = targetLatencySegments * segmentDuration;
+
+console.log(startSegmentNumber);   // 117
+console.log(approximateLatency);   // 12 seconds`
+      },
+      {
+        type: "text",
+        heading: "Manifest Refresh",
+        body: [
+          "A live manifest is not a static table. The player must refresh it to discover newly available segments and to learn when older segments have expired. DASH uses fields such as type=\"dynamic\", availabilityStartTime, timeShiftBufferDepth, minimumUpdatePeriod, and suggestedPresentationDelay to describe live behavior.",
+          "The practical lesson keeps this deliberately small: refresh the manifest, calculate the segment numbers that should now be available, append missing segments, and schedule the next refresh."
+        ],
+        points: [
+          "minimumUpdatePeriod tells the player how often the MPD may need refreshing.",
+          "timeShiftBufferDepth describes how much recent history is available for seeking.",
+          "suggestedPresentationDelay gives the service's recommended distance behind the live edge."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Buffer Cleanup",
+        body: [
+          "A live stream can run for hours, so a player cannot keep every appended segment forever. Old buffered media should be removed after the playhead has moved safely beyond it.",
+          "Cleanup is a balancing act. Removing too little wastes memory. Removing too aggressively can break short backward seeks or cause playback to stall if timestamps and ranges are not handled carefully."
+        ],
+        points: [
+          "Use SourceBuffer.remove(start, end) for old ranges.",
+          "Do not remove media close to currentTime.",
+          "Keep audio and video cleanup aligned so one track does not disappear before the other."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Sliding Live Window",
+        mode: "timeline",
+        text: "Live playback follows a moving segment window, targeting a stable delay behind the newest available media."
+      }
+    ],
+    outcome: "You can explain live edge, live latency, sliding availability windows, MPD refresh, and why live buffers need cleanup."
   },
   {
     slug: "live",

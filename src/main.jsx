@@ -12,7 +12,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { lessons } from "./data/lessons.js";
-import { AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
+import { AudioFundamentalsDiagram, AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
 import { PlayerShowcase } from "./components/PlayerShowcase.jsx";
 import "./styles.css";
@@ -167,6 +167,7 @@ function Diagram({ visual }) {
   if (visual === "buffer") return <BufferQueue />;
   if (visual === "timeline") return <SegmentTimeline />;
   if (visual === "video") return <VideoFundamentalsDiagram />;
+  if (visual === "audio") return <AudioFundamentalsDiagram />;
   if (visual === "file") return <MediaFileDiagram />;
   if (visual === "codec") return <CodecCompressionDiagram />;
   if (visual === "fmp4") return <Fmp4CmafDiagram />;

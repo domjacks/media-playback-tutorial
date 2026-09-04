@@ -95,6 +95,43 @@ export function VideoFundamentalsDiagram() {
   );
 }
 
+export function AudioFundamentalsDiagram() {
+  const samples = [18, 34, 54, 70, 58, 36, 20, 30, 52, 76, 62, 40, 24, 32, 48, 66];
+
+  return (
+    <section className="diagram audio-fundamentals" aria-label="Audio waveform, samples, and channels diagram">
+      <div className="wave-panel">
+        <div className="wave-head">
+          <strong><Volume2 size={20} /> Waveform</strong>
+          <span>48,000 samples/s</span>
+        </div>
+        <div className="waveform">
+          {samples.map((height, index) => (
+            <span key={index} style={{ height: `${height}%`, animationDelay: `${index * 0.05}s` }} />
+          ))}
+        </div>
+      </div>
+      <div className="audio-metrics">
+        <div>
+          <Clock size={22} />
+          <strong>Sample rate</strong>
+          <span>How often amplitude is measured</span>
+        </div>
+        <div>
+          <Gauge size={22} />
+          <strong>Bit depth</strong>
+          <span>Precision of each measurement</span>
+        </div>
+        <div>
+          <Volume2 size={22} />
+          <strong>Channels</strong>
+          <span>Mono, stereo, surround, or objects</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function MediaFileDiagram() {
   return (
     <section className="diagram media-file-diagram" aria-label="Media file structure diagram">
