@@ -56,8 +56,16 @@ export const lessons = [
     blocks: [
       {
         type: "text",
-        heading: "Introduction",
-        body: ["Video is made up of a series of images over time. We call those images frames. Those frames are made up of a collection of dots known as pixels where each pixel is set to a specific colour."]
+        heading: "Pixels And Raster Images",
+        body: [
+          "Digital video is a sequence of raster images shown over time. A raster image is a grid of picture elements, or pixels. Each pixel stores values that describe the colour and brightness at one point in the picture.",
+          "A single video frame is one raster image. Playback works by presenting many frames on a timeline quickly enough that the viewer perceives motion."
+        ],
+        points: [
+          "Pixels are spatial samples of a picture.",
+          "Frames are raster images placed at times on the media timeline.",
+          "Video quality starts with how many samples exist and how accurately each sample describes light."
+        ]
       },
       {
         type: "diagram",
@@ -65,10 +73,10 @@ export const lessons = [
       },
       {
         type: "text",
-        heading: "Spatial Detail",
+        heading: "Resolution And Aspect Ratio",
         body: [
-          "Resolution is the number of pixels in each frame. A 1920 by 1080 video has more samples of the image than a 1280 by 720 video, so it can preserve more detail when displayed at the same size.",
-          "Aspect ratio is the shape of the picture, such as 16:9 or 4:3. Player layout should respect the encoded display shape so the image is not stretched or cropped by accident."
+          "Resolution is the number of pixels in each frame. A 1920 by 1080 video has 2,073,600 luma sample positions per frame, while a 1280 by 720 video has 921,600. More samples can preserve more spatial detail, but they also increase decode work and usually need more bitrate.",
+          "Aspect ratio is the shape of the picture, such as 16:9 or 4:3. Player layout should respect the encoded display shape so the image is not stretched, squeezed, or cropped by accident."
         ],
         points: [
           "Resolution affects sharpness, decode cost, and bandwidth.",
@@ -90,15 +98,54 @@ video.addEventListener("loadedmetadata", () => {
       },
       {
         type: "text",
-        heading: "Time And Motion",
+        heading: "RGB And YCbCr",
+        body: [
+          "Screens often display colour as RGB: red, green, and blue light values. Video systems commonly store colour as YCbCr instead. Y carries luma, which is brightness detail. Cb and Cr carry chroma difference information, which describes colour relative to luma.",
+          "YCbCr is useful because human vision is more sensitive to brightness detail than colour detail. Video can keep full luma resolution while storing less chroma detail, saving data with less visible damage than reducing every component equally."
+        ],
+        points: [
+          "RGB is convenient for displays and canvas-style pixel work.",
+          "YCbCr is common in encoded video and broadcast workflows.",
+          "Colour conversion and metadata help the browser map encoded values to the display."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Bit Depth",
+        body: [
+          "Bit depth is the number of bits used for each component sample. 8-bit video gives each component 256 possible values. 10-bit video gives each component 1,024 possible values, which allows smoother gradients and gives HDR workflows more precision.",
+          "Higher bit depth increases raw data size before compression. A 10-bit stream is not automatically better than an 8-bit stream, but it gives the codec and display pipeline more precision to work with."
+        ],
+        points: [
+          "8-bit SDR video is common and broadly compatible.",
+          "10-bit video is common for HDR and higher-quality distribution.",
+          "Browser support depends on codec, profile, operating system, GPU, and display."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Chroma Subsampling",
+        body: [
+          "Chroma subsampling stores colour at a lower resolution than luma. The notation describes how chroma samples are shared across nearby pixels. 4:4:4 keeps full chroma detail. 4:2:2 halves chroma horizontally. 4:2:0 halves chroma horizontally and vertically across a two-line area.",
+          "Most web video is 4:2:0 because it compresses well and usually looks good for natural images. Text, graphics, and sharp colour edges can suffer more because their chroma detail matters."
+        ],
+        points: [
+          "4:4:4 keeps one Cb and one Cr sample for every luma sample.",
+          "4:2:2 keeps full luma but shares chroma across pairs of horizontal samples.",
+          "4:2:0 keeps full luma but shares chroma across a small block of neighbouring samples."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Frame Rate And Scan Type",
         body: [
           "Frame rate is how many pictures are shown per second. Common values include 24 fps for film-like motion, 25 or 30 fps for broadcast and web video, and 50 or 60 fps for sport, games, and very smooth motion.",
-          "Higher frame rates usually need more encoded samples per second. That can improve motion clarity, but it also raises decode work and often requires more bitrate for the same visual quality."
+          "Progressive video stores each frame as a complete picture. Interlaced video stores each picture as alternating fields, traditionally one field for odd lines and one for even lines. Interlacing helped older broadcast systems reduce bandwidth, but modern web playback usually prefers progressive video."
         ],
         points: [
           "A 60 fps stream has twice as many frame times as a 30 fps stream.",
           "The media timeline is continuous even though video frames are discrete.",
-          "Audio is usually sampled much more frequently than video and must stay synchronized with it."
+          "Interlaced sources usually need deinterlacing before clean progressive display."
         ]
       },
       {
@@ -121,7 +168,7 @@ video.addEventListener("loadedmetadata", () => {
         text: "Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens."
       }
     ],
-    outcome: "You can explain resolution, aspect ratio, frame rate, colour gamut, and dynamic range in player terms."
+    outcome: "You can explain pixels, raster frames, resolution, RGB versus YCbCr, bit depth, chroma subsampling, frame rate, scan type, colour gamut, and dynamic range in player terms."
   },
   {
     slug: "audio-fundamentals",
@@ -132,15 +179,15 @@ video.addEventListener("loadedmetadata", () => {
     blocks: [
       {
         type: "text",
-        heading: "Sound As Samples",
+        heading: "PCM Audio",
         body: [
-          "Sound is pressure changing over time. Digital audio stores measurements of that changing signal at regular intervals. Each measurement is a sample, and playback reconstructs the waveform by sending those samples to the audio device at the right rate.",
-          "This is different from video frames. Video gives the browser pictures at frame times. Audio gives it a dense stream of samples that must be played continuously. Small audio gaps are often more obvious to viewers than small video quality changes."
+          "Sound is pressure changing over time. PCM, or Pulse-Code Modulation, represents that changing signal as a sequence of numeric sample values taken at regular intervals.",
+          "Uncompressed PCM is the simple mental model behind most digital audio: each channel has a stream of samples, each sample stores an amplitude value, and playback sends those values to the audio device at the correct rate. Codecs such as AAC and Opus compress audio, but they ultimately decode back to PCM-like samples for output."
         ],
         points: [
-          "Sample rate is the number of audio samples per second.",
-          "48 kHz is common for video workflows; 44.1 kHz is common for music.",
-          "The media timeline still uses seconds, even though audio is stored as many tiny samples."
+          "PCM is usually uncompressed audio sample data.",
+          "Compressed audio codecs decode into samples that the output device can play.",
+          "The media timeline uses seconds, even though audio is made from many tiny samples."
         ]
       },
       {
@@ -152,7 +199,7 @@ video.addEventListener("loadedmetadata", () => {
         heading: "Sample Rate And Bit Depth",
         body: [
           "Sample rate controls how often the waveform is measured. A 48 kHz track has 48,000 samples per second for each channel. Higher sample rates can represent higher frequencies, but they also create more data before compression.",
-          "Bit depth controls how much precision each sample has. A 16-bit sample can represent 65,536 possible values. A 24-bit sample has much finer precision and is useful during production, but distribution formats often compress audio so the final stream is described by bitrate rather than raw bit depth."
+          "Bit depth controls how much precision each PCM sample has. A 16-bit sample can represent 65,536 possible amplitude values. A 24-bit sample has much finer precision and is useful during capture, mixing, and mastering, though final streaming audio is usually compressed."
         ],
         points: [
           "Raw stereo 48 kHz, 16-bit PCM is 48,000 x 2 channels x 16 bits = 1,536,000 bits/s.",
@@ -178,15 +225,28 @@ video.addEventListener("volumechange", () => {
       },
       {
         type: "text",
-        heading: "Channels, Layout, And Loudness",
+        heading: "Channels And Layout",
         body: [
-          "Channels describe how many independent audio signals are present and how they should be presented. Mono has one channel, stereo has left and right, and surround formats add more speakers or audio objects.",
-          "Loudness is separate from sample rate or bitrate. Two tracks can use the same codec and bitrate but sound very different in perceived loudness. Production workflows often normalize loudness so switching programmes, languages, or ads is not jarring."
+          "Channels describe how many independent audio signals are present and how they should be presented. Mono has one channel. Stereo has left and right. Surround formats add more speaker positions, and object-based formats can describe sounds that are rendered into a listening layout.",
+          "Channel layout matters because two tracks with the same codec can still require different handling. A stereo AAC track, a 5.1 AAC track, and an alternate-language stereo track may all appear as different choices in a streaming manifest."
         ],
         points: [
           "A DASH audio Representation may advertise channel layout and sampling rate.",
           "The browser handles decoding and output routing, but the player still chooses which audio track to fetch.",
           "Language, accessibility, channel count, codec support, and bitrate can all affect audio track selection."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Loudness",
+        body: [
+          "Loudness is perceived volume, not just sample value. Two audio tracks can use the same sample rate, bit depth, codec, and bitrate but still sound different in loudness because of mixing and mastering choices.",
+          "Streaming services often normalize loudness so switching programmes, languages, commentary tracks, or adverts is less jarring. The player usually does not solve loudness by itself, but it should preserve the metadata and track choices provided by the media workflow."
+        ],
+        points: [
+          "Sample rate describes time resolution.",
+          "Bit depth describes sample precision.",
+          "Loudness describes how loud the track feels to the listener."
         ]
       },
       {
@@ -209,85 +269,111 @@ video.addEventListener("volumechange", () => {
         text: "Audio playback is a continuous timed sample stream that must stay aligned with video on the same media clock."
       }
     ],
-    outcome: "You can explain sample rate, bit depth, channels, loudness, and why audio continuity matters for synchronized playback."
+    outcome: "You can explain PCM audio, sample rate, bit depth, channels, loudness, and why audio continuity matters for synchronized playback."
   },
   {
-    slug: "media-files-containers",
-    title: "Media Files And Containers",
-    kind: "Theory",
-    summary: "Learn what a media file contains and how containers organize tracks, timing, metadata, and media data.",
-    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Containers",
+    slug: "inspect-av-with-ffmpeg",
+    title: "Inspect Video And Audio With FFmpeg",
+    kind: "Practical",
+    summary: "Use FFmpeg and FFprobe to generate a small test asset and inspect the video and audio fundamentals you just learned.",
+    reference: "https://ffmpeg.org/ffprobe.html",
     blocks: [
       {
         type: "text",
-        heading: "What Makes Up A Media File",
+        heading: "What This Lab Uses",
         body: [
-          "A media file is more than raw video and audio bytes. It normally contains structural headers, track metadata, timing information, codec configuration, and chunks of encoded media data.",
-          "The container is the file format that organizes those parts. MP4, WebM, MPEG-TS, and Matroska are containers. They can carry different codec payloads, which is why saying a file is MP4 does not fully describe whether a browser can play it."
+          "This lab uses FFmpeg to generate a short synthetic media file and FFprobe to inspect it. The point is not to create beautiful content; it is to produce a controlled file where you know the expected resolution, frame rate, sample rate, channel count, codecs, and duration.",
+          "Run these commands from a working directory where you are happy to create a lab folder. The generated file is small and can be deleted afterwards."
         ],
         points: [
-          "Headers describe the container structure and where important information lives.",
-          "Metadata describes tracks, durations, timescales, language, dimensions, and codec setup.",
-          "Media data contains encoded audio and video samples ordered by decoding and presentation rules."
-        ]
-      },
-      {
-        type: "diagram",
-        visual: "file"
-      },
-      {
-        type: "text",
-        heading: "MIME Types And Codec Strings",
-        body: [
-          "A browser support check needs two layers of identity. The MIME type describes the container or track format, such as video/mp4, audio/mp4, or video/webm. The codecs parameter describes the encoded samples inside that container.",
-          "This matters more once you reach MSE. When you call addSourceBuffer, the browser needs a precise string so it can decide whether the appended bytes can be parsed and decoded. A string that is too vague, or a codec profile the device cannot decode, can fail before any media is appended."
-        ],
-        points: [
-          "A complete MP4 file might be described as video/mp4 with both video and audio codec identifiers.",
-          "An MSE SourceBuffer normally receives one track type, so the video buffer and audio buffer use separate MIME strings.",
-          "DASH MPDs may put mimeType and codecs on AdaptationSet or Representation, so a player often combines inherited attributes."
+          "ffmpeg creates or transforms media.",
+          "ffprobe reads media metadata, streams, packets, and frames.",
+          "Synthetic sources avoid depending on external downloads."
         ]
       },
       {
         type: "code",
-        title: "Container Versus Codec",
-        explain: "Use exact MIME and codec strings before creating SourceBuffers. A normal file can advertise audio and video together; MSE often checks each track buffer separately.",
+        title: "Check The Tools",
+        explain: "Confirm both tools are installed before starting the lab.",
         code: `
-const mp4File = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
-const videoBuffer = 'video/mp4; codecs="avc1.64001f"';
-const audioBuffer = 'audio/mp4; codecs="mp4a.40.2"';
+ffmpeg -version
+ffprobe -version`
+      },
+      {
+        type: "code",
+        title: "Generate A Test MP4",
+        explain: "Create a five-second MP4 with a 1280x720, 25 fps video test pattern and a 48 kHz sine-wave audio track.",
+        code: `
+mkdir -p lab
 
-console.log(MediaSource.isTypeSupported(mp4File));
-console.log(MediaSource.isTypeSupported(videoBuffer));
-console.log(MediaSource.isTypeSupported(audioBuffer));`
+ffmpeg -y \\
+  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=5 \\
+  -f lavfi -i sine=frequency=1000:sample_rate=48000:duration=5 \\
+  -c:v libx264 -pix_fmt yuv420p -g 50 -crf 23 \\
+  -c:a aac -b:a 128k -ac 2 \\
+  -movflags +faststart \\
+  lab/fundamentals.mp4`
+      },
+      {
+        type: "code",
+        title: "Inspect Streams",
+        explain: "The stream output connects directly to resolution, frame rate, pixel format, sample rate, channels, codec names, and duration.",
+        code: `
+ffprobe -hide_banner \\
+  -show_streams \\
+  -select_streams v:0 \\
+  lab/fundamentals.mp4
+
+ffprobe -hide_banner \\
+  -show_streams \\
+  -select_streams a:0 \\
+  lab/fundamentals.mp4`
       },
       {
         type: "text",
-        heading: "Containers, Formats, And Bitrate",
+        heading: "What To Look For",
         body: [
-          "A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.",
-          "Bitrate is the amount of data used per second of media. The container records enough timing information for the browser to place those encoded samples onto a media timeline."
+          "On the video stream, look for width, height, r_frame_rate, avg_frame_rate, pix_fmt, codec_name, profile, and duration. The pix_fmt value yuv420p means YCbCr-style planar video with 4:2:0 chroma subsampling.",
+          "On the audio stream, look for codec_name, sample_rate, channels, channel_layout, and duration. The encoded audio is AAC, but it represents a 48 kHz stereo signal when decoded for playback."
         ],
         points: [
-          "MP4 with H.264 video and AAC audio is broadly compatible on the web.",
-          "WebM with VP9 or AV1 can be efficient but support varies by device.",
-          "For streaming, average bitrate helps predict download time and ABR decisions."
+          "width and height confirm resolution.",
+          "r_frame_rate and avg_frame_rate expose frame-rate information.",
+          "sample_rate and channels expose the audio fundamentals.",
+          "codec_name confirms the encoded format carried by the file."
         ]
       },
       {
+        type: "code",
+        title: "Compact Field View",
+        explain: "This version prints only the fields that matter for the early fundamentals lessons.",
+        code: `
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_entries stream=codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,duration \\
+  -of default=noprint_wrappers=1 \\
+  lab/fundamentals.mp4
+
+ffprobe -v error \\
+  -select_streams a:0 \\
+  -show_entries stream=codec_name,sample_rate,channels,channel_layout,duration \\
+  -of default=noprint_wrappers=1 \\
+  lab/fundamentals.mp4`
+      },
+      {
         type: "demo",
-        title: "File Anatomy",
-        mode: "packets",
-        text: "A playable file combines container structure, metadata, track timing, and encoded audio/video samples."
+        title: "Metadata As Evidence",
+        mode: "timeline",
+        text: "FFprobe turns theory terms such as resolution, frame rate, sample rate, channels, codec, and duration into observable fields."
       }
     ],
-    outcome: "You can separate file structure, container metadata, tracks, samples, and codec identifiers."
+    outcome: "You can generate a controlled MP4 and use FFprobe to inspect core video and audio properties."
   },
   {
     slug: "codecs-compression",
     title: "Codecs And Compression",
     kind: "Theory",
-    summary: "See why raw camera video is enormous and how codecs reduce it with sampling, prediction, and frame dependencies.",
+    summary: "See why raw camera video is enormous and how H.264-style codecs reduce it with spatial compression, temporal prediction, and bitrate control.",
     reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs",
     blocks: [
       {
@@ -341,15 +427,80 @@ console.log(bytesPerSecond);  // 129600000`
       },
       {
         type: "text",
-        heading: "Video Codecs And Frame Dependencies",
+        heading: "H.264 As The Main Model",
         body: [
-          "Video codecs exploit the fact that nearby frames are often similar. Instead of storing every frame independently, they store some complete reference frames and many predicted frames that describe changes from other frames.",
-          "A Group of Pictures, or GOP, is a run of frames built around these dependencies. I-frames are self-contained. P-frames predict from earlier frames. B-frames can predict from frames before and after their presentation time."
+          "This tutorial uses H.264 as the main codec model because it is widely supported by browsers, devices, and streaming workflows. H.264 is also old enough that its core ideas are well understood: divide pictures into blocks, predict what can be predicted, transform what remains, quantize detail, and code the result efficiently.",
+          "HEVC, VP9, and AV1 use many of the same broad ideas with more advanced tools. They can deliver better compression efficiency, but support, licensing, encoding cost, and device decode capability vary."
         ],
         points: [
-          "I-frames are larger but useful for startup, seeking, and recovery.",
-          "P-frames are smaller because they reuse previous reference information.",
-          "B-frames improve compression but can make decode order differ from presentation order."
+          "H.264 is the practical baseline for broad MP4 playback.",
+          "HEVC can be efficient but browser/device support is uneven.",
+          "VP9 and AV1 are common web alternatives, especially in WebM or modern streaming workflows."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Spatial Compression",
+        body: [
+          "Spatial compression reduces detail within a single frame. H.264 first predicts blocks from neighbouring pixels in the same picture where it can. The remaining difference, called the residual, is transformed so visible image energy is concentrated into values that are easier to compress.",
+          "A common way to explain this family of techniques is DCT, quantisation, then entropy coding. A transform such as the Discrete Cosine Transform expresses image detail as frequency-like coefficients. Quantisation reduces precision, often throwing away fine detail that viewers are less likely to notice. Entropy coding then stores the resulting values with fewer bits."
+        ],
+        points: [
+          "Transform coding turns pixel differences into coefficients.",
+          "Quantisation is where much of the visible loss is introduced.",
+          "Entropy coding removes statistical redundancy without changing the decoded values further."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Temporal Compression",
+        body: [
+          "Temporal compression reduces repeated information between frames. Instead of encoding every frame independently, H.264 can encode some frames by referencing other frames. The encoder searches for similar blocks in reference frames, describes motion with motion vectors, and stores only the prediction error that remains.",
+          "Motion estimation is the encoder's search for matching image areas. Motion compensation is the decoder's use of those motion vectors and reference frames to rebuild the predicted picture. This is why compressed video can be much smaller than raw frames when motion is predictable."
+        ],
+        points: [
+          "Reference frames are previously decoded pictures kept so later pictures can predict from them.",
+          "Motion vectors describe where matching image detail moved.",
+          "The residual stores what prediction could not explain."
+        ]
+      },
+      {
+        type: "text",
+        heading: "I-Frames, P-Frames, B-Frames, And GOPs",
+        body: [
+          "A Group of Pictures, or GOP, is a run of frames built around prediction dependencies. I-frames are intra-coded: they can be decoded without other frames. P-frames predict from earlier reference frames. B-frames can predict from frames before and after their presentation time.",
+          "I-frames are important for startup, seeking, quality switching, and recovery after errors, but they are larger. P-frames and B-frames usually compress better, but they create dependencies. With B-frames, decode order can differ from presentation order because the decoder may need a future reference before it can display the current frame."
+        ],
+        points: [
+          "Shorter GOPs improve random access but usually increase bitrate.",
+          "Longer GOPs improve compression but make seeking and switching less immediate.",
+          "Streaming representations should align GOP boundaries so quality switches can happen cleanly."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Bitrate Control",
+        body: [
+          "Bitrate is how many bits are spent per second of encoded media. CBR, or constant bitrate, tries to keep the rate steady. VBR, or variable bitrate, spends more bits on complex scenes and fewer bits on easy scenes. Streaming ladders often describe each Representation with an average or target bitrate so the ABR algorithm has something to compare against network throughput.",
+          "CRF, or Constant Rate Factor, is a quality-targeted encoding mode used by tools such as x264. Lower CRF values generally mean higher quality and larger files. CRF is useful when producing files where consistent visual quality matters more than hitting an exact bitrate, while ABR streaming packaging often needs bitrate-controlled outputs for predictable delivery."
+        ],
+        points: [
+          "CBR is predictable for networks but may waste bits on easy content.",
+          "VBR usually gives better quality for a given average size.",
+          "CRF targets quality rather than a fixed output bitrate."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Measuring Quality",
+        body: [
+          "Video quality is not only a bitrate number. Objective metrics compare an encoded result with a reference source. PSNR measures signal error mathematically, but it often disagrees with human perception. SSIM compares structural similarity and usually tracks perceived quality better than PSNR.",
+          "VMAF combines several measurements using a perceptual model and is widely used when building encoding ladders. None of these metrics is perfect, but they help compare codec settings, bitrates, resolutions, and alternative codecs systematically."
+        ],
+        points: [
+          "PSNR is simple but not very perceptual.",
+          "SSIM focuses on structural similarity.",
+          "VMAF is commonly used to tune streaming ladders and compare encodes."
         ]
       },
       {
@@ -360,8 +511,8 @@ console.log(bytesPerSecond);  // 129600000`
           "Audio still has timing, frames, sample rates, channel layouts, and codec configuration. A player must keep audio and video clocks aligned even though their encoded structures are different."
         ],
         points: [
-          "Sample rate describes audio samples per second, commonly 44.1 kHz or 48 kHz.",
-          "Channel layout describes mono, stereo, surround, or object-based arrangements.",
+          "AAC is common with H.264 in MP4 and DASH streams.",
+          "Opus is efficient and common in WebM and real-time workflows.",
           "Audio buffer underruns are often more noticeable than small video quality drops."
         ]
       },
@@ -371,19 +522,388 @@ console.log(bytesPerSecond);  // 129600000`
         explain: "A browser support check needs both the container MIME type and codec identifiers.",
         code: `
 const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const hevcAac = 'video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"';
 const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
+const av1Opus = 'video/webm; codecs="av01.0.05M.08, opus"';
 
 console.log(MediaSource.isTypeSupported(h264Aac));
-console.log(MediaSource.isTypeSupported(vp9Opus));`
+console.log(MediaSource.isTypeSupported(hevcAac));
+console.log(MediaSource.isTypeSupported(vp9Opus));
+console.log(MediaSource.isTypeSupported(av1Opus));`
       },
       {
         type: "demo",
         title: "Compression Pressure",
         mode: "packets",
-        text: "Raw samples quickly become hundreds of megabytes per second, so codecs reduce the signal before streaming."
+        text: "Raw samples quickly become hundreds of megabytes per second, so codecs reduce spatial detail, temporal repetition, and statistical redundancy before streaming."
       }
     ],
-    outcome: "You can calculate raw video data rate and explain why I-frames, P-frames, B-frames, and audio codecs exist."
+    outcome: "You can calculate raw video data rate and explain H.264 spatial compression, temporal prediction, GOP structure, bitrate control, and quality metrics."
+  },
+  {
+    slug: "inspect-codecs-compression",
+    title: "Inspect Codecs And Compression",
+    kind: "Practical",
+    summary: "Encode the same source with different H.264 settings and inspect how CRF, bitrate, GOP size, and frame types change the output.",
+    reference: "https://ffmpeg.org/ffmpeg-codecs.html#libx264",
+    blocks: [
+      {
+        type: "text",
+        heading: "One Source, Several Encodes",
+        body: [
+          "Codec concepts are easiest to reason about when the source stays fixed. This lab uses FFmpeg's test pattern source and encodes it several ways with libx264 so you can compare file size, bitrate, GOP structure, and frame types.",
+          "The commands deliberately use H.264 because that is the main codec model in this tutorial. The same inspection habits apply when you later compare HEVC, VP9, or AV1."
+        ],
+        points: [
+          "CRF targets quality rather than an exact bitrate.",
+          "Bitrate settings target delivery size or rate.",
+          "GOP and B-frame settings affect prediction dependencies."
+        ]
+      },
+      {
+        type: "code",
+        title: "Create A Reusable Source",
+        explain: "Use a lossless-ish intermediate source for comparisons so each encode starts from the same frames.",
+        code: `
+mkdir -p lab
+
+ffmpeg -y \\
+  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
+  -f lavfi -i sine=frequency=880:sample_rate=48000:duration=8 \\
+  -c:v ffv1 \\
+  -c:a pcm_s16le \\
+  lab/source.mkv`
+      },
+      {
+        type: "code",
+        title: "Compare CRF Values",
+        explain: "Lower CRF generally means higher quality and larger output. The codec is still H.264 in both files.",
+        code: `
+ffmpeg -y -i lab/source.mkv \\
+  -c:v libx264 -pix_fmt yuv420p -crf 18 -g 50 \\
+  -c:a aac -b:a 128k \\
+  lab/h264-crf18.mp4
+
+ffmpeg -y -i lab/source.mkv \\
+  -c:v libx264 -pix_fmt yuv420p -crf 32 -g 50 \\
+  -c:a aac -b:a 128k \\
+  lab/h264-crf32.mp4
+
+ls -lh lab/h264-crf18.mp4 lab/h264-crf32.mp4`
+      },
+      {
+        type: "code",
+        title: "Inspect Codec And Bitrate",
+        explain: "Use FFprobe to compare codec name, profile, pixel format, and reported bitrate.",
+        code: `
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_entries stream=codec_name,profile,pix_fmt,bit_rate,avg_frame_rate \\
+  -of default=noprint_wrappers=1 \\
+  lab/h264-crf18.mp4
+
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_entries stream=codec_name,profile,pix_fmt,bit_rate,avg_frame_rate \\
+  -of default=noprint_wrappers=1 \\
+  lab/h264-crf32.mp4`
+      },
+      {
+        type: "code",
+        title: "Force A Bitrate Target",
+        explain: "This creates a more delivery-oriented encode. The maxrate and bufsize options constrain bitrate variation.",
+        code: `
+ffmpeg -y -i lab/source.mkv \\
+  -c:v libx264 -pix_fmt yuv420p \\
+  -b:v 1200k -maxrate 1200k -bufsize 2400k \\
+  -g 50 \\
+  -c:a aac -b:a 128k \\
+  lab/h264-1200k.mp4`
+      },
+      {
+        type: "code",
+        title: "Inspect Frame Types",
+        explain: "The pict_type values show I, P, and B frames. Key frames are the random access points used for startup and seeking.",
+        code: `
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_entries frame=pict_type,key_frame,pkt_pts_time,best_effort_timestamp_time \\
+  -of csv=p=0 \\
+  lab/h264-crf18.mp4 | head -40`
+      },
+      {
+        type: "code",
+        title: "Change GOP And B-Frames",
+        explain: "This encode uses a shorter GOP and disables B-frames. It is easier to decode and reason about, but usually less efficient.",
+        code: `
+ffmpeg -y -i lab/source.mkv \\
+  -c:v libx264 -pix_fmt yuv420p -crf 23 \\
+  -g 25 -bf 0 \\
+  -c:a aac -b:a 128k \\
+  lab/h264-gop25-no-bframes.mp4
+
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_entries frame=pict_type,key_frame \\
+  -of csv=p=0 \\
+  lab/h264-gop25-no-bframes.mp4 | head -40`
+      },
+      {
+        type: "text",
+        heading: "Quality Metrics In Practice",
+        body: [
+          "PSNR, SSIM, and VMAF are normally used by comparing an encoded file against a reference source. FFmpeg can calculate PSNR and SSIM with built-in filters. VMAF support depends on whether your FFmpeg build includes libvmaf.",
+          "Treat these metrics as engineering signals, not truth. They are useful for comparing encodes, but visual inspection and product constraints still matter."
+        ],
+        points: [
+          "PSNR is easy to compute but weak as a perceptual metric.",
+          "SSIM is more perceptual and still widely available.",
+          "VMAF is common for ladder tuning when the tooling is available."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Encode Tradeoffs",
+        mode: "packets",
+        text: "Changing codec settings changes file size, bitrate, prediction structure, random access points, and visual quality."
+      }
+    ],
+    outcome: "You can use FFmpeg and FFprobe to compare H.264 CRF, bitrate, GOP, and frame-type behavior."
+  },
+  {
+    slug: "media-files-containers",
+    title: "Media Files And Containers",
+    kind: "Theory",
+    summary: "Learn what a media file contains and how containers organize tracks, timing, metadata, and media data.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Containers",
+    blocks: [
+      {
+        type: "text",
+        heading: "What Makes Up A Media File",
+        body: [
+          "A media file is more than raw video and audio bytes. It normally contains structural headers, track metadata, timing information, codec configuration, and chunks of encoded media data.",
+          "The container is the file format that organizes those parts. MP4, WebM, MPEG-TS, and Matroska are containers. They can carry different codec payloads, which is why saying a file is MP4 does not fully describe whether a browser can play it."
+        ],
+        points: [
+          "Headers describe the container structure and where important information lives.",
+          "Metadata describes tracks, durations, timescales, language, dimensions, and codec setup.",
+          "Media data contains encoded audio and video samples ordered by decoding and presentation rules."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "file"
+      },
+      {
+        type: "text",
+        heading: "MP4 As A Box Tree",
+        body: [
+          "MP4 files are built from boxes, also called atoms. Each box starts with a size and a four-character type, then contains either data or more nested boxes. A player reads this structure to discover what tracks exist, how samples are timed, and where the encoded media bytes live.",
+          "The important beginner model is that metadata and media payload are separate. Boxes such as ftyp and moov describe the file and its tracks. The mdat box carries the encoded audio and video samples."
+        ],
+        points: [
+          "ftyp identifies the MP4 brand and compatibility, such as isom, mp42, avc1, or iso6.",
+          "moov contains movie-level metadata and track descriptions.",
+          "mdat contains encoded media data: compressed audio and video samples."
+        ]
+      },
+      {
+        type: "code",
+        title: "Typical MP4 Box Shape",
+        explain: "A normal MP4 is a hierarchy. Some boxes contain other boxes, and the media samples are referenced by metadata rather than being self-describing raw bytes.",
+        code: `
+MP4 file
+  ftyp
+    major brand
+    compatible brands
+
+  moov
+    mvhd
+    trak
+      tkhd
+      mdia
+        mdhd
+        hdlr
+        minf
+          stbl
+
+  mdat
+    encoded audio/video samples`
+      },
+      {
+        type: "text",
+        heading: "Movie And Track Metadata",
+        body: [
+          "The moov box is the main metadata container for a normal MP4 file. Inside it, mvhd stores movie-level information such as the overall timescale and duration. Each trak box describes one track, such as video, audio, or subtitles.",
+          "Inside a trak, tkhd stores track-level information such as track ID, duration, dimensions for video, and presentation flags. The mdia box contains the media information for that track: its media timescale, handler type, and tables that map sample numbers to decode times, byte offsets, sizes, and keyframe positions."
+        ],
+        points: [
+          "moov tells the player how to interpret the file as a timed presentation.",
+          "mvhd describes movie-level timing.",
+          "trak groups metadata for one track.",
+          "tkhd describes that track's identity and presentation properties.",
+          "mdia leads to the timing and sample tables needed for playback and seeking."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Where mdat Fits",
+        body: [
+          "The mdat box is where the encoded sample bytes live. It does not, by itself, tell the browser when every sample should play or which samples are random access points. The player uses metadata from moov and the track sample tables to interpret the bytes in mdat.",
+          "This is why MP4 metadata placement affects startup. If the moov box is near the start of the file, the browser can read track metadata quickly and begin progressive playback sooner. If moov is at the end, the browser may need more of the file before it can understand duration, tracks, and seek points."
+        ],
+        points: [
+          "mdat is payload; moov explains the payload.",
+          "Fast-start MP4 usually means moov is placed before mdat.",
+          "Fragmented MP4 changes this model by putting setup in an init segment and timing metadata in repeated fragments."
+        ]
+      },
+      {
+        type: "text",
+        heading: "MIME Types And Codec Strings",
+        body: [
+          "A browser support check needs two layers of identity. The MIME type describes the container or track format, such as video/mp4, audio/mp4, or video/webm. The codecs parameter describes the encoded samples inside that container.",
+          "This matters more once you reach MSE. When you call addSourceBuffer, the browser needs a precise string so it can decide whether the appended bytes can be parsed and decoded. A string that is too vague, or a codec profile the device cannot decode, can fail before any media is appended."
+        ],
+        points: [
+          "A complete MP4 file might be described as video/mp4 with both video and audio codec identifiers.",
+          "An MSE SourceBuffer normally receives one track type, so the video buffer and audio buffer use separate MIME strings.",
+          "DASH MPDs may put mimeType and codecs on AdaptationSet or Representation, so a player often combines inherited attributes."
+        ]
+      },
+      {
+        type: "code",
+        title: "Container Versus Codec",
+        explain: "Use exact MIME and codec strings before creating SourceBuffers. A normal file can advertise audio and video together; MSE often checks each track buffer separately.",
+        code: `
+const mp4File = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const videoBuffer = 'video/mp4; codecs="avc1.64001f"';
+const audioBuffer = 'audio/mp4; codecs="mp4a.40.2"';
+
+console.log(MediaSource.isTypeSupported(mp4File));
+console.log(MediaSource.isTypeSupported(videoBuffer));
+console.log(MediaSource.isTypeSupported(audioBuffer));`
+      },
+      {
+        type: "text",
+        heading: "Containers, Formats, And Bitrate",
+        body: [
+          "A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.",
+          "Bitrate is the amount of data used per second of media. The container records enough timing information for the browser to place those encoded samples onto a media timeline."
+        ],
+        points: [
+          "MP4 with H.264 video and AAC audio is broadly compatible on the web.",
+          "WebM with VP9 or AV1 can be efficient but support varies by device.",
+          "For streaming, average bitrate helps predict download time and ABR decisions."
+        ]
+      },
+      {
+        type: "demo",
+        title: "File Anatomy",
+        mode: "packets",
+        text: "A playable file combines container structure, metadata, track timing, and encoded audio/video samples."
+      }
+    ],
+    outcome: "You can separate MP4 file structure, container metadata, boxes, tracks, samples, and codec identifiers."
+  },
+  {
+    slug: "inspect-mp4-containers",
+    title: "Inspect MP4 Containers",
+    kind: "Practical",
+    summary: "Use FFprobe and optional MP4 box tools to inspect tracks, packets, timestamps, keyframes, and MP4 box structure.",
+    reference: "https://ffmpeg.org/ffprobe.html",
+    blocks: [
+      {
+        type: "text",
+        heading: "Inspect The Container, Not Just The Codec",
+        body: [
+          "The previous labs created encoded audio and video. This lab looks at how the MP4 container describes those encoded samples as tracks, packets, timestamps, durations, and byte-addressed payload.",
+          "FFprobe does not show every MP4 box in the same way a dedicated MP4 parser does, but it is excellent for stream, packet, frame, and timing inspection. If you install Bento4, mp4dump can show the box tree directly."
+        ],
+        points: [
+          "Streams are logical tracks such as video and audio.",
+          "Packets are encoded chunks with timestamps and sizes.",
+          "Frames are decoded pictures or audio frames exposed by the demuxer/decoder path."
+        ]
+      },
+      {
+        type: "code",
+        title: "Create A Fast-Start MP4",
+        explain: "The +faststart flag places the moov metadata near the start, which helps progressive download startup.",
+        code: `
+mkdir -p lab
+
+ffmpeg -y \\
+  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=6 \\
+  -f lavfi -i sine=frequency=440:sample_rate=48000:duration=6 \\
+  -c:v libx264 -pix_fmt yuv420p -g 50 -crf 23 \\
+  -c:a aac -b:a 128k -ac 2 \\
+  -movflags +faststart \\
+  lab/container-faststart.mp4`
+      },
+      {
+        type: "code",
+        title: "Show Format And Streams",
+        explain: "This is the high-level view: one container with video and audio streams.",
+        code: `
+ffprobe -hide_banner \\
+  -show_format \\
+  -show_streams \\
+  lab/container-faststart.mp4`
+      },
+      {
+        type: "code",
+        title: "Inspect Packets",
+        explain: "Packets expose encoded payload timing. Look for stream_index, pts_time, dts_time, duration_time, size, and flags.",
+        code: `
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_packets \\
+  -show_entries packet=stream_index,pts_time,dts_time,duration_time,size,flags \\
+  -of csv=p=0 \\
+  lab/container-faststart.mp4 | head -30`
+      },
+      {
+        type: "code",
+        title: "Inspect Frames And Keyframes",
+        explain: "Frame inspection helps connect MP4 timing with codec structure. Keyframes are the safe random access points.",
+        code: `
+ffprobe -v error \\
+  -select_streams v:0 \\
+  -show_frames \\
+  -show_entries frame=key_frame,pict_type,best_effort_timestamp_time,pkt_size \\
+  -of csv=p=0 \\
+  lab/container-faststart.mp4 | head -40`
+      },
+      {
+        type: "text",
+        heading: "Optional Box Tree Inspection",
+        body: [
+          "FFprobe gives you stream and packet information. To inspect MP4 boxes directly, install Bento4 and use mp4dump. That lets you see ftyp, moov, mvhd, trak, tkhd, mdia, and mdat as container boxes.",
+          "This is optional because FFmpeg is enough for the rest of the tutorial. Box dumps are useful when you need to debug malformed MP4s, metadata placement, timescales, or fragmented output."
+        ],
+        points: [
+          "ftyp identifies brands and compatibility.",
+          "moov contains movie and track metadata.",
+          "trak/tkhd/mdia describe individual tracks.",
+          "mdat carries encoded sample bytes."
+        ]
+      },
+      {
+        type: "code",
+        title: "Optional: mp4dump",
+        explain: "If Bento4 is installed, this prints the MP4 box tree. The command is optional and may not exist on every machine.",
+        code: `
+mp4dump lab/container-faststart.mp4 | head -80`
+      },
+      {
+        type: "demo",
+        title: "Container Evidence",
+        mode: "packets",
+        text: "A container maps encoded packets to tracks, timestamps, byte sizes, keyframes, and presentation order."
+      }
+    ],
+    outcome: "You can inspect an MP4 as streams, packets, frames, timestamps, keyframes, and optionally as a box tree."
   },
   {
     slug: "fragmented-mp4-cmaf",
@@ -487,6 +1007,107 @@ function logBuffered(video) {
       }
     ],
     outcome: "You understand init segments, media segments, MP4 boxes, timestamps, and why CMAF exists."
+  },
+  {
+    slug: "create-fragmented-mp4",
+    title: "Create Fragmented MP4 For MSE",
+    kind: "Practical",
+    summary: "Use FFmpeg to create fragmented MP4 output and inspect how it differs from a normal progressive MP4.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API",
+    blocks: [
+      {
+        type: "text",
+        heading: "Why Create fMP4",
+        body: [
+          "MSE commonly works with fragmented MP4: initialization metadata first, then media fragments that carry timed samples. DASH and modern HLS can both reference fMP4 or CMAF-style media.",
+          "This lab creates a fragmented MP4 with FFmpeg so you can connect the fMP4/CMAF theory to actual packaging commands before appending bytes with MSE."
+        ],
+        points: [
+          "Normal progressive MP4 is usually one complete file.",
+          "Fragmented MP4 splits timing metadata into repeated fragments.",
+          "MSE needs initialization data before it can parse media fragments."
+        ]
+      },
+      {
+        type: "code",
+        title: "Create A Normal MP4",
+        explain: "Start with a normal fast-start MP4 so you have something to compare against.",
+        code: `
+mkdir -p lab
+
+ffmpeg -y \\
+  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
+  -f lavfi -i sine=frequency=660:sample_rate=48000:duration=8 \\
+  -c:v libx264 -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 -crf 23 \\
+  -c:a aac -b:a 128k -ac 2 \\
+  -movflags +faststart \\
+  lab/progressive.mp4`
+      },
+      {
+        type: "code",
+        title: "Create A Fragmented MP4",
+        explain: "These movflags produce an MP4 with initialization metadata followed by fragments. The keyframe settings keep fragment boundaries predictable.",
+        code: `
+ffmpeg -y \\
+  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
+  -f lavfi -i sine=frequency=660:sample_rate=48000:duration=8 \\
+  -c:v libx264 -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 -crf 23 \\
+  -c:a aac -b:a 128k -ac 2 \\
+  -movflags frag_keyframe+empty_moov+default_base_moof \\
+  lab/fragmented.mp4`
+      },
+      {
+        type: "code",
+        title: "Compare High-Level Metadata",
+        explain: "FFprobe still sees both as MP4 files with audio and video streams. Fragmentation is mainly a container layout difference.",
+        code: `
+ffprobe -hide_banner -show_format -show_streams lab/progressive.mp4
+ffprobe -hide_banner -show_format -show_streams lab/fragmented.mp4`
+      },
+      {
+        type: "text",
+        heading: "What Changed",
+        body: [
+          "The progressive file is optimized as one playable file. The fragmented file is organized as initialization information plus fragments. A browser using MSE can receive the initialization data, then receive media fragments over time.",
+          "In real DASH packaging, these pieces are often split into a separate init segment and multiple .m4s media segment files. This single fragmented file is still useful because it exposes the same moof/mdat idea."
+        ],
+        points: [
+          "empty_moov writes an initial moov before media fragments.",
+          "frag_keyframe starts fragments at keyframes.",
+          "default_base_moof makes fragment addressing friendlier for streaming use cases."
+        ]
+      },
+      {
+        type: "code",
+        title: "Optional: Inspect Fragment Boxes",
+        explain: "If Bento4 is installed, look for ftyp, moov, repeated moof boxes, and mdat payload boxes.",
+        code: `
+mp4dump lab/fragmented.mp4 | head -120`
+      },
+      {
+        type: "code",
+        title: "Optional: Segment With FFmpeg",
+        explain: "This creates a DASH-style init segment and numbered media segments. The later DASH lessons use manifests to discover files like these.",
+        code: `
+mkdir -p lab/dash
+
+ffmpeg -y -i lab/progressive.mp4 \\
+  -map 0:v:0 -map 0:a:0 \\
+  -c copy \\
+  -f dash \\
+  -seg_duration 2 \\
+  -init_seg_name 'init-$RepresentationID$.mp4' \\
+  -media_seg_name 'chunk-$RepresentationID$-$Number%05d$.m4s' \\
+  lab/dash/manifest.mpd`
+      },
+      {
+        type: "demo",
+        title: "From File To Fragments",
+        mode: "timeline",
+        text: "Fragmented MP4 packages encoded samples into appendable timed fragments that line up with MSE and DASH."
+      }
+    ],
+    outcome: "You can create fragmented MP4 output and relate FFmpeg packaging flags to init metadata, moof/mdat fragments, and DASH-style segments."
   },
   {
     slug: "players-timelines-buffers",
