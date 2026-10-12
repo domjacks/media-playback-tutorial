@@ -1953,6 +1953,132 @@ async function fetchBytes(url) {
     outcome: "A browser ESM player fetches the BBC Big Buck Bunny MPD and plays audio plus video from manifest-derived segments."
   },
   {
+    slug: "demuxing-samples",
+    title: "Demuxing Media Samples",
+    kind: "Theory",
+    summary: "Follow fragmented MP4 one level below media segments and see how a demuxer exposes timed encoded samples.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
+    blocks: [
+      {
+        type: "text",
+        heading: "A Segment Contains Samples",
+        body: [
+          "MSE accepts a complete initialization segment and media fragments, then the browser demuxes and decodes them internally. WebCodecs gives JavaScript access to the decoder boundary, so a player must do the demuxing work itself.",
+          "An fMP4 init segment describes tracks, timescales, and codec setup. Each media fragment pairs moof metadata with mdat bytes. The sample run metadata tells us where each encoded access unit starts, how many bytes it occupies, and where it belongs on the track timeline."
+        ],
+        points: [
+          "tfhd identifies the track and can provide default sample fields.",
+          "tfdt gives the first decode timestamp in a fragment.",
+          "trun lists sample durations, sizes, flags, and optional composition offsets.",
+          "mdat stores the encoded sample bytes; sample flags identify random access points."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "fmp4"
+      },
+      {
+        type: "text",
+        heading: "Decode Time And Presentation Time",
+        body: [
+          "Track timestamps are integer ticks. Divide by that track's timescale to get seconds. Decode time tells the decoder when a sample must be processed; a composition offset maps it to presentation time. With B-frames, decode order can differ from display order.",
+          "The demuxer feeds samples to a decoder in decode order and carries presentation timestamps with each chunk. The output frames can then be scheduled on a shared audio/video playback clock."
+        ],
+        points: [
+          "Encoded samples are compressed access units, not decoded pixels or PCM audio.",
+          "Video keyframe flags tell the decoder where independent decoding can begin.",
+          "Audio and video have different timescales but share one presentation timeline."
+        ]
+      },
+      {
+        type: "code",
+        title: "From Fragment Bytes To Samples",
+        explain: "The tutorial demuxer reads track setup once, then extracts each sample's bytes and timing from media fragments.",
+        code: `
+const tracks = parseInitSegment(initializationBytes);
+const samples = demuxFragment(mediaSegmentBytes, tracks);
+
+for (const sample of samples) {
+  const decodeSeconds = sample.decodeTime / sample.track.timescale;
+  const presentationSeconds = sample.timestamp / sample.track.timescale;
+  console.log(sample.track.kind, sample.data.byteLength, decodeSeconds, presentationSeconds, sample.key);
+}`
+      },
+      {
+        type: "text",
+        heading: "A Deliberately Small Parser",
+        body: [
+          "The hands-on parser supports the H.264 and AAC fragmented MP4 tracks used by this tutorial's single-period DASH VOD example. It reads the sample descriptions, tfhd, tfdt, trun, and mdat boxes needed for that path.",
+          "MP4 has many valid layouts and optional fields. This parser reports unsupported structures instead of claiming to handle flat MP4 sample tables, encrypted samples, every codec, or every fMP4 variation."
+        ]
+      }
+    ],
+    outcome: "You can explain how fMP4 track metadata and fragment boxes locate encoded samples and map them onto decode and presentation timelines."
+  },
+  {
+    slug: "webcodecs-playback",
+    title: "Decode Samples With WebCodecs",
+    kind: "Practical",
+    summary: "Use your DASH and demuxing knowledge to decode H.264 and AAC samples and schedule synchronized video and audio output.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API",
+    blocks: [
+      {
+        type: "text",
+        heading: "The Decoder Boundary",
+        body: [
+          "WebCodecs accepts encoded chunks plus codec configuration. It does not fetch DASH segments, parse MP4, create a media timeline, or present a complete movie for you. The player connects those pieces: MPD, segment fetch, demuxed samples, decoders, and output scheduling.",
+          "The example uses VideoDecoder output frames drawn to a canvas and AudioDecoder output scheduled through AudioContext. Both tracks use timestamps derived from their fMP4 timescales, so audio and video follow one playback clock."
+        ],
+        points: [
+          "Check VideoDecoder and AudioDecoder configuration support before decoding.",
+          "Send compressed samples in decode order and label video keyframes correctly.",
+          "Use decoded timestamps for presentation and apply backpressure to decoder queues.",
+          "Close VideoFrame and AudioData objects when they are no longer needed."
+        ]
+      },
+      {
+        type: "link",
+        href: "./webcodecs.html",
+        label: "Open the runnable DASH WebCodecs player"
+      },
+      {
+        type: "code",
+        title: "Configure A Video Decoder",
+        explain: "The H.264 sample entry provides the codec string and avcC decoder configuration needed by WebCodecs.",
+        code: `
+const support = await VideoDecoder.isConfigSupported({
+  codec: track.config.codec,
+  description: track.config.description
+});
+if (!support.supported) throw new Error("This device cannot decode this H.264 profile");
+
+decoder.configure(support.config);
+decoder.decode(new EncodedVideoChunk({
+  type: sample.key ? "key" : "delta",
+  timestamp: presentationTimeUs,
+  duration: sampleDurationUs,
+  data: sample.data
+}));`
+      },
+      {
+        type: "text",
+        heading: "Scheduling And Controls",
+        body: [
+          "The sample player schedules audio buffers against AudioContext.currentTime and draws the video frame whose timestamp is due. Pausing suspends the audio clock, which also pauses video presentation. Replay rebuilds the decoder session from the first sample.",
+          "The example requests a fixed DASH quality and buffers the tutorial's bounded VOD segment list. It demonstrates the decoding and synchronization boundary, not adaptive switching, live edge management, seeking, or production memory policies."
+        ]
+      },
+      {
+        type: "text",
+        heading: "When To Choose WebCodecs",
+        body: [
+          "MSE is a good fit when the browser should own demuxing and presentation while JavaScript supplies media segments. WebCodecs is useful when an application needs control over decoded frames or custom processing, and accepts responsibility for parsing, scheduling, synchronization, and resource cleanup."
+        ]
+      }
+    ],
+    outcome: "You can connect DASH segment fetching, fMP4 sample extraction, WebCodecs decoding, and synchronized canvas/audio output."
+  },
+  {
     slug: "adaptive-bitrate",
     title: "Adaptive Bitrate",
     kind: "Practical",
