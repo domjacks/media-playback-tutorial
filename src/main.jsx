@@ -9,12 +9,12 @@ import {
   ExternalLink,
   FlaskConical,
   Play,
-  Radio,
   ShieldCheck
 } from "lucide-react";
 import { lessons } from "./data/lessons.js";
-import { BufferQueue, PacketFlow, SegmentTimeline } from "./components/Diagrams.jsx";
+import { AudioFundamentalsDiagram, AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
+import { PlayerShowcase } from "./components/PlayerShowcase.jsx";
 import "./styles.css";
 
 const storageKey = "mse-tutorial-progress";
@@ -46,6 +46,10 @@ function App() {
     }
   }, [lesson.slug]);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [lesson.slug]);
+
   function markComplete() {
     setProgress((current) => {
       const next = { ...current, [lesson.slug]: true };
@@ -57,7 +61,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar" aria-label="Tutorial lessons">
-        <a className="brand" href="#/fundamentals">
+        <a className="brand" href={`#/${lessons[0].slug}`}>
           <span className="brand-mark"><Play size={18} fill="currentColor" /></span>
           <span>MSE From Scratch</span>
         </a>
@@ -112,41 +116,19 @@ function Lesson({ lesson, index, onComplete, progress }) {
         </div>
       </header>
 
-      {lesson.visual === "packets" && <PacketFlow />}
-      {lesson.visual === "buffer" && <BufferQueue />}
-      {lesson.visual === "timeline" && <SegmentTimeline />}
-
       <section className="content-grid">
         <div className="lesson-body">
-          {lesson.sections.map((section) => (
-            <section key={section.heading} className="text-section">
-              <h2>{section.heading}</h2>
-              {section.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-              {section.points && (
-                <ul>
-                  {section.points.map((point) => <li key={point}>{point}</li>)}
-                </ul>
-              )}
-            </section>
+          {lesson.blocks.map((block, blockIndex) => (
+            <LessonBlock key={`${block.type}-${block.title ?? block.heading ?? block.visual ?? blockIndex}`} block={block} />
           ))}
         </div>
         <aside className="lesson-aside">
           <div className="aside-panel">
-            <h3>Build Target</h3>
-            <p>{lesson.target}</p>
-          </div>
-          <div className="aside-panel">
-            <h3>Checkpoint</h3>
-            <p>{lesson.checkpoint}</p>
+            <h3>Lesson Outcome</h3>
+            <p>{lesson.outcome}</p>
           </div>
         </aside>
       </section>
-
-      {lesson.demo && <DemoPanel demo={lesson.demo} />}
-
-      {lesson.snippets.map((snippet) => (
-        <CodeSnippet key={snippet.title} snippet={snippet} />
-      ))}
 
       <footer className="pager">
         {previous ? <a href={`#/${previous.slug}`}><ChevronLeft size={18} /> {previous.title}</a> : <span />}
@@ -155,6 +137,42 @@ function Lesson({ lesson, index, onComplete, progress }) {
       </footer>
     </article>
   );
+}
+
+function LessonBlock({ block }) {
+  if (block.type === "text") return <TextBlock block={block} />;
+  if (block.type === "code") return <CodeSnippet snippet={block} />;
+  if (block.type === "diagram") return <Diagram visual={block.visual} />;
+  if (block.type === "demo") return <DemoPanel demo={block} />;
+  if (block.type === "showcase" && block.showcase === "player") return <PlayerShowcase />;
+  return null;
+}
+
+function TextBlock({ block }) {
+  return (
+    <section className="text-section">
+      <h2>{block.heading}</h2>
+      {block.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      {block.points && (
+        <ul>
+          {block.points.map((point) => <li key={point}>{point}</li>)}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Diagram({ visual }) {
+  if (visual === "packets") return <PacketFlow />;
+  if (visual === "buffer") return <BufferQueue />;
+  if (visual === "timeline") return <SegmentTimeline />;
+  if (visual === "video") return <VideoFundamentalsDiagram />;
+  if (visual === "audio") return <AudioFundamentalsDiagram />;
+  if (visual === "file") return <MediaFileDiagram />;
+  if (visual === "codec") return <CodecCompressionDiagram />;
+  if (visual === "fmp4") return <Fmp4CmafDiagram />;
+  if (visual === "av-sync") return <AvSyncDiagram />;
+  return null;
 }
 
 function CodeSnippet({ snippet }) {

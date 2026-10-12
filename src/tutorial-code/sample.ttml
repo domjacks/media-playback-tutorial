@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <head>
+    <layout>
+      <region xml:id="bottom" />
+    </layout>
+  </head>
+  <body>
+    <div>
+      <p begin="00:00:01.000" end="00:00:04.000" region="bottom">
+        Big Buck Bunny starts in a quiet field.
+      </p>
+      <p begin="00:00:05.500" end="00:00:08.000" region="bottom">
+        IMSC cues can carry richer layout information than WebVTT.
+      </p>
+    </div>
+  </body>
+</tt>
