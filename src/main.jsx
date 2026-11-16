@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   BookOpen,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -11,7 +12,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { MDXProvider } from "@mdx-js/react";
-import { lessons } from "./lessons/index.js";
+import { lessons, sections } from "./lessons/index.js";
 import { lessonComponents } from "./components/LessonComponents.jsx";
 import "./styles.css";
 
@@ -69,27 +70,73 @@ function App() {
             <span style={{ width: `${(completedCount / lessons.length) * 100}%` }} />
           </div>
         </div>
-        <nav className="lesson-nav">
-          {lessons.map((item, index) => (
-            <a
-              key={item.slug}
-              href={`#/${item.slug}`}
-              className={item.slug === lesson.slug ? "active" : ""}
-            >
-              <span className="lesson-number">{index + 1}</span>
-              <span>
-                <strong>{item.title}</strong>
-                <small>{item.kind}</small>
-              </span>
-              {progress[item.slug] && <Check size={16} />}
-            </a>
-          ))}
-        </nav>
+        <LessonNav activeSlug={lesson.slug} activeSection={lesson.section} progress={progress} />
       </aside>
       <main className="lesson-page">
         <Lesson lesson={lesson} index={activeIndex} onComplete={markComplete} progress={progress} />
       </main>
     </div>
+  );
+}
+
+function LessonNav({ activeSlug, activeSection, progress }) {
+  const [expanded, setExpanded] = useState(() => new Set([activeSection]));
+
+  useEffect(() => {
+    setExpanded((current) => (current.has(activeSection) ? current : new Set(current).add(activeSection)));
+  }, [activeSection]);
+
+  function toggle(title) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      return next;
+    });
+  }
+
+  return (
+    <nav className="lesson-nav">
+      {sections.map((section, sectionIndex) => {
+        const open = expanded.has(section.title);
+        const done = section.lessons.filter((item) => progress[item.slug]).length;
+        const listId = `lesson-section-${sectionIndex}`;
+        return (
+          <section key={section.title} className={`nav-section${section.title === activeSection ? " current" : ""}`}>
+            <button
+              type="button"
+              className="nav-section-toggle"
+              aria-expanded={open}
+              aria-controls={listId}
+              onClick={() => toggle(section.title)}
+            >
+              <ChevronDown size={16} className="nav-section-chevron" />
+              <span className="nav-section-title">{section.title}</span>
+              <span className="nav-section-count">{done}/{section.lessons.length}</span>
+            </button>
+            {open && (
+              <div id={listId} className="nav-section-lessons">
+                {section.lessons.map((item) => (
+                  <a
+                    key={item.slug}
+                    href={`#/${item.slug}`}
+                    className={item.slug === activeSlug ? "active" : ""}
+                    aria-current={item.slug === activeSlug ? "page" : undefined}
+                  >
+                    <span className="lesson-number">{item.index + 1}</span>
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.kind}</small>
+                    </span>
+                    {progress[item.slug] && <Check size={16} />}
+                  </a>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -101,7 +148,7 @@ function Lesson({ lesson, index, onComplete, progress }) {
   return (
     <article>
       <header className="lesson-hero">
-        <div className="lesson-kicker"><Icon size={18} /> {lesson.kind}</div>
+        <div className="lesson-kicker"><Icon size={18} /> {lesson.section} · {lesson.kind}</div>
         <h1>{lesson.title}</h1>
         <p>{lesson.summary}</p>
         <div className="hero-actions">

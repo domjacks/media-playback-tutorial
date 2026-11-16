@@ -1,4 +1,4 @@
-import { lessonOrder } from "./order.js";
+import { lessonOrder, lessonSections } from "./order.js";
 
 const modules = import.meta.glob("./*.mdx", { eager: true });
 
@@ -17,5 +17,14 @@ for (const [path, module] of Object.entries(modules)) {
 export const lessons = lessonOrder.map((slug) => {
   const module = bySlug.get(slug);
   if (!module) throw new Error(`Lesson "${slug}" is in src/lessons/order.js but src/lessons/${slug}.mdx does not exist`);
-  return { ...module.frontmatter, Content: module.default };
+  const section = lessonSections.find((item) => item.slugs.includes(slug));
+  return { ...module.frontmatter, section: section.title, Content: module.default };
 });
+
+export const sections = lessonSections.map((section) => ({
+  title: section.title,
+  lessons: section.slugs.map((slug) => {
+    const index = lessonOrder.indexOf(slug);
+    return { ...lessons[index], index };
+  })
+}));

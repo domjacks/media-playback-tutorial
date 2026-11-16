@@ -11,7 +11,7 @@ import { extractRegion, listRegions } from "../src/lib/snippets.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const checkpointsDir = join(root, "checkpoints");
 const lessonsDir = join(root, "src/lessons");
-const { lessonOrder } = await import(pathToFileURL(join(lessonsDir, "order.js")).href);
+const { lessonOrder, lessonSections } = await import(pathToFileURL(join(lessonsDir, "order.js")).href);
 
 const requiredFields = ["slug", "title", "kind", "summary", "outcome", "reference"];
 const kinds = ["Theory", "Practical"];
@@ -139,6 +139,15 @@ function checkLesson(fileSlug, source) {
     if (name === "Snippet") checkSnippet(where, props, node);
     else if (name === "Checkpoint") checkCheckpoint(where, props);
   });
+}
+
+// sections must be named, unique and non-empty
+const sectionTitles = new Set();
+for (const section of lessonSections) {
+  if (!section.title) errors.push("order.js has a section with no title");
+  else if (sectionTitles.has(section.title)) errors.push(`order.js has more than one section titled "${section.title}"`);
+  sectionTitles.add(section.title);
+  if (!section.slugs?.length) errors.push(`order.js section "${section.title}" has no lessons`);
 }
 
 // order.js and files must match one-to-one
