@@ -11,11 +11,11 @@ reference: "https://www.w3.org/TR/ttml-imsc1.2/"
 
 IMSC is large enough that a full implementation should use a dedicated renderer. This lab deliberately does not do that. It parses only the subset needed to understand the moving parts: paragraph timing, region assignment, text content, and a simple overlay.
 
-The renderer listens to timeupdate and seeking events, checks which cues are active at video.currentTime, and updates an absolutely positioned layer above the video.
+The renderer listens to `timeupdate` and `seeking` events, checks which cues are active at `video.currentTime`, and updates an absolutely positioned layer above the video.
 
-- Use DOMParser to parse the XML document.
-- Convert begin and end attributes into seconds.
-- Render active p elements into an overlay instead of creating native TextTrack cues.
+- Use `DOMParser` to parse the XML document.
+- Convert `begin` and `end` attributes into seconds.
+- Render active `p` elements into an overlay instead of creating native `TextTrack` cues.
 
 <Diagram visual="timeline" />
 
@@ -37,21 +37,21 @@ The useful pattern is the same as the DASH lesson: parse a standard format conse
 
 <Checkpoint slug="imsc-practical" run files={["index.html","dash.js","player.js","imsc-renderer.js","imsc.css","sample.ttml"]} note="This snapshot is the adaptive-bitrate player with the IMSC overlay in place of WebVTT.">
 
-- Network shows sample.ttml fetched once; there is no sample.vtt request.
-- In the console, video.textTracks.length is 0: the cues are not native text tracks.
+- Network shows `sample.ttml` fetched once; there is no `sample.vtt` request.
+- In the console, `video.textTracks.length` is 0: the cues are not native text tracks.
 - "Big Buck Bunny starts in a quiet field." appears over the bottom of the video from 1.0 to 4.0 s, and "IMSC cues can carry richer layout information than WebVTT." from 5.5 to 8.0 s.
-- DevTools Elements shows a .video-stage wrapper containing the video and a .imsc-overlay with a .imsc-cue.imsc-region-bottom child while a cue is active, and the overlay empties between cues.
-- Seeking re-renders immediately (the renderer listens to seeking as well as timeupdate).
+- DevTools Elements shows a `.video-stage` wrapper containing the video and a `.imsc-overlay` with a `.imsc-cue.imsc-region-bottom` child while a cue is active, and the overlay empties between cues.
+- Seeking re-renders immediately (the renderer listens to `seeking` as well as `timeupdate`).
 
 </Checkpoint>
 
 <Exercise title="Add A Top Region">
 
-Add a third cue to sample.ttml with region="top" between 9 and 12 seconds, and a matching .imsc-region-top rule in imsc.css that pins it to the top of the video.
+Add a third cue to `sample.ttml` with `region="top"` between 9 and 12 seconds, and a matching `.imsc-region-top` rule in `imsc.css` that pins it to the top of the video.
 
-Confirm in the Elements panel that the cue gets the class imsc-region-top, and that the bottom cues are unaffected.
+Confirm in the Elements panel that the cue gets the class `imsc-region-top`, and that the bottom cues are unaffected.
 
-<Hint>The renderer already emits imsc-region-\<name>. Add \<region xml:id="top" /> to the TTML layout for tidiness, and use align-self: start in the new CSS rule, since the overlay is a grid with align-items: end.</Hint>
+<Hint>The renderer already emits `imsc-region-<name>`. Add `<region xml:id="top" />` to the TTML layout for tidiness, and use `align-self: start` in the new CSS rule, since the overlay is a grid with `align-items: end`.</Hint>
 
 </Exercise>
 

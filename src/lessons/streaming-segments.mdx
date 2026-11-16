@@ -75,4 +75,10 @@ For now, think of those renditions as available choices. The player will learn h
 - Representations need aligned segment timing before a player can switch cleanly.
 - The manifest is where the player discovers these choices.
 
+<Question prompt="A live stream moves from 6 s segments to 2 s segments. What happens to live latency and to the number of requests a player makes per track over 10 minutes?">
+
+Shorter segments reduce live latency because the player waits less for each segment to be complete and sits fewer seconds behind the edge. The request count triples: 600 / 6 = 100 requests per track becomes 600 / 2 = 300, so request overhead rises. Every segment should still start at a random access point, so the encoder keyframe interval has to fit the shorter segments.
+
+</Question>
+
 <Demo title="Segment Delivery" mode="packets">Streaming players request timed chunks and append enough future media to keep playback moving.</Demo>

@@ -35,9 +35,9 @@ Captions are synchronized to media time.
 
 ## WebVTT
 
-WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a WEBVTT header, and then lists cues with start time, end time, and cue text.
+WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a `WEBVTT` header, and then lists cues with start time, end time, and cue text.
 
-The browser can fetch, parse, synchronize, and render WebVTT for you through a track element or the TextTrack API. That makes it the right first practical subtitle step.
+The browser can fetch, parse, synchronize, and render WebVTT for you through a `track` element or the `TextTrack` API. That makes it the right first practical subtitle step.
 
 - WebVTT is easy to hand-author and inspect.
 - It supports cue settings for placement and alignment, but browser styling is intentionally constrained.
@@ -47,7 +47,7 @@ The browser can fetch, parse, synchronize, and render WebVTT for you through a t
 
 TTML, the Timed Text Markup Language, is XML-based and more expressive than WebVTT. It can describe regions, styles, timing, layout, nested spans, and richer broadcast-style subtitle behavior.
 
-That expressiveness comes with cost. A simple browser player cannot hand TTML to a native track element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs.
+That expressiveness comes with cost. A simple browser player cannot hand TTML to a native `track` element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs.
 
 - TTML separates timing, styling, layout, and text content in XML.
 - It is useful when subtitles need precise placement, styling, or broadcast workflow compatibility.
@@ -86,5 +86,11 @@ For this tutorial, treat IMSC as TTML with rules. The practical lab will parse a
 ```
 
 </Snippet>
+
+<Question prompt="A broadcaster needs subtitles with precise regions and styling. Which format fits, why can the browser not render it directly, and what are your options in a simple player?">
+
+TTML, or its constrained profile IMSC, can describe regions, styles, timing and layout, which WebVTT's cue settings cannot do fully. A native `track` element will not render TTML, so you either convert it to WebVTT (and lose some layout), use a library such as IMSC.js, or parse a small subset yourself and draw the active timed elements as absolutely positioned HTML over the video.
+
+</Question>
 
 <Demo title="Subtitle Cues" mode="timeline">Text cues occupy timed ranges just like media segments, but render as captions instead of decoded frames.</Demo>

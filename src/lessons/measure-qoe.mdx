@@ -53,7 +53,7 @@ For a browser the transmission choice is easy. Request headers (`CMCD-Request`, 
 
 ## Wire It Into The Player
 
-fetchWithCmcd builds the field set from the live player state, fetches with timing, remembers the last throughput for the next request's `mtp`, and keeps recent requests for the panel. The ABR loop is the one from the previous lesson with two changes: it fetches through this helper, and the EWMA is fed the Resource Timing throughput.
+`fetchWithCmcd` builds the field set from the live player state, fetches with timing, remembers the last throughput for the next request's `mtp`, and keeps recent requests for the panel. The ABR loop is the one from the previous lesson with two changes: it fetches through this helper, and the EWMA is fed the Resource Timing throughput.
 
 <Snippet title="Fetch With CMCD And Timing" explain="su stays true until the buffer first reaches 10 s. bs is sent once after a rebuffer. The top bitrate is only attached to video requests, because tb must match the object type being requested." file="measure-qoe/player.js" region="cmcd-fetch" />
 
@@ -66,7 +66,7 @@ fetchWithCmcd builds the field set from the live player state, fetches with timi
 - The panel shows a startup time in milliseconds once the first frame appears, then a rebuffer count of 0 on a healthy connection.
 - Every segment request in the Network panel has a query string like `?CMCD=bl%3D12300%2Cbr%3D1417%2Ccid%3D%22bbb-avc1-high%22%2C...`. Decoding it gives alphabetically ordered keys such as `bl`, `br`, `cid`, `d`, `dl`, `mtp`, `ot=v`, `sf=d`, `sid`, `st=v`, `tb`. The request still returns 200.
 - Init segment requests carry `ot=i` and no `br`. The first requests include `su` with no value; it disappears once the buffer is over 10 s.
-- Each recent request line ends with `fetch-fallback` and a warning appears under the list: from localhost the BBB `Timing-Allow-Origin` does not name your origin, so Resource Timing hides sizes and the player used wall-clock time.
+- Each recent request line ends with `fetch-fallback` and a warning appears under the list: from `localhost` the BBB `Timing-Allow-Origin` does not name your origin, so Resource Timing hides sizes and the player used wall-clock time.
 - Throttle to Fast 3G mid-playback: bitrate switches goes up, the average bitrate falls below the starting value, and a long enough stall increments rebuffers and the next request carries `bs`.
 - Seek backwards in the video: the rebuffer count does not change, because seeking waits are excluded.
 - Untick the CMCD box: the next requests have no query string and the panel shows CMCD off.
@@ -79,7 +79,7 @@ Change the player to send CMCD in request headers instead of the query argument:
 
 Open DevTools and compare. Which request fails, why, and what would the CDN have to change to make it work?
 
-<Hint>The browser sends an OPTIONS preflight with `Access-Control-Request-Headers: cmcd-object,...` first. The BBB response lists only `Origin,Range,Accept-Encoding,Referer`, so the real GET is blocked and the console reports a CORS error. The fix is on the server: add `CMCD-Request, CMCD-Object, CMCD-Status, CMCD-Session` to `Access-Control-Allow-Headers`, which is exactly what CTA-5004 asks servers to do. Each unique URL then costs an extra round trip, which is why the spec prefers query arguments for browsers.</Hint>
+<Hint>The browser sends an `OPTIONS` preflight with `Access-Control-Request-Headers: cmcd-object,...` first. The BBB response lists only `Origin,Range,Accept-Encoding,Referer`, so the real `GET` is blocked and the console reports a CORS error. The fix is on the server: add `CMCD-Request, CMCD-Object, CMCD-Status, CMCD-Session` to `Access-Control-Allow-Headers`, which is exactly what CTA-5004 asks servers to do. Each unique URL then costs an extra round trip, which is why the spec prefers query arguments for browsers.</Hint>
 
 </Exercise>
 

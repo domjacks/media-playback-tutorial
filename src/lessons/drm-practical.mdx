@@ -34,7 +34,7 @@ Separate files are a deliberate choice. Each track goes into its own `SourceBuff
 Dump the boxes of `media/video.mp4`. If you have Bento4, `mp4dump` prints them; otherwise a few lines of Node can walk them. This is what the walker printed for the committed files.
 
 - `sinf` appears inside the `encv` (video) and `enca` (audio) sample entries. `frma` reports the original type (`avc1`, `mp4a`) and `schm` reports scheme `cenc`.
-- `tenc` reports `isProtected=1`, an 8-byte per-sample IV, and `default_KID` 00112233445566778899aabbccddeeff.
+- `tenc` reports `isProtected=1`, an 8-byte per-sample IV, and `default_KID` `00112233445566778899aabbccddeeff`.
 - In the `moof`, `senc` lists 100 samples for video. Its flags value is 2, meaning each sample carries subsample ranges: clear NAL headers, encrypted slice data. Audio has flags 0: whole AAC frames are encrypted, so no subsamples. `saiz` and `saio` index the same data.
 - There is no `pssh` box. FFmpeg writes `tenc` and `senc` but no `pssh` for any DRM, and without initialisation data the browser has nothing to put in the `encrypted` event.
 
@@ -61,9 +61,9 @@ The committed `media/video.mp4` (about 206 KB) and `media/audio.mp4` (about 36 K
 The player module `drm.js` carries the EME logic. It is the same module as before, with an optional `log` callback so the page can show each step.
 
 - Request key system access, with both video and audio capabilities, before attaching encrypted media.
-- Attach MediaKeys to the video element.
-- Audio and video each fire encrypted, often with identical initData, so create one session per distinct initData (keyed by its base64) rather than per event.
-- In the session's message handler, parse the request JSON (\{ kids, type \}) and update the session with a JWK set containing only the requested keys: \{ keys: \[\{ kty: "oct", kid, k \}\], type: "temporary" \}.
+- Attach `MediaKeys` to the video element.
+- Audio and video each fire `encrypted`, often with identical `initData`, so create one session per distinct `initData` (keyed by its base64) rather than per event.
+- In the session's message handler, parse the request JSON (`{ kids, type }`) and update the session with a JWK set containing only the requested keys: `{ keys: [{ kty: "oct", kid, k }], type: "temporary" }`.
 
 <Snippet title="Access And MediaKeys" explain="The ClearKey key system name is org.w3.clearkey. The configuration asks for cenc init data and both capabilities. After setMediaKeys the video element can hand encrypted samples to the CDM." file="drm-practical/drm.js" region="request-access" />
 
@@ -85,12 +85,12 @@ In a real service, `createClearKeyLicense` is replaced by a `fetch` to a licence
 
 <Checkpoint slug="drm-practical" run files={["index.html","player.js","drm.js","lab.sh","add-pssh.js"]} note="Serve the repository from localhost or HTTPS. EME is unavailable on plain http:// hosts and file:// URLs. The first play needs a browser with ClearKey, such as Chrome, Edge or Firefox.">
 
-- The log shows "key system org.w3.clearkey ready, MediaKeys attached" before any append line.
-- An encrypted event appears with initDataType "cenc" and 52 bytes, the size of the pssh box. It appears twice (video and audio) but only one session is created.
-- The log shows a message of type "license-request" whose JSON contains the kid ABEiM0RVZneImaq7zN3u_w, then "session.update() resolved".
-- keystatuseschange lists kid 00112233445566778899aabbccddeeff as "usable".
+- The log shows "key system org.w3.clearkey ready, `MediaKeys` attached" before any append line.
+- An `encrypted` event appears with `initDataType` `"cenc"` and 52 bytes, the size of the pssh box. It appears twice (video and audio) but only one session is created.
+- The log shows a message of type "license-request" whose JSON contains the kid `ABEiM0RVZneImaq7zN3u_w`, then "session.update() resolved".
+- `keystatuseschange` lists kid `00112233445566778899aabbccddeeff` as "usable".
 - Both files append, the log says the duration is about 4 seconds, and pressing play shows the test pattern with a running timer, with the video playing to the end.
-- Run ./lab.sh in the checkpoint directory (it needs ffmpeg and node): it prints "100 frames identical" for video and "174 frames identical" for audio.
+- Run `./lab.sh` in the checkpoint directory (it needs `ffmpeg` and `node`): it prints "100 frames identical" for video and "174 frames identical" for audio.
 
 </Checkpoint>
 
@@ -98,7 +98,7 @@ In a real service, `createClearKeyLicense` is replaced by a `fetch` to a licence
 
 First change the key in `player.js` to a different 32-character hex string and reload. Observe the log: the licence request is still answered, because the kid matches, but the key is wrong. Note whether the video decodes or shows corrupt frames or errors, and whether `keystatuseschange` still reports "usable".
 
-Then restore the key and change only the kid in `TEST_KEYS`. The CDM asks for kid ABEiM0RVZneImaq7zN3u_w, `createClearKeyLicense` finds no match and throws, and the session never reaches a usable state. Compare the console error with the first case, then explain why a ClearKey CDM cannot tell you in advance that a key is wrong.
+Then restore the key and change only the kid in `TEST_KEYS`. The CDM asks for kid `ABEiM0RVZneImaq7zN3u_w`, `createClearKeyLicense` finds no match and throws, and the session never reaches a usable state. Compare the console error with the first case, then explain why a ClearKey CDM cannot tell you in advance that a key is wrong.
 
 <Hint>A CDM checks only that the licence is well formed and names the requested kid, not that the key will decrypt anything. AES-CTR decrypts any bytes with any key and produces garbage. A wrong key therefore shows up as a decode error or corrupted picture, not as a key status. A missing kid never creates a key at all.</Hint>
 

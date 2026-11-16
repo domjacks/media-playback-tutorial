@@ -36,7 +36,7 @@ These are approximate and depend on tuning, so treat them as orders of magnitude
 
 CMAF defines a segment as a sequence of fragments, and a fragment as one or more chunks, each a `moof` + `mdat` pair. A 2 to 6 s segment can therefore be cut into chunks of 0.5 to 1 s, or even a single frame or GOP. Each chunk is decodable on its own once earlier chunks of the segment have been seen.
 
-The packager does not wait for the segment to finish. As each chunk completes it is written to the response, using HTTP/1.1 `Transfer-Encoding: chunked`, or the streaming body of HTTP/2 or HTTP/3 (which have no chunked encoding but send data frames incrementally). The URL for segment N is requested early. The origin holds the response open and emits chunks at the media rate, and the player reads the body as a stream and appends each chunk to its SourceBuffer.
+The packager does not wait for the segment to finish. As each chunk completes it is written to the response, using HTTP/1.1 `Transfer-Encoding: chunked`, or the streaming body of HTTP/2 or HTTP/3 (which have no chunked encoding but send data frames incrementally). The URL for segment N is requested early. The origin holds the response open and emits chunks at the media rate, and the player reads the body as a stream and appends each chunk to its `SourceBuffer`.
 
 This also means the whole chain has to cooperate. The ingest from the packager to the origin must itself be streamed, the CDN must forward bytes to waiting clients while it is still receiving them from the origin (instead of buffering the whole object before replying), and request collapsing must let many clients share one in-progress upstream response. Any hop that buffers the whole segment brings the latency back.
 
@@ -114,5 +114,11 @@ Chunked CMAF reaches a few seconds on the same CDN infrastructure as ordinary st
 - Media over QUIC (MoQ), an IETF effort, aims for sub-second delivery that can still fan out through relays. It is not yet a finished standard.
 
 For most broadcast-style live events, a few seconds on chunked CMAF is the practical trade-off. The next lesson builds exactly that.
+
+<Question prompt="A low-latency player runs 2 s above its target latency and is allowed a playbackRate range of 0.96 to 1.04. Roughly how long does it take to catch up at the maximum speed, and why is seeking not the first choice?">
+
+At 1.04x each second of playback recovers 0.04 s of latency, so removing 2 s takes about 2 / 0.04 = 50 s. Seeking would remove the delay instantly but is jarring and risks a stall because the buffer is only a second or two deep. A seek to the live edge is kept for large errors, such as after a long stall.
+
+</Question>
 
 <Demo title="Chunked Delivery" mode="packets">Chunks of a segment reach the player while the segment is still being produced, which removes the wait for a whole segment.</Demo>

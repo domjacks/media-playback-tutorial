@@ -144,4 +144,10 @@ console.log(MediaSource.isTypeSupported(av1Opus));
 
 </Snippet>
 
+<Question prompt="A camera signal is 1920 by 1080, 25 fps, 10-bit 4:2:2. If you convert it to raw 8-bit 4:2:0 before any codec runs, what fraction of the data rate remains, and is the result small enough to stream?">
+
+About 60% remains. 4:2:2 carries 2 samples per pixel and 4:2:0 carries 1.5, a factor of 0.75, and dropping from 10 to 8 bits gives another factor of 0.8; 0.75 x 0.8 = 0.6. That takes 1,036.8 Mbit/s down to 622 Mbit/s, which is still far beyond a viewer's connection, so a codec doing spatial and temporal compression is still essential.
+
+</Question>
+
 <Demo title="Compression Pressure" mode="packets">Raw samples quickly become hundreds of megabytes per second, so codecs reduce spatial detail, temporal repetition, and statistical redundancy before streaming.</Demo>

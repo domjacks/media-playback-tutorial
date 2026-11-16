@@ -70,10 +70,16 @@ Streaming services often normalize loudness so switching programmes, languages, 
 
 Audio is usually the track viewers notice first when playback goes wrong. If audio underruns, playback commonly stalls or produces silence. If audio and video timestamps drift apart, speech no longer matches the picture.
 
-Later, when you append separate audio and video SourceBuffers, both tracks must land on one shared media timeline. The player needs enough audio and enough video buffered around the playhead for smooth synchronized playback.
+Later, when you append separate audio and video `SourceBuffers`, both tracks must land on one shared media timeline. The player needs enough audio and enough video buffered around the playhead for smooth synchronized playback.
 
 - Audio samples have timestamps just like video frames.
-- The media element advances one currentTime for both audio and video.
+- The media element advances one `currentTime` for both audio and video.
 - Streaming players often treat audio continuity as critical when deciding whether playback can continue.
+
+<Question prompt="A stereo 48 kHz, 16-bit PCM track plays for 10 seconds. How many samples are produced in total, and roughly how many bytes of raw PCM is that?">
+
+48,000 samples per second per channel across 2 channels gives 96,000 samples per second, so 960,000 samples in 10 seconds. At 16 bits (2 bytes) each that is 1,920,000 bytes, about 1.9 MB, matching the roughly 192 KB/s figure. This is why streaming audio is always compressed with a codec such as AAC or Opus before delivery.
+
+</Question>
 
 <Demo title="Samples To Timeline" mode="timeline">Audio playback is a continuous timed sample stream that must stay aligned with video on the same media clock.</Demo>

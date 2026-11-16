@@ -107,11 +107,11 @@ Static HDR metadata helps the display tone-map. SMPTE ST 2086 describes the mast
 
 ## Matrix Coefficients And YCbCr
 
-YCbCr is derived from non-linear R'G'B' using two constants, Kr and Kb. Luma is Y' = Kr R' + (1 - Kr - Kb) G' + Kb B', and Cb and Cr are scaled differences B' - Y' and R' - Y'.
+YCbCr is derived from non-linear R'G'B' using two constants, `Kr` and `Kb`. Luma is `Y' = Kr R' + (1 - Kr - Kb) G' + Kb B'`, and Cb and Cr are scaled differences B' - Y' and R' - Y'.
 
-- BT.601 uses Kr = 0.299 and Kb = 0.114.
-- BT.709 uses Kr = 0.2126 and Kb = 0.0722.
-- BT.2020 non-constant luminance uses Kr = 0.2627 and Kb = 0.0593.
+- BT.601 uses `Kr = 0.299` and `Kb = 0.114`.
+- BT.709 uses `Kr = 0.2126` and `Kb = 0.0722`.
+- BT.2020 non-constant luminance uses `Kr = 0.2627` and `Kb = 0.0593`.
 
 Decoding with the wrong matrix does not break playback. It shifts hue and saturation slightly, mostly in reds and greens, which makes it easy to ship unnoticed.
 
@@ -119,16 +119,16 @@ Decoding with the wrong matrix does not break playback. It shifts hue and satura
 
 Broadcast-style video uses limited range, also called TV or studio range. For 8-bit it places luma black at 16 and white at 235, and chroma between 16 and 240, leaving headroom and footroom for filtering overshoot. At 10 bits the equivalent values are 64 to 940 for luma and 64 to 960 for chroma. Full range, also called PC or JPEG range, uses the whole 0 to 255 (or 0 to 1023).
 
-Web video is almost always limited range. The flag that says which is in use is video_full_range_flag, and a stream with the flag missing is normally treated as limited.
+Web video is almost always limited range. The flag that says which is in use is `video_full_range_flag`, and a stream with the flag missing is normally treated as limited.
 
 ## Where It Is Signalled
 
 The same four values can appear in several places, and a robust player or packager makes them agree.
 
-- H.264 and HEVC carry them in the VUI inside the SPS: video_signal_type_present_flag, video_full_range_flag, colour_primaries, transfer_characteristics and matrix_coeffs. HDR metadata travels as SEI messages for mastering display colour volume and content light level.
-- MP4 carries them in the `colr` box inside the sample entry. A `colr` with colour type `nclx` holds colour_primaries, transfer_characteristics, matrix_coefficients and full_range_flag. HDR metadata uses the `mdcv` and `clli` boxes.
+- H.264 and HEVC carry them in the VUI inside the SPS: `video_signal_type_present_flag`, `video_full_range_flag`, `colour_primaries`, `transfer_characteristics` and `matrix_coeffs`. HDR metadata travels as SEI messages for mastering display colour volume and content light level.
+- MP4 carries them in the `colr` box inside the sample entry. A `colr` with colour type `nclx` holds `colour_primaries`, `transfer_characteristics`, `matrix_coefficients` and `full_range_flag`. HDR metadata uses the `mdcv` and `clli` boxes.
 - Codec strings for VP9 and AV1 embed them. VP9 ends with chroma, colour primaries, transfer, matrix and full-range fields, and AV1 does the same. HEVC and H.264 strings do not, so the codec string alone cannot tell you whether an HEVC stream is SDR or HDR10.
-- DASH can add SupplementalProperty or EssentialProperty descriptors with the same code points, so that a player can filter Representations before downloading anything.
+- DASH can add `SupplementalProperty` or `EssentialProperty` descriptors with the same code points, so that a player can filter Representations before downloading anything.
 
 <Snippet title="VP9 And AV1 Strings Carry Colour" explain="Both strings end with colour primaries, transfer and matrix, then the full-range flag. 16 is PQ and 09 is BT.2020. The profile, level, bit depth and chroma fields before them are explained in Media Files And Containers.">
 
@@ -149,7 +149,7 @@ Colour metadata errors rarely stop playback. They change the picture, which make
 - BT.2020 content shown as if it were BT.709 looks desaturated.
 - PQ content shown as if it were SDR looks dim and flat, and HDR10 without correct tone mapping loses highlight detail.
 
-When two renditions look different on the same screen, compare their colr and VUI values before you blame the encoder.
+When two renditions look different on the same screen, compare their `colr` and VUI values before you blame the encoder.
 
 ## Checking HDR Support In The Browser
 
@@ -182,5 +182,11 @@ console.log({ hdrDisplay, wideGamut }, info.supported, info.smooth, info.powerEf
 
 - A player should surface compatibility failures clearly instead of pretending every rendition is equivalent.
 - Offer an SDR fallback Representation, because an HDR-capable decoder on an SDR display still needs tone mapping that not every platform does well.
+
+<Question prompt="An 8-bit limited-range video is displayed by a player that wrongly treats it as full range. What do black and white look like, and what flag would normally tell the player which range applies?">
+
+Limited range puts black at code 16 and white at 235. Read as full range, black is 16 / 255, about 6% grey instead of true black, and white is 235 / 255, about 92% brightness, so the picture looks washed out. The stream signals the range with `video_full_range_flag` in the H.264 or HEVC VUI (or `full_range_flag` in the MP4 `colr` box); when it is missing the stream is normally treated as limited.
+
+</Question>
 
 <Demo title="Picture Properties" mode="timeline">Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens.</Demo>

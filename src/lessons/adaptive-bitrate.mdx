@@ -35,7 +35,7 @@ Buffer depth changes how aggressive the player can be. If there is a large buffe
 
 ## Startup ABR Versus Switching
 
-This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching SourceBuffer streams mid-playback.
+This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching `SourceBuffer` streams mid-playback.
 
 A full player repeats the decision throughout playback. It can switch at aligned segment boundaries, but it must handle codec compatibility, buffered ranges, quality oscillation, and audio/video coordination.
 
@@ -66,16 +66,16 @@ The goal is stability, not always maximum quality. A runtime algorithm should sw
 
 ## Runtime Switching Constraints
 
-The loop assumes every Representation has aligned segment timing. It also has to handle codec configuration. The BBB ladder's video Representations have different codec strings (avc1.640028 for 1080p, avc1.640020 for 720p, and avc1.64001f for 504p), even though they are all H.264 in MP4. A player must either restrict switching to identical codecs or call SourceBuffer.changeType() with the new MIME type before appending the new init segment. That is exactly what canSwitchTo and the loop do.
+The loop assumes every Representation has aligned segment timing. It also has to handle codec configuration. The BBB ladder's video Representations have different codec strings (`avc1.640028` for 1080p, `avc1.640020` for 720p, and `avc1.64001f` for 504p), even though they are all H.264 in MP4. A player must either restrict switching to identical codecs or call `SourceBuffer.changeType()` with the new MIME type before appending the new init segment. That is exactly what `canSwitchTo` and the loop do.
 
-Switching also means appending the new Representation's init segment before its first media segment, because the SourceBuffer's parser needs that Representation's codec setup. The loop tracks which init segment is currently in the buffer.
+Switching also means appending the new Representation's init segment before its first media segment, because the `SourceBuffer`'s parser needs that Representation's codec setup. The loop tracks which init segment is currently in the buffer.
 
-The loop also has a buffer goal: before each request it waits while bufferAhead(video) is at or above BUFFER_GOAL_SECONDS (30). Without a goal a fast network just downloads the whole presentation, the buffer is always full, and the buffer signal that drives ABR becomes meaningless. A goal keeps buffer depth responsive to real conditions and bounds memory.
+The loop also has a buffer goal: before each request it waits while `bufferAhead(video)` is at or above `BUFFER_GOAL_SECONDS` (30). Without a goal a fast network just downloads the whole presentation, the buffer is always full, and the buffer signal that drives ABR becomes meaningless. A goal keeps buffer depth responsive to real conditions and bounds memory.
 
 Runtime ABR also coordinates audio and video. Audio often stays on one Representation because it is much cheaper than video, but the player still has to keep audio and video append queues synchronized around the same media time.
 
 - Switch only at aligned segment boundaries.
-- Avoid switching across incompatible codec strings or profiles unless changeType() is available.
+- Avoid switching across incompatible codec strings or profiles unless `changeType()` is available.
 - Append the new init segment on every switch, before the next media segment.
 - Stop fetching once the buffer goal is met.
 - Do not abandon audio buffering while chasing video quality.
@@ -83,22 +83,22 @@ Runtime ABR also coordinates audio and video. Audio often stays on one Represent
 
 <Checkpoint slug="adaptive-bitrate" run files={["index.html","dash.js","player.js"]} note="This snapshot has no subtitles, so you can inspect ABR behaviour in isolation.">
 
-- The status line reads video \<representation id> segment \<n>, \<kbps> kbps, \<s>s buffered, updating after each video segment.
-- Reload with DevTools throttling set to Fast 3G (or 3G): the status line shows 896x504p25 from the start, the lowest Representation.
-- Reload with no throttling: it starts on a higher Representation (1280x720p25 or 1920x1080p25, depending on navigator.connection.downlink), and then switches down to 896x504p25 when you apply Fast 3G mid-playback. Decisions are made only while the buffer is below 30 s, so the switch can take a few segments.
+- The status line reads `video <representation id> segment <n>, <kbps> kbps, <s>s buffered`, updating after each video segment.
+- Reload with DevTools throttling set to Fast 3G (or 3G): the status line shows `896x504p25` from the start, the lowest Representation.
+- Reload with no throttling: it starts on a higher Representation (`1280x720p25` or `1920x1080p25`, depending on `navigator.connection.downlink`), and then switches down to `896x504p25` when you apply Fast 3G mid-playback. Decisions are made only while the buffer is below 30 s, so the switch can take a few segments.
 - Remove the throttle again: it steps up one Representation at a time (504p to 720p to 1080p), never straight to the top.
-- Network shows an init segment request (IS.mp4) for the new Representation each time the video Representation changes, and the picture keeps playing without a glitch.
+- Network shows an init segment request (`IS.mp4`) for the new Representation each time the video Representation changes, and the picture keeps playing without a glitch.
 - The buffer reading stops growing near 30 s: the buffer goal is holding downloads back.
 
 </Checkpoint>
 
 <Exercise title="Make Switching Up More Cautious">
 
-Change appendVideoAbr so it only switches up after chooseRuntimeRepresentation has proposed the same higher Representation on 3 consecutive segments. Switching down must still happen immediately.
+Change `appendVideoAbr` so it only switches up after `chooseRuntimeRepresentation` has proposed the same higher Representation on 3 consecutive segments. Switching down must still happen immediately.
 
 Verify by throttling to Fast 3G, then removing the throttle: you should see three segments on the old Representation before each step up.
 
-<Hint>Keep a counter in appendVideoAbr: increment it when the proposal has higher bandwidth than current, reset it to 0 otherwise, and only assign current when it reaches 3 (always assign on a downward proposal). Log the counter in the status line to see it.</Hint>
+<Hint>Keep a counter in `appendVideoAbr`: increment it when the proposal has higher bandwidth than `current`, reset it to 0 otherwise, and only assign `current` when it reaches 3 (always assign on a downward proposal). Log the counter in the status line to see it.</Hint>
 
 </Exercise>
 

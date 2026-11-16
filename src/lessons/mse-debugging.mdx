@@ -9,13 +9,13 @@ reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extens
 
 ## Debug State, Not Just Code
 
-MSE failures often look opaque because the browser owns parsing, decode, buffering, and A/V synchronization. A player engineer needs to inspect state at several layers: the media element, the MediaSource, each SourceBuffer, network requests, and the encoded media itself.
+MSE failures often look opaque because the browser owns parsing, decode, buffering, and A/V synchronization. A player engineer needs to inspect state at several layers: the media element, the `MediaSource`, each `SourceBuffer`, network requests, and the encoded media itself.
 
-The fastest debugging path is to ask where the pipeline stopped. Did fetch fail? Did addSourceBuffer reject the MIME string? Did appendBuffer throw? Did updateend never fire? Did bytes append but produce no buffered time? Did buffered time exist but decode fail?
+The fastest debugging path is to ask where the pipeline stopped. Did `fetch` fail? Did `addSourceBuffer` reject the MIME string? Did `appendBuffer` throw? Did `updateend` never fire? Did bytes append but produce no buffered time? Did buffered time exist but decode fail?
 
-- HTMLMediaElement exposes playback state and final media errors.
-- MediaSource exposes whether the append pipeline is open, ended, or closed.
-- SourceBuffer exposes whether an append or remove operation is still updating.
+- `HTMLMediaElement` exposes playback state and final media errors.
+- `MediaSource` exposes whether the append pipeline is open, ended, or closed.
+- `SourceBuffer` exposes whether an append or remove operation is still updating.
 
 <Diagram visual="buffer" />
 
@@ -49,13 +49,13 @@ function logRanges(label, ranges) {
 
 ## SourceBuffer Rules
 
-A SourceBuffer is strict. You cannot append while it is updating. You cannot append bytes with a MIME type or codec the browser does not support. You cannot rely on downloaded bytes becoming playable time if the timestamps are missing, discontinuous, overlapping in the wrong way, or incompatible with previous appends.
+A `SourceBuffer` is strict. You cannot append while it is updating. You cannot append bytes with a MIME type or codec the browser does not support. You cannot rely on downloaded bytes becoming playable time if the timestamps are missing, discontinuous, overlapping in the wrong way, or incompatible with previous appends.
 
 Most MSE bugs fall into a small set: wrong codec string, missing init segment, append called while updating, media segments appended out of order, timestamp gaps, quota pressure, or a decode error in the media bytes.
 
-- Check MediaSource.isTypeSupported before addSourceBuffer.
+- Check `MediaSource.isTypeSupported` before `addSourceBuffer`.
 - Append initialization data before media fragments.
-- Wait for updateend before appending the next chunk.
+- Wait for `updateend` before appending the next chunk.
 - Inspect buffered ranges after append; do not assume bytes equal playable time.
 
 <Snippet title="Guard Append Operations" explain="This wrapper makes append failures visible. It resolves on updateend, rejects on error, abort, or a synchronous throw such as QuotaExceededError, and removes its listeners once settled so repeated appends do not pile them up.">
@@ -96,13 +96,13 @@ function appendBufferChecked(sourceBuffer, bytes, label) {
 
 ## Common Failure Modes
 
-Unsupported codec strings usually fail at addSourceBuffer or decode. CORS and HTTP errors fail before append. QuotaExceededError means the browser refused more buffered data, usually because the player appended too much without removing old ranges. Timestamp gaps can append successfully but create disjoint buffered ranges that stall at the gap.
+Unsupported codec strings usually fail at `addSourceBuffer` or decode. CORS and HTTP errors fail before append. `QuotaExceededError` means the browser refused more buffered data, usually because the player appended too much without removing old ranges. Timestamp gaps can append successfully but create disjoint buffered ranges that stall at the gap.
 
-DevTools is part of the workflow. Use the Network panel to inspect status codes, CORS headers, Content-Type, range requests, and segment sizes. Use the Media panel to inspect ready state, buffered ranges, errors, and selected tracks.
+DevTools is part of the workflow. Use the Network panel to inspect status codes, CORS headers, `Content-Type`, range requests, and segment sizes. Use the Media panel to inspect ready state, buffered ranges, errors, and selected tracks.
 
-- If addSourceBuffer throws, check MIME and codec strings first.
-- If fetch throws, check URL resolution, CORS, status code, and content type.
-- If append throws QuotaExceededError, remove old buffered media or reduce buffer target.
+- If `addSourceBuffer` throws, check MIME and codec strings first.
+- If `fetch` throws, check URL resolution, CORS, status code, and content type.
+- If append throws `QuotaExceededError`, remove old buffered media or reduce buffer target.
 - If playback stalls with buffered data, inspect gaps and A/V alignment.
 
 <Snippet title="Check Support Before Appending" explain="Make unsupported codec problems explicit instead of letting them fail later in the pipeline.">
@@ -122,14 +122,20 @@ requireSupported('audio/mp4; codecs="mp4a.40.2"');
 
 ## When Bytes Append But Playback Fails
 
-The hardest class of bugs happens after appendBuffer succeeds. That only proves the browser accepted bytes for parsing. It does not prove the decoded samples form a continuous, synchronized timeline.
+The hardest class of bugs happens after `appendBuffer` succeeds. That only proves the browser accepted bytes for parsing. It does not prove the decoded samples form a continuous, synchronized timeline.
 
-At that point, inspect media structure. Use ffprobe, mp4dump, or browser DevTools to check whether init segments match media segments, whether decode and presentation timestamps are continuous, whether the segment starts with a usable random access point, and whether audio and video describe the same timeline.
+At that point, inspect media structure. Use `ffprobe`, `mp4dump`, or browser DevTools to check whether init segments match media segments, whether decode and presentation timestamps are continuous, whether the segment starts with a usable random access point, and whether audio and video describe the same timeline.
 
 - Successful append is not the same as successful decode.
 - Continuous video without matching audio can still stall.
-- A gap in TimeRanges is usually a timestamp or missing-segment problem.
+- A gap in `TimeRanges` is usually a timestamp or missing-segment problem.
 
 For the API surface behind these failures (`mode`, `timestampOffset`, append windows, `QuotaExceededError`), see [MSE In Depth](#/mse-in-depth).
+
+<Question prompt="Every appendBuffer call completes with updateend, yet playback stalls at 12 s while buffered shows 0-12 s and 12.5-30 s. Which stage of the pipeline failed, and what would you inspect first?">
+
+The appends worked, so the failure is later: a timestamp gap or missing segment leaves two disjoint buffered ranges and the playhead stalls at the 0.5 s gap. A successful append only proves the browser accepted the bytes for parsing. Inspect the segment timestamps with `ffprobe` or `mp4dump` (decode times in `tfdt`, sample durations) to see whether a segment is missing or the timing does not line up.
+
+</Question>
 
 <Demo title="Failure Pipeline" mode="buffer">Debug MSE by locating the failed stage: network, MIME support, append sequencing, timestamp continuity, decode, or playback state.</Demo>

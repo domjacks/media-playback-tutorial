@@ -92,6 +92,12 @@ Common Media Application Format (ISO/IEC 23000-19) defines a constrained fMP4 pr
 
 ## Choosing
 
-Support both. Use DASH where you want its flexibility (SegmentTemplate, multiple Periods, rich live timing) and HLS wherever Apple devices matter. If you package CMAF, the two cost little more than one.
+Support both. Use DASH where you want its flexibility (`SegmentTemplate`, multiple Periods, rich live timing) and HLS wherever Apple devices matter. If you package CMAF, the two cost little more than one.
+
+<Question prompt="A live client's clock runs 30 s ahead of the server. Which of DASH and HLS is affected, and what symptom would you see?">
+
+DASH live is clock driven: the player computes which segments should exist from the current time, so a client clock 30 s ahead asks for segments that have not been published yet and gets 404s near the live edge. This is why DASH-IF requires a `UTCTiming` element. HLS is list driven, so the player just reloads the playlist and fetches segments it has not seen, and the wrong clock mostly does not matter.
+
+</Question>
 
 <Demo title="Manifest To Timeline" mode="timeline">A manifest maps segment numbers to timeline ranges so the player can request just enough future media, whichever protocol describes it.</Demo>

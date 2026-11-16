@@ -29,4 +29,10 @@ The practical lessons build one browser ESM project step by step: first fixed MS
 - Practical lessons keep the implementation small enough to inspect.
 - Each code sample is plain HTML and JavaScript modules that can run directly in a browser dev server.
 
+<Question prompt="The finished player is built from three pieces: the video element, Media Source Extensions and a minimal DASH parser. Which does each job (presenting, feeding bytes, discovering segments), and in what order do the practical lessons add capabilities?">
+
+The video element presents the media, Media Source Extensions feeds it encoded bytes, and the DASH parser reads the manifest to discover which segments to request. The practical lessons start with fixed MSE appends, then add DASH VOD parsing, then live refresh, subtitles and an optional ClearKey DRM flow. The theory lessons come first so that terms like frame, codec, container, segment, timeline and buffer are familiar before they appear in code.
+
+</Question>
+
 <Demo title="Learning Path" mode="timeline">The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming.</Demo>

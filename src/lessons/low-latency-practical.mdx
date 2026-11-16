@@ -16,7 +16,7 @@ The test stream is DASH-IF livesim2 with two extra URL elements, `chunkdur_0.5` 
 `https://livesim2.dashif.org/livesim2/chunkdur_0.5/ato_1.5/testpic_2s/Manifest.mpd`
 
 - `chunkdur_0.5` cuts each 2 s segment into four 0.5 s CMAF chunks, each one `moof`+`mdat`.
-- `ato_1.5` sets `availabilityTimeOffset="1.5"` and `availabilityTimeComplete="false"` on the SegmentTemplate: segment N may be requested 1.5 s before it is complete, that is 0.5 s after it starts.
+- `ato_1.5` sets `availabilityTimeOffset="1.5"` and `availabilityTimeComplete="false"` on the `SegmentTemplate`: segment N may be requested 1.5 s before it is complete, that is 0.5 s after it starts.
 - The MPD also carries a `ServiceDescription` with a latency target of 3500 ms and a playback rate range of 0.96 to 1.04. This player uses both.
 
 You can see the delivery with Node 18 or later, no player required. A request made 0.55 s into a segment returns `transfer-encoding: chunked`, and the body arrives in four steps about 0.5 s apart rather than all at once. Requested 0.3 s into a segment, the same URL returns `425 Too Early`.
@@ -45,9 +45,9 @@ The splitter reads the 8-byte box header (size and four-character type, with a 1
 
 ## The Streaming Loop
 
-The loop mirrors the live controller but is driven by chunks rather than whole segments. It starts at the segment holding the time `live - target latency`, which is already complete, then waits for each following segment's first-chunk availability time and streams audio and video in parallel into their own SourceBuffers.
+The loop mirrors the live controller but is driven by chunks rather than whole segments. It starts at the segment holding the time `live - target latency`, which is already complete, then waits for each following segment's first-chunk availability time and streams audio and video in parallel into their own `SourceBuffers`.
 
-Each track has its own append queue, because audio and video chunks complete at different moments and `appendBuffer` calls on one SourceBuffer must not overlap.
+Each track has its own append queue, because audio and video chunks complete at different moments and `appendBuffer` calls on one `SourceBuffer` must not overlap.
 
 <Snippet title="Chunk-By-Chunk Live Loop" explain="Wait until segmentAvailableAt, stream every track for the segment number, and append each unit as it arrives. A null result means the packager disagrees with our clock by a few milliseconds, so the same segment is retried. After the first segment the player seeks to the target playback time and starts maintenance. If one track returns null after the other has already appended, the retry re-appends the same time range, which is harmless." file="low-latency-practical/player.js" region="ll-loop" />
 
@@ -61,7 +61,7 @@ Latency is `livePresentationTime - video.currentTime`. The player samples it fou
 
 <Checkpoint slug="low-latency-practical" run files={["index.html","dash-live.js","live.js","chunked.js","player.js"]} note="Plays the public DASH-IF livesim2 low-latency stream, so it needs network access to livesim2.dashif.org and time.akamai.com (both allow CORS).">
 
-- Network shows V300/\<n>.m4s and A48/\<n>.m4s requests starting about 0.5 s after each 2 s boundary, not 2 s after. Each response has `transfer-encoding: chunked` (HTTP/1.1) or a streaming body (HTTP/2), and its timing bar shows a long content download of about 1.5 s.
+- Network shows `V300/<n>.m4s` and `A48/<n>.m4s` requests starting about 0.5 s after each 2 s boundary, not 2 s after. Each response has `transfer-encoding: chunked` (HTTP/1.1) or a streaming body (HTTP/2), and its timing bar shows a long content download of about 1.5 s.
 - The page prints the chunk arrival offsets for the latest segment, in the form `video segment N: +18 ms (12547 B) +508 ms (6320 B) +1008 ms (12054 B) +1508 ms (5921 B)`: four chunks roughly 0.5 s apart, the first immediate because it was already produced.
 - The status line settles near `latency 3.5 s (target 3.5 s)`, with `rate` between 0.96 and 1.04 and buffer around 3 s.
 - Compared with the live lesson, whose latency settles around 6 to 8 s, the latency is roughly half.
@@ -76,7 +76,7 @@ The arrival log shows why naive throughput is wrong here: a segment of about 38 
 
 Change the stream loop to estimate throughput per chunk instead. For each unit, divide its bytes by the time between its arrival and the previous unit's arrival, but only when the previous unit arrived less than 100 ms earlier (a burst). Log the estimate and compare it with the `bandwidth` declared in the MPD.
 
-<Hint>Keep the arrival time of the previous unit inside streamSegment and pass the estimate to onUnit. Only the first chunk or two of a segment arrive as a burst, because they already existed when you asked. Later chunks are paced by the packager at one per 0.5 s, so they yield no usable sample. That is the core difficulty of throughput estimation for chunked delivery, and why chunk-aware ABR algorithms only trust the burst portions.</Hint>
+<Hint>Keep the arrival time of the previous unit inside `streamSegment` and pass the estimate to `onUnit`. Only the first chunk or two of a segment arrive as a burst, because they already existed when you asked. Later chunks are paced by the packager at one per 0.5 s, so they yield no usable sample. That is the core difficulty of throughput estimation for chunked delivery, and why chunk-aware ABR algorithms only trust the burst portions.</Hint>
 
 </Exercise>
 

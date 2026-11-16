@@ -169,4 +169,10 @@ if (window.MediaSource || window.ManagedMediaSource) {
 - `#EXT-X-ENDLIST` = `type="static"` or an MPD that stops being updated.
 - `#EXT-X-KEY` = `ContentProtection`.
 
+<Question prompt="A live media playlist with 6-second segments lists media sequence numbers 100 to 109 and has no #EXT-X-ENDLIST. Which is the newest segment a client should begin playback with, and how long should it wait to retry if a reload returns an unchanged playlist?">
+
+Segment 107 starts exactly 18 s (three target durations) before the end of the playlist, so it is the latest allowed starting point; 108 and 109 start less than three target durations from the end. The player will therefore sit at least 18 seconds behind live. After an unchanged reload it should wait half a target duration, 3 s, before trying again.
+
+</Question>
+
 <Demo title="Playlists Are Manifests" mode="timeline">HLS expresses the same ideas as DASH, but as a tree of text playlists whose segments are listed explicitly and ordered by sequence number.</Demo>

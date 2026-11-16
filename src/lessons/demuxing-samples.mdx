@@ -11,12 +11,12 @@ reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API"
 
 MSE accepts a complete initialization segment and media fragments, then the browser demuxes and decodes them internally. WebCodecs gives JavaScript access to the decoder boundary, so a player must do the demuxing work itself.
 
-An fMP4 init segment describes tracks, timescales, and codec setup. Each media fragment pairs moof metadata with mdat bytes. The sample run metadata tells us where each encoded access unit starts, how many bytes it occupies, and where it belongs on the track timeline.
+An fMP4 init segment describes tracks, timescales, and codec setup. Each media fragment pairs `moof` metadata with `mdat` bytes. The sample run metadata tells us where each encoded access unit starts, how many bytes it occupies, and where it belongs on the track timeline.
 
-- tfhd identifies the track and can provide default sample fields.
-- tfdt gives the first decode timestamp in a fragment.
-- trun lists sample durations, sizes, flags, and optional composition offsets.
-- mdat stores the encoded sample bytes; sample flags identify random access points.
+- `tfhd` identifies the track and can provide default sample fields.
+- `tfdt` gives the first decode timestamp in a fragment.
+- `trun` lists sample durations, sizes, flags, and optional composition offsets.
+- `mdat` stores the encoded sample bytes; sample flags identify random access points.
 
 <Diagram visual="fmp4" />
 
@@ -47,6 +47,13 @@ for (const sample of samples) {
 
 ## A Deliberately Small Parser
 
-The hands-on parser supports the H.264 and AAC fragmented MP4 tracks used by this tutorial's single-period DASH VOD example. It reads the sample descriptions, tfhd, tfdt, trun, and mdat boxes needed for that path.
+The hands-on parser supports the H.264 and AAC fragmented MP4 tracks used by this tutorial's single-period DASH VOD example. It reads the sample descriptions, `tfhd`, `tfdt`, `trun`, and `mdat` boxes needed for that path.
 
 MP4 has many valid layouts and optional fields. This parser reports unsupported structures instead of claiming to handle flat MP4 sample tables, encrypted samples, every codec, or every fMP4 variation.
+
+<Question prompt="A video track has timescale 90000. Its fragment has tfdt = 270000, and the first trun sample has duration 3600 and composition offset 7200. At what time (in seconds) is that sample decoded and presented, and what frame rate does the duration imply?">
+
+Decode time is 270000 / 90000 = 3.0 s. Presentation time adds the composition offset: (270000 + 7200) / 90000 = 3.08 s, so the frame is shown 80 ms after it is decoded, which is the kind of reordering delay B-frames cause. The duration 3600 / 90000 = 0.04 s corresponds to 25 frames per second.
+
+</Question>
+

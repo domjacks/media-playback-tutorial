@@ -14,10 +14,10 @@ A live manifest changes over time. Segments expire from the back of the availabi
 The player should not chase the newest byte exactly. It should target a small latency behind live edge so downloads, CDN propagation, MSE append, and decode have room to recover.
 
 - Parse live DASH timing fields instead of assuming first and last segment numbers exist.
-- Start behind the live edge using suggestedPresentationDelay or a segment-count fallback.
+- Start behind the live edge using `suggestedPresentationDelay` or a segment-count fallback.
 - Start at the live edge with a segment cursor instead of downloading the whole time-shift window.
 - Handle near-edge 404s as retryable and remove old buffered ranges after playback moves past them.
-- After the first append, seek the video to the start of the buffered range and set mediaSource.duration to Infinity so the player treats the stream as live.
+- After the first append, seek the video to the start of the buffered range and set `mediaSource.duration` to `Infinity` so the player treats the stream as live.
 
 <Diagram visual="buffer" />
 
@@ -45,20 +45,20 @@ The player should not chase the newest byte exactly. It should target a small la
 
 <Checkpoint slug="live" run files={["index.html","live.js","dash-live.js","player.js"]} note="Plays the public DASH-IF livesim2 stream, so it needs network access to livesim2.dashif.org and time.akamai.com (both allow CORS).">
 
-- Network shows Manifest.mpd re-requested about every 2 s, A48/init.mp4 and V300/init.mp4 once each, then A48/\<n>.m4s and V300/\<n>.m4s pairs with n increasing by 1 every 2 s (numbers around 897 million, because availabilityStartTime is 1970).
-- The status line shows segment \<n> increasing every 2 s and latency settling around 6 to 8 s (target 6.0 s, three 2 s segments), with rate 1 and a small clock offset.
-- video.buffered.start(0) in the console is about 1.79 billion (seconds since 1970), and after a minute it trails currentTime by about 30 s as old media is pruned.
-- The video starts muted and plays continuously; the seek bar shows a live window rather than a fixed duration (mediaSource.duration is Infinity).
+- Network shows `Manifest.mpd` re-requested about every 2 s, `A48/init.mp4` and `V300/init.mp4` once each, then `A48/<n>.m4s` and `V300/<n>.m4s` pairs with `n` increasing by 1 every 2 s (numbers around 897 million, because `availabilityStartTime` is 1970).
+- The status line shows `segment <n>` increasing every 2 s and latency settling around 6 to 8 s (target 6.0 s, three 2 s segments), with rate 1 and a small clock offset.
+- `video.buffered.start(0)` in the console is about 1.79 billion (seconds since 1970), and after a minute it trails `currentTime` by about 30 s as old media is pruned.
+- The video starts muted and plays continuously; the seek bar shows a live window rather than a fixed duration (`mediaSource.duration` is `Infinity`).
 
 </Checkpoint>
 
 <Exercise title="Chase The Edge">
 
-Reduce the target latency in getLiveSegmentRange from three segments to one, and add 1000 ms to the getNow passed to createLiveController, as if the local clock ran fast.
+Reduce the target latency in `getLiveSegmentRange` from three segments to one, and add 1000 ms to the `getNow` passed to `createLiveController`, as if the local clock ran fast.
 
 Watch the Network panel: segments are now requested slightly before they exist, so you should see 404s followed by a 200 about 750 ms later for the same segment number. Explain why the controller retries instead of skipping.
 
-<Hint>Change timing.segmentDuration \* 3 to timing.segmentDuration \* 1 in live.js. Latency of 2 segments is safe on this stream; one segment sits exactly on the availability boundary, which is why clock error shows up as 404s.</Hint>
+<Hint>Change `timing.segmentDuration * 3` to `timing.segmentDuration * 1` in `live.js`. Latency of 2 segments is safe on this stream; one segment sits exactly on the availability boundary, which is why clock error shows up as 404s.</Hint>
 
 </Exercise>
 

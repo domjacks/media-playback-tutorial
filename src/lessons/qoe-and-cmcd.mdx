@@ -128,4 +128,10 @@ CMCD is deliberately limited: no IP address, cookie, location or user identity. 
 - Use HTTPS. Data sent to a third party in event mode is subject to the same consent and data-protection rules as any other analytics.
 - Let integrators configure which keys are sent and where, and let servers drop what they do not need.
 
+<Question prompt="A viewer waits 2 s for startup, plays 90 s, stalls twice for a combined 3 s, and also waits 1 s after a seek. What is the rebuffer ratio the lesson defines, and why are the other waits excluded?">
+
+The rebuffer ratio is stalled time divided by stalled plus playing time: 3 / (3 + 90) is about 3.2%. The 2 s startup and the 1 s seek wait are excluded, because startup is tracked separately as startup time and counting every seek would make normal viewer actions look like failures.
+
+</Question>
+
 <Demo title="Measure What The Viewer Felt" mode="timeline">Startup, stalls and quality changes are properties of the playback timeline, not of any single request.</Demo>

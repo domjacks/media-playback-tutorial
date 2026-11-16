@@ -13,7 +13,7 @@ This page brings the main pieces together inside the tutorial app. The player fe
 
 The subtitle layer uses the same timing idea as the IMSC lab. It watches the media playhead and renders the active cue into an overlay above the video.
 
-- The audio and video bytes come from DASH and MSE, not from assigning a single MP4 URL to video.src.
+- The audio and video bytes come from DASH and MSE, not from assigning a single MP4 URL to `video.src`.
 - Runtime ABR uses smoothed measured throughput and buffer depth to choose each future video segment.
 - The subtitle renderer is custom HTML layered over the video.
 - The player reports manifest, codec, CORS, and fetch errors in the page so failures are inspectable.

@@ -31,9 +31,9 @@ A player chooses a target latency so it can stay close to live without constantl
 
 ## Wall Clock Versus Media Time
 
-Live DASH adds wall-clock time to the normal media timeline. Wall-clock time is real time, usually UTC. Media time is the presentation timeline used by segments, timestamps, SourceBuffers, and video.currentTime.
+Live DASH adds wall-clock time to the normal media timeline. Wall-clock time is real time, usually UTC. Media time is the presentation timeline used by segments, timestamps, `SourceBuffers`, and `video.currentTime`.
 
-The bridge between those worlds is availabilityStartTime. It anchors the start of the live presentation to wall-clock time. A player estimates the live presentation time by subtracting availabilityStartTime from the current wall clock, then applies latency and availability rules before choosing segments.
+The bridge between those worlds is `availabilityStartTime`. It anchors the start of the live presentation to wall-clock time. A player estimates the live presentation time by subtracting `availabilityStartTime` from the current wall clock, then applies latency and availability rules before choosing segments.
 
 - Wall-clock time answers: what time is it now?
 - Media time answers: which presentation time should this segment cover?
@@ -59,35 +59,35 @@ console.log("target playback time", targetPlaybackTime);
 
 ## Manifest Refresh
 
-A live manifest is not a static table. The player must refresh it to discover newly available segments, detect changed timing metadata, and learn when older segments have expired. DASH uses fields such as type="dynamic", availabilityStartTime, publishTime, timeShiftBufferDepth, minimumUpdatePeriod, and suggestedPresentationDelay to describe live behavior.
+A live manifest is not a static table. The player must refresh it to discover newly available segments, detect changed timing metadata, and learn when older segments have expired. DASH uses fields such as `type="dynamic"`, `availabilityStartTime`, `publishTime`, `timeShiftBufferDepth`, `minimumUpdatePeriod`, and `suggestedPresentationDelay` to describe live behavior.
 
-minimumUpdatePeriod is a refresh hint, not a guarantee that every refresh contains new segments. publishTime can help identify whether a refreshed MPD is newer than the one already loaded.
+`minimumUpdatePeriod` is a refresh hint, not a guarantee that every refresh contains new segments. `publishTime` can help identify whether a refreshed MPD is newer than the one already loaded.
 
-- minimumUpdatePeriod tells the player how often the MPD may need refreshing.
-- publishTime identifies when this version of the MPD was published.
-- timeShiftBufferDepth describes how much recent history is available for seeking.
-- suggestedPresentationDelay gives the service's recommended distance behind the live edge.
+- `minimumUpdatePeriod` tells the player how often the MPD may need refreshing.
+- `publishTime` identifies when this version of the MPD was published.
+- `timeShiftBufferDepth` describes how much recent history is available for seeking.
+- `suggestedPresentationDelay` gives the service's recommended distance behind the live edge.
 
 ## Segment Availability
 
-For simple SegmentTemplate streams with fixed duration, the player can estimate segment numbers from media time. Divide presentation time by segment duration and add startNumber. The first available segment is bounded by the time-shift buffer. The newest safe segment is behind the live edge by the target latency or by a service-specific availability delay.
+For simple `SegmentTemplate` streams with fixed duration, the player can estimate segment numbers from media time. Divide presentation time by segment duration and add `startNumber`. The first available segment is bounded by the time-shift buffer. The newest safe segment is behind the live edge by the target latency or by a service-specific availability delay.
 
-The accurate rule is that a segment becomes available at availabilityStartTime + Period start + the segment's end time, minus availabilityTimeOffset if the service sets one (it makes segments available earlier, for chunked low-latency delivery). With a presentationTimeOffset, the end time is measured as (end ticks minus presentationTimeOffset) divided by the timescale. The end time is what counts because a segment cannot be published until its last sample has been produced. This is why target latency must be at least one segment duration: the segment that covers the target playback time can end up to a whole segment later than that time.
+The accurate rule is that a segment becomes available at `availabilityStartTime` + Period start + the segment's end time, minus `availabilityTimeOffset` if the service sets one (it makes segments available earlier, for chunked low-latency delivery). With a `presentationTimeOffset`, the end time is measured as (end ticks minus `presentationTimeOffset`) divided by the `timescale`. The end time is what counts because a segment cannot be published until its last sample has been produced. This is why target latency must be at least one segment duration: the segment that covers the target playback time can end up to a whole segment later than that time.
 
-Every one of these formulas needs the current time, which makes the player's clock part of the protocol. DASH-IF requires dynamic MPDs to carry a UTCTiming element naming a time source (`urn:mpeg:dash:utc:http-xsdate:2014`, `http-iso`, `http-head`, or `direct`), and requires clients to synchronise to it rather than trust the device. The player measures the server time, assumes it was read halfway through the round trip, and uses the difference as an offset. The DASH Live Timing lesson shows the maths.
+Every one of these formulas needs the current time, which makes the player's clock part of the protocol. DASH-IF requires dynamic MPDs to carry a `UTCTiming` element naming a time source (`urn:mpeg:dash:utc:http-xsdate:2014`, `http-iso`, `http-head`, or `direct`), and requires clients to synchronise to it rather than trust the device. The player measures the server time, assumes it was read halfway through the round trip, and uses the difference as an offset. The DASH Live Timing lesson shows the maths.
 
 - A client clock ahead of the service asks for segments that are not published yet, and gets 404s.
 - A client clock behind the service plays further from live than intended, or falls off the back of the time-shift window.
 - HLS reads availability from the playlist, so it is immune to this; its wall-clock link is `#EXT-X-PROGRAM-DATE-TIME`.
 
-This tutorial keeps the formula deliberately simple because live DASH can become more complex. SegmentTimeline, multiple Periods, clock synchronization, and low-latency chunked transfer all refine the same basic idea: determine which media times are currently requestable.
+This tutorial keeps the formula deliberately simple because live DASH can become more complex. `SegmentTimeline`, multiple Periods, clock synchronization, and low-latency chunked transfer all refine the same basic idea: determine which media times are currently requestable.
 
-- segmentDurationSeconds = duration / timescale.
-- availableAt = availabilityStartTime + Period@start + segment end time - availabilityTimeOffset.
-- targetLatency >= segmentDurationSeconds, or the newest chosen segment may not exist yet.
-- newest = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).
-- first = newest - floor(timeShiftBufferDepth / segmentDurationSeconds).
-- SegmentTimeline streams should use explicit S elements instead of assuming fixed duration.
+- `segmentDurationSeconds = duration / timescale`.
+- `availableAt = availabilityStartTime + Period@start + segment end time - availabilityTimeOffset`.
+- `targetLatency >= segmentDurationSeconds`, or the newest chosen segment may not exist yet.
+- `newest = startNumber + floor(targetPlaybackTime / segmentDurationSeconds)`.
+- `first = newest - floor(timeShiftBufferDepth / segmentDurationSeconds)`.
+- `SegmentTimeline` streams should use explicit S elements instead of assuming fixed duration.
 
 ## Buffer Cleanup
 
@@ -95,18 +95,24 @@ A live stream can run for hours, so a player cannot keep every appended segment 
 
 Cleanup is a balancing act. Removing too little wastes memory. Removing too aggressively can break short backward seeks or cause playback to stall if timestamps and ranges are not handled carefully.
 
-- Use SourceBuffer.remove(start, end) for old ranges.
-- Do not remove media close to currentTime.
+- Use `SourceBuffer.remove(start, end)` for old ranges.
+- Do not remove media close to `currentTime`.
 - Keep audio and video cleanup aligned so one track does not disappear before the other.
 
 ## 404s, Drift, And Catch-Up
 
 Live players must tolerate uncertainty. A segment near the live edge may return 404 because the MPD advertised it before the object reached the CDN edge, or because the player clock is ahead of the server clock. A robust player treats near-edge 404s as retryable rather than fatal.
 
-Players also drift. If playback falls too far behind the target latency, the player can seek closer to live or temporarily raise playbackRate slightly above 1.0. If playback gets too close to the edge, it should slow requests or increase target latency before it starts stalling.
+Players also drift. If playback falls too far behind the target latency, the player can seek closer to live or temporarily raise `playbackRate` slightly above 1.0. If playback gets too close to the edge, it should slow requests or increase target latency before it starts stalling.
 
 - Retry near-edge 404s with backoff.
-- Use playbackRate catch-up conservatively, such as 1.03x to 1.08x.
+- Use `playbackRate` catch-up conservatively, such as 1.03x to 1.08x.
 - Avoid seeking over buffered media unless latency is far outside the target.
+
+<Question prompt="A fixed-duration live stream has 2 s segments, startNumber 1 and timeShiftBufferDepth 30 s. The target playback time is 100 s into the presentation. Which segment numbers can be requested, and what is the smallest sensible target latency?">
+
+The newest safe segment is `1 + floor(100 / 2)` = 51. The first available is `51 - floor(30 / 2)` = 36, so segments 36 to 51 are requestable. Target latency must be at least one segment duration, here 2 s, because segment 51 covers 100 s to 102 s and cannot be published until its last sample is produced at 102 s.
+
+</Question>
 
 <Demo title="Sliding Live Window" mode="timeline">Live playback follows a moving segment window, targeting a stable delay behind the newest available media.</Demo>

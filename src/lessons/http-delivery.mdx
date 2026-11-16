@@ -106,7 +106,7 @@ For cross-origin responses the browser zeroes most of these values unless the re
 
 ## HTTP/1.1, HTTP/2 And HTTP/3
 
-- HTTP/1.1 carries one request per connection at a time, so browsers open several connections per host (typically six). A player fetching audio, video and subtitles in parallel competes for them. The BBC test host answers over HTTP/1.1 when fetched with curl.
+- HTTP/1.1 carries one request per connection at a time, so browsers open several connections per host (typically six). A player fetching audio, video and subtitles in parallel competes for them. The BBC test host answers over HTTP/1.1 when fetched with `curl`.
 - HTTP/2 multiplexes many requests on one TCP connection, with header compression (HPACK). It makes parallel segment, audio and subtitle fetches cheap. Its weakness is TCP head-of-line blocking: one lost packet stalls every stream on the connection. livesim2 is served over HTTP/2.
 - HTTP/3 runs over QUIC (UDP). Streams are independent, so a lost packet only delays the stream it belongs to, connection setup is faster (one round trip, or zero when resuming), and connections survive a network change such as Wi-Fi to mobile. For segment fetching the gains are largest on lossy mobile networks and at startup; on good fixed networks the difference is small.
 
@@ -134,5 +134,11 @@ Switching strategies, from simplest to most capable:
 - Client-driven selection from measured throughput and error rate per CDN. CMCD event reports can carry the current hostname (`h`), and CMSD (CTA-5006) lets a CDN tell the player it is under duress.
 
 Switching CDNs mid-stream means cold caches, new TLS connections and different token schemes, so do it deliberately.
+
+<Question prompt="A live manifest is served with Cache-Control max-age=1 and a segment that does not exist yet is requested 100 ms early, returning a 404 that the CDN caches for 60 s. What does the player experience, and what header policy prevents it?">
+
+Every request for that segment URL gets the cached 404 for up to 60 s, even though the object exists 100 ms later, so the player fails far longer than the timing error justifies. Error responses should get a very short or zero TTL (for example `Cache-Control: no-store` or a `max-age` of a second or less on 404 and 425), while complete live segments can keep a long lifetime like VOD segments.
+
+</Question>
 
 <Demo title="Delivery Path" mode="packets">Every segment is an HTTP response whose headers decide whether it is cached, readable and measurable by the player.</Demo>

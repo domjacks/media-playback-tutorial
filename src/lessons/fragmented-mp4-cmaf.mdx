@@ -43,12 +43,12 @@ Media segment
 
 MP4 is made of boxes. Each box has a type and a payload. You do not need to hand-parse every box for this tutorial, but knowing the common names makes MSE errors easier to reason about.
 
-An init segment normally includes ftyp and moov. A media segment normally includes moof and mdat. The moof box describes the fragment timing and sample layout. The mdat box carries the encoded sample bytes.
+An init segment normally includes `ftyp` and `moov`. A media segment normally includes `moof` and `mdat`. The `moof` box describes the fragment timing and sample layout. The `mdat` box carries the encoded sample bytes.
 
-- ftyp identifies the MP4 brand and compatibility.
-- moov contains movie and track metadata, including codec setup.
-- moof contains fragment metadata such as decode time and sample runs.
-- mdat contains the encoded audio or video samples.
+- `ftyp` identifies the MP4 brand and compatibility.
+- `moov` contains movie and track metadata, including codec setup.
+- `moof` contains fragment metadata such as decode time and sample runs.
+- `mdat` contains the encoded audio or video samples.
 
 ## Timestamps And Timeline Mapping
 
@@ -64,7 +64,7 @@ Every timestamp in MP4 is an integer count of ticks, and the track's timescale s
 - Audio normally uses its sample rate, so 48000 for 48 kHz audio and one AAC frame of 1024 samples lasts 1024 ticks.
 - 1000 is millisecond precision, which is too coarse for exact frame or audio-frame durations and causes rounding drift.
 
-Time in seconds is ticks divided by timescale. In DASH, SegmentTemplate carries a timescale attribute, and SegmentTimeline times (`t` and `d`) are counted in it, so it has to match the track timescale in the init segment.
+Time in seconds is ticks divided by timescale. In DASH, `SegmentTemplate` carries a `timescale` attribute, and `SegmentTimeline` times (`t` and `d`) are counted in it, so it has to match the track timescale in the init segment.
 
 ## Decode Time And Presentation Time
 
@@ -73,28 +73,28 @@ Decode time (DTS) is the order and time the decoder consumes samples. Presentati
 MP4 stores DTS implicitly, as a running sum of sample durations from `stts` (or from per-sample durations in `trun`). The gap between PTS and DTS is stored explicitly as a composition time offset.
 
 - In a non-fragmented file the `ctts` box in `moov` lists composition offsets per sample.
-- In a fragment, the `trun` box carries sample_composition_time_offset per sample when the flag bit 0x800 is set.
-- PTS = DTS + composition offset.
+- In a fragment, the `trun` box carries `sample_composition_time_offset` per sample when the flag bit `0x800` is set.
+- `PTS = DTS + composition offset`.
 - Version 0 offsets are unsigned, so the first frame can never have a PTS before its DTS. Version 1 offsets are signed, which lets a muxer start with an offset of 0 instead of shifting everything later.
 
-So with version 0, an encoder that uses B-frames starts DTS at 0 and gives the first frame a positive offset. Left uncorrected, the first frame is presented at (for example) 0.08 s rather than 0, which is what an edit list or a negative-offset trun then fixes.
+So with version 0, an encoder that uses B-frames starts DTS at 0 and gives the first frame a positive offset. Left uncorrected, the first frame is presented at (for example) 0.08 s rather than 0, which is what an edit list or a negative-offset `trun` then fixes.
 
 ## tfdt: Where A Fragment Starts
 
-In a fragment, the `tfdt` box in each `traf` holds baseMediaDecodeTime: the decode time of the first sample in this fragment, in the track timescale. Each fragment of each track has its own value, and it is what makes fragments independent of each other.
+In a fragment, the `tfdt` box in each `traf` holds `baseMediaDecodeTime`: the decode time of the first sample in this fragment, in the track timescale. Each fragment of each track has its own value, and it is what makes fragments independent of each other.
 
-- A video track with a 12800 timescale and two-second fragments has tfdt values 0, 25600, 51200 and so on.
+- A video track with a 12800 timescale and two-second fragments has `tfdt` values 0, 25600, 51200 and so on.
 - Version 1 of the box uses a 64-bit value, which long-running live streams need.
-- A fragment's baseMediaDecodeTime should equal the previous fragment's start plus its total duration. A mismatch is a gap or an overlap.
+- A fragment's `baseMediaDecodeTime` should equal the previous fragment's start plus its total duration. A mismatch is a gap or an overlap.
 
 ## Edit Lists
 
-An edit list, `elst` inside `edts` inside `trak`, maps a track's media timeline onto the presentation timeline. Each entry has a segment_duration (in movie timescale), a media_time (in media timescale) and a rate. A media_time of -1 inserts an empty edit, a delay before the track starts.
+An edit list, `elst` inside `edts` inside `trak`, maps a track's media timeline onto the presentation timeline. Each entry has a `segment_duration` (in movie timescale), a `media_time` (in media timescale) and a rate. A `media_time` of -1 inserts an empty edit, a delay before the track starts.
 
 Encoders write an edit list to correct for two kinds of start-up offset without altering any sample data.
 
-- Video with B-frames: the first frame has a composition offset, so media_time is set to that offset (for two 512-tick frames, media_time=1024) so presentation starts at zero.
-- AAC priming: see below. media_time skips the priming samples.
+- Video with B-frames: the first frame has a composition offset, so `media_time` is set to that offset (for two 512-tick frames, `media_time=1024`) so presentation starts at zero.
+- AAC priming: see below. `media_time` skips the priming samples.
 
 Edit list handling varies between players and MSE implementations, so many streaming packagers avoid depending on them. They write timestamps that already start where intended, or move the offset into the manifest.
 
@@ -104,14 +104,14 @@ AAC encoders output extra leading samples because the filterbank needs history b
 
 There are two ways to carry this.
 
-- An edit list on the audio track whose media_time skips the priming samples, so the first audible sample plays at presentation time 0.
-- A first audio packet with a negative PTS, as FFmpeg shows internally, marked as discardable with skip_samples.
+- An edit list on the audio track whose `media_time` skips the priming samples, so the first audible sample plays at presentation time 0.
+- A first audio packet with a negative PTS, as FFmpeg shows internally, marked as discardable with `skip_samples`.
 
 If you strip the edit list when repackaging, audio shifts later by the priming duration, which is 21.3 ms for 1024 samples at 48 kHz. Dropping the edit list from one track but not the other leaves a constant audio-video offset of that size.
 
 ## Presentation Time Offset In DASH
 
-DASH adds one more layer. A Period starts at a time on the presentation timeline, and the segments inside may have media timestamps that begin elsewhere, for example because the stream was cut from a longer source or the encoder began at 10 hours. `presentationTimeOffset` (PTO) in the SegmentBase or SegmentTemplate says which media time corresponds to the start of the Period.
+DASH adds one more layer. A Period starts at a time on the presentation timeline, and the segments inside may have media timestamps that begin elsewhere, for example because the stream was cut from a longer source or the encoder began at 10 hours. `presentationTimeOffset` (PTO) in the `SegmentBase` or `SegmentTemplate` says which media time corresponds to the start of the Period.
 
 <Snippet title="Mapping Media Time To Presentation Time" explain="Illustrative formula, in the timescale of the Representation. MSE players set the SourceBuffer timestampOffset so that appended media lands at the right place, which is the same calculation in seconds.">
 
@@ -129,9 +129,9 @@ sourceBuffer.timestampOffset = periodStart - presentationTimeOffset / timescale;
 
 </Snippet>
 
-- periodStart is Period@start in seconds.
+- `periodStart` is `Period@start` in seconds.
 - Edit-list effects are separate: they apply inside the file, before the manifest's offset.
-- Multi-period live streams change the offset at every Period boundary, which is why the player sets timestampOffset again when it appends the first segment of a new Period.
+- Multi-period live streams change the offset at every Period boundary, which is why the player sets `timestampOffset` again when it appends the first segment of a new Period.
 
 ## Where CMAF Fits
 
@@ -154,5 +154,11 @@ function logBuffered(video) {
 ```
 
 </Snippet>
+
+<Question prompt="A video track uses timescale 12800 at 25 fps with two-second fragments. What is each frame's duration in ticks, and what baseMediaDecodeTime (the tfdt value) should the fourth fragment carry?">
+
+Each frame lasts 12800 / 25 = 512 ticks. A two-second fragment is 25600 ticks, so the fragments start at 0, 25600, 51200 and 76800. The fourth fragment therefore has `tfdt` = 76800 (6 s). If it carried anything else, the browser would see a gap or an overlap in the buffered ranges.
+
+</Question>
 
 <Demo title="Appendable Fragments" mode="timeline">fMP4 turns encoded samples into timed fragments that MSE can append and expose as buffered media ranges.</Demo>

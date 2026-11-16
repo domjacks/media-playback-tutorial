@@ -37,13 +37,13 @@ Each track runs its own loop. Every pass it reads `currentTime` and that track's
 
 ## Eviction And Quota Errors
 
-Eviction is a single `remove(0, keepFrom)` before each append. Because it starts at zero it removes the back buffer and any stale island far behind the playhead, such as the pre-seek position after a big jump forward. `runOperation` wraps both `appendBuffer` and `remove`: it waits for the SourceBuffer to be idle, starts the operation, and resolves on `updateend`. A synchronous throw such as `QuotaExceededError` rejects the same promise.
+Eviction is a single `remove(0, keepFrom)` before each append. Because it starts at zero it removes the back buffer and any stale island far behind the playhead, such as the pre-seek position after a big jump forward. `runOperation` wraps both `appendBuffer` and `remove`: it waits for the `SourceBuffer` to be idle, starts the operation, and resolves on `updateend`. A synchronous throw such as `QuotaExceededError` rejects the same promise.
 
 <Snippet title="Evict Before Append, Retry On Quota" explain="appendWithQuota first removes everything older than currentTime minus 30 s. If appendBuffer still throws QuotaExceededError it removes down to 5 s behind the playhead and retries once; a second failure propagates and is shown in the log. runOperation serialises operations on a SourceBuffer, which is required because append and remove both set updating." file="seeking-and-eviction/player.js" region="evict" />
 
 ## Seeking
 
-The `seeking` handler is the heart of the lesson. It bumps a generation counter, aborts the controller (cancelling fetches and waking sleeping loops), and calls `sourceBuffer.abort()` on any SourceBuffer that is mid-append. It clears `initId` so the new loops re-append the init segment, waits for the old loops to finish, and starts fresh loops. A second seek during the wait wins because of the generation check, so a scrub produces one restart, not a queue.
+The `seeking` handler is the heart of the lesson. It bumps a generation counter, aborts the controller (cancelling fetches and waking sleeping loops), and calls `sourceBuffer.abort()` on any `SourceBuffer` that is mid-append. It clears `initId` so the new loops re-append the init segment, waits for the old loops to finish, and starts fresh loops. A second seek during the wait wins because of the generation check, so a scrub produces one restart, not a queue.
 
 <Snippet title="Abort, Reset And Restart On Seek" explain="abort() is only called when the MediaSource is open and the SourceBuffer is updating. If the MediaSource had ended, the browser has already reopened it for the seek, and the next append would reopen it anyway. The done flags are reset in startLoops, so reaching the end again calls endOfStream() again." file="seeking-and-eviction/player.js" region="seek-restart" />
 
@@ -62,7 +62,7 @@ The readout is plain text rewritten every 250 ms. It is deliberately simple, bec
 <Snippet title="Live Readout" explain="Buffered ranges are printed per SourceBuffer, not through video.buffered, so you can see video and audio drift. 'last action' is the most recent fetch, eviction, seek, gap jump or quota event." file="seeking-and-eviction/player.js" region="readout" />
 
 - The loops re-read state every pass, so none of the handlers has to patch state in place.
-- Aborting is a cooperative protocol: abort the signal, call `abort()` on the SourceBuffer, then wait for the old loops to exit before starting the new ones.
+- Aborting is a cooperative protocol: abort the signal, call `abort()` on the `SourceBuffer`, then wait for the old loops to exit before starting the new ones.
 - A seek into already-buffered media still restarts the loops, which cancels an in-flight request for the next segment and immediately re-requests it. Skipping that is an optimisation worth measuring.
 
 <Checkpoint slug="seeking-and-eviction" run files={["index.html","dash.js","player.js"]} note="Open DevTools, Network tab (filter on m4s), and the Console, which logs each action.">
@@ -72,7 +72,7 @@ The readout is plain text rewritten every 250 ms. It is deliberately simple, bec
 - Drag the scrubber to 8:00: Network shows requests jumping to segments around 126 (480 s divided by 3.84 s), the old buffered range disappears, and a single new range near [480 - 514] appears. The Console shows `seeking`, `evict` and `fetch` actions.
 - Seek back to 1:00: a range starts near 60 s while the island at 8:00 is still buffered ahead, so for a moment there are two islands. The island ahead is kept until the playhead passes it.
 - Drag the scrubber repeatedly and quickly: cancelled requests show as red (cancelled) in Network, and playback resumes from the last position with no console errors.
-- Seek to the very end, wait for it to finish, then check that `last action` shows `endOfStream()` and MediaSource reads `ended`. Seek back to 5:00: MediaSource returns to `open`, playback resumes, and it reaches the end and calls `endOfStream()` again.
+- Seek to the very end, wait for it to finish, then check that `last action` shows `endOfStream()` and `MediaSource` reads `ended`. Seek back to 5:00: `MediaSource` returns to `open`, playback resumes, and it reaches the end and calls `endOfStream()` again.
 - Open the page with `?goal=600` on a fast connection: you may see `QuotaExceededError` messages in `last action`, followed by a successful retry or an error in the log, depending on the browser's limits. This varies by browser and device.
 
 </Checkpoint>
@@ -83,7 +83,7 @@ Right now the loop fetches whenever the buffer ahead is below 30 s, so requests 
 
 Measure the effect by counting requests per 10 s in the Network tab before and after. You should see bursts of about three segments (roughly 10 s of media) with idle periods between them.
 
-<Hint>Add a per-track `filling` boolean. In runTrack, set it to false when `ahead >= BUFFER_GOAL_SECONDS` and to true when `ahead < LOW_WATER_SECONDS`; only fetch while `filling` is true. Reset it to true in startLoops so a seek always starts fetching immediately.</Hint>
+<Hint>Add a per-track `filling` boolean. In `runTrack`, set it to false when `ahead >= BUFFER_GOAL_SECONDS` and to true when `ahead < LOW_WATER_SECONDS`; only fetch while `filling` is true. Reset it to true in `startLoops` so a seek always starts fetching immediately.</Hint>
 
 </Exercise>
 

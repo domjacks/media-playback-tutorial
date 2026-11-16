@@ -27,11 +27,11 @@ This lab creates a fragmented MP4 with FFmpeg so you can connect the fMP4/CMAF t
 
 The progressive file is optimized as one playable file. The fragmented file is organized as initialization information plus fragments. A browser using MSE can receive the initialization data, then receive media fragments over time.
 
-In real DASH packaging, these pieces are often split into a separate init segment and multiple .m4s media segment files. This single fragmented file is still useful because it exposes the same moof/mdat idea.
+In real DASH packaging, these pieces are often split into a separate init segment and multiple `.m4s` media segment files. This single fragmented file is still useful because it exposes the same `moof/mdat` idea.
 
-- empty_moov writes an initial moov before media fragments.
-- frag_keyframe starts fragments at keyframes.
-- default_base_moof makes fragment addressing friendlier for streaming use cases.
+- `empty_moov` writes an initial `moov` before media fragments.
+- `frag_keyframe` starts fragments at keyframes.
+- `default_base_moof` makes fragment addressing friendlier for streaming use cases.
 
 <Snippet title="Inspect Fragment Boxes" explain="Use mp4dump to inspect the fragmented MP4. Look for ftyp, moov, repeated moof boxes, and mdat payload boxes." file="create-fragmented-mp4/lab.sh" region="fragment-boxes" />
 
@@ -39,28 +39,28 @@ In real DASH packaging, these pieces are often split into a separate init segmen
 
 ## Check The Manifest And Audio Segment Durations
 
-Open lab/dash/manifest.mpd. Each Representation should carry a SegmentTemplate with timescale, duration, and startNumber, and the file should contain no SegmentTimeline element. With the generated 2 second setting the template reads timescale="1000000" duration="2000000", which is 2 seconds.
+Open `lab/dash/manifest.mpd`. Each Representation should carry a `SegmentTemplate` with `timescale`, `duration`, and `startNumber`, and the file should contain no `SegmentTimeline` element. With the generated 2 second setting the template reads `timescale="1000000" duration="2000000"`, which is 2 seconds.
 
 Audio segment durations will not exactly match video. AAC frames are 1024 samples, so at 48 kHz each frame lasts 21.33 ms and audio segments can only start on multiples of that. In this lab the second audio segment starts at 1.920 s (90 frames), the third at 3.925 s, and the audio track can finish with a very short extra segment, so audio may report one more segment than video for the same period.
 
 - The template duration is nominal; real audio segments land within a frame of it.
-- Players should position audio by the timestamps inside the segment, not by index x duration.
+- Players should position audio by the timestamps inside the segment, not by `index x duration`.
 
 <Checkpoint slug="create-fragmented-mp4" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe. If mp4dump is not installed, the fragment-box step prints a notice and is skipped.">
 
-- major_brand is isom (compatible isomiso2avc1mp41) for lab/progressive.mp4 and iso5 (compatible iso5iso6mp41) for lab/fragmented.mp4.
-- The fragmented file reports nb_frames=N/A and duration=8.080000 for audio; the progressive file reports nb_frames=200 for video.
-- ls lab/dash lists init-0.mp4, init-1.mp4, manifest.mpd, 4 video chunks (chunk-0-00001..4.m4s) and 5 audio chunks (chunk-1-00001..5.m4s): audio has one extra short segment.
-- manifest.mpd contains no SegmentTimeline (grep -c prints 0) and a template with timescale="1000000" duration="2000000".
-- With Bento4 installed, mp4dump lab/fragmented.mp4 shows ftyp, an empty moov, then repeated moof and mdat boxes.
+- `major_brand` is `isom` (compatible `isomiso2avc1mp41`) for `lab/progressive.mp4` and `iso5` (compatible `iso5iso6mp41`) for `lab/fragmented.mp4`.
+- The fragmented file reports `nb_frames=N/A` and `duration=8.080000` for audio; the progressive file reports `nb_frames=200` for video.
+- `ls lab/dash` lists `init-0.mp4`, `init-1.mp4`, `manifest.mpd`, 4 video chunks (`chunk-0-00001..4.m4s`) and 5 audio chunks (`chunk-1-00001..5.m4s`): audio has one extra short segment.
+- `manifest.mpd` contains no `SegmentTimeline` (`grep -c` prints 0) and a template with `timescale="1000000" duration="2000000"`.
+- With Bento4 installed, `mp4dump lab/fragmented.mp4` shows `ftyp`, an empty `moov`, then repeated `moof` and `mdat` boxes.
 
 </Checkpoint>
 
 <Exercise title="Change The Segment Duration">
 
-Re-run the DASH segmenting step with -seg_duration 4 into a different folder, such as lab/dash4.
+Re-run the DASH segmenting step with `-seg_duration 4` into a different folder, such as `lab/dash4`.
 
-Count the video and audio chunks, and check the new SegmentTemplate duration. Explain why 4 seconds still works with -g 50 at 25 fps, and what would go wrong with -seg_duration 3.
+Count the video and audio chunks, and check the new `SegmentTemplate` duration. Explain why 4 seconds still works with `-g 50` at 25 fps, and what would go wrong with `-seg_duration 3`.
 
 <Hint>Expect 2 video chunks and 3 audio chunks. Segments must start on keyframes, and keyframes here are 2 s apart, so only multiples of 2 s can be honoured exactly.</Hint>
 

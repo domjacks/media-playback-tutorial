@@ -46,14 +46,14 @@ With a fixed segment duration, the next segment is arithmetic, not a search. For
 - If you use a `SegmentTimeline` or variable durations, binary-search the segment list by start time instead.
 - Treat the end specially: with a short final segment and track durations that differ slightly (here video buffers to about 572.3 s and audio to 572.5 s), "buffered within about half a second of the duration" is a safer completion test than comparing to a segment boundary.
 
-Video and audio are separate SourceBuffers with their own buffered ranges, so compute the index per track. Their ends differ a little, and the media element's `buffered` is the intersection of the two, which is what playback actually sees.
+Video and audio are separate `SourceBuffers` with their own buffered ranges, so compute the index per track. Their ends differ a little, and the media element's `buffered` is the intersection of the two, which is what playback actually sees.
 
 ## Seeking With MSE
 
 The media element does most of seeking: it moves the playhead, fires `seeking`, flushes its decoders, and waits for data at the new time; it fires `seeked` once playback can continue. MSE leaves the player to supply that data. A correct seek handler does the following.
 
 - Cancel in-flight requests (`AbortController.abort()` on every fetch) so the old position does not keep using bandwidth.
-- If a SourceBuffer is `updating`, call `sourceBuffer.abort()` to cancel the append and reset the parser. Only legal while the MediaSource is `open`.
+- If a `SourceBuffer` is `updating`, call `sourceBuffer.abort()` to cancel the append and reset the parser. Only legal while the `MediaSource` is `open`.
 - Compute the segment from the new `currentTime` and the new buffered ranges, as above. If the target is already buffered, nothing needs to be fetched immediately and the loop simply continues past that range.
 - Append the init segment again if you need to (after `abort()`, when the Representation changed, or after `changeType()`), then the media segment.
 - Restart the loop. The `waiting` event fires while playback is blocked for lack of data, and `canplay` or `playing` when it resumes; these are the events a UI would use to show a spinner.
@@ -76,14 +76,20 @@ Audio and video alignment is a related concern. If segments are aligned across t
 
 ## endOfStream And Seeking Back
 
-When both tracks have appended their final segment, call `mediaSource.endOfStream()` so the media element knows no more data is coming and can fire `ended` instead of waiting. Only do so when `readyState` is `open` and neither SourceBuffer is `updating`.
+When both tracks have appended their final segment, call `mediaSource.endOfStream()` so the media element knows no more data is coming and can fire `ended` instead of waiting. Only do so when `readyState` is `open` and neither `SourceBuffer` is `updating`.
 
-Seeking after the end is legal. A seek on an `ended` MediaSource moves it back to `open` and fires `sourceopen`, and so does a later append. The loop then needs to treat the seek like any other: reset the per-track `done` flags, work out the index from the new position, and call `endOfStream()` again after the tail is re-buffered. If you remove data near the end and re-append it, the final duration can change slightly, so set `mediaSource.duration` from the manifest rather than trusting what `endOfStream()` left behind.
+Seeking after the end is legal. A seek on an `ended` `MediaSource` moves it back to `open` and fires `sourceopen`, and so does a later append. The loop then needs to treat the seek like any other: reset the per-track `done` flags, work out the index from the new position, and call `endOfStream()` again after the tail is re-buffered. If you remove data near the end and re-append it, the final duration can change slightly, so set `mediaSource.duration` from the manifest rather than trusting what `endOfStream()` left behind.
 
 ## How The In-App Player Does It
 
-The Putting It All Together player in this tutorial (`src/components/PlayerShowcase.jsx`) follows the same shape, with one async loop per track. Each iteration it computes the end of buffered media at the playhead (`bufferedEndAt`, with a 0.1 s tolerance), derives the segment index as `floor((nextTime + 0.1) / segmentSeconds)`, and waits when the buffer ahead is at least the 30 s goal. Before every append it removes media older than `currentTime - 30` (`evictBehind`), and if the append throws `QuotaExceededError` it evicts down to 5 s behind and retries once. Because the index comes from the current playhead and buffered ranges each time, a seek mostly takes care of itself: the waiting loop wakes on `seeking` and `timeupdate`, recomputes, and fetches from the new position. It also respects `mediaSource.streaming` for ManagedMediaSource and calls `endOfStream()` when both tracks report done.
+The Putting It All Together player in this tutorial (`src/components/PlayerShowcase.jsx`) follows the same shape, with one async loop per track. Each iteration it computes the end of buffered media at the playhead (`bufferedEndAt`, with a 0.1 s tolerance), derives the segment index as `floor((nextTime + 0.1) / segmentSeconds)`, and waits when the buffer ahead is at least the 30 s goal. Before every append it removes media older than `currentTime - 30` (`evictBehind`), and if the append throws `QuotaExceededError` it evicts down to 5 s behind and retries once. Because the index comes from the current playhead and buffered ranges each time, a seek mostly takes care of itself: the waiting loop wakes on `seeking` and `timeupdate`, recomputes, and fetches from the new position. It also respects `mediaSource.streaming` for `ManagedMediaSource` and calls `endOfStream()` when both tracks report done.
 
 What it leaves out is what the next lesson adds: aborting requests that are already in flight when the viewer seeks, calling `sourceBuffer.abort()`, and jumping small gaps. [Seeking And Eviction](#/seeking-and-eviction) builds those and a live readout so you can watch buffered ranges move.
+
+<Question prompt="Video is buffered to 40 s and audio to 25 s; the playhead is at 20 s and the network drops. When does playback stall, and why?">
+
+Playback stalls at 25 s, after 5 seconds. The media element's `buffered` is the intersection of the two tracks' buffered ranges, so the shorter track limits what can play. Video alone has 20 s of runway, but once the playhead reaches the end of the audio there is nothing to decode for that track and the element fires `waiting`.
+
+</Question>
 
 <Demo title="Buffer Policy" mode="buffer">A player keeps a forward goal, a modest back buffer, and recomputes what to fetch from the playhead and buffered ranges every time.</Demo>

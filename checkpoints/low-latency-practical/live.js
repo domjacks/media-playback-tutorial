@@ -54,7 +54,6 @@ export function getLowLatencyEdge(timing, nowMs) {
 }
 // #endregion ll-edge
 
-// #region seek-to-live-start
 // Call once the first media is appended: expose the live window and move the playhead near the target latency.
 export function seekToTarget(video, mediaSource, targetPlaybackTime) {
   if (!video.buffered.length) return;
@@ -67,7 +66,6 @@ export function seekToTarget(video, mediaSource, targetPlaybackTime) {
   }
   video.currentTime = Math.min(Math.max(targetPlaybackTime, start), end - 0.1);
 }
-// #endregion seek-to-live-start
 
 // #region ll-catchup
 // Steer latency back to the target by nudging playbackRate within the MPD's PlaybackRate range.
@@ -80,7 +78,6 @@ export function chooseCatchupRate({ latency, bufferAhead }, { targetLatency, min
 }
 // #endregion ll-catchup
 
-// #region prune-buffer
 export async function removeOldBuffer(sourceBuffer, currentTime, keepBehind = 10) {
   const removeEnd = currentTime - keepBehind;
   if (removeEnd <= 0 || sourceBuffer.updating) return;
@@ -92,4 +89,3 @@ export async function removeOldBuffer(sourceBuffer, currentTime, keepBehind = 10
     sourceBuffer.remove(0, removeEnd);
   });
 }
-// #endregion prune-buffer

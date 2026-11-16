@@ -21,7 +21,7 @@ This lab encodes one short file with B-frames, then inspects it with FFprobe and
 
 ## Timescales
 
-Each track counts in its own units. FFprobe reports the unit as time_base, which is the inverse of the mdhd timescale.
+Each track counts in its own units. FFprobe reports the unit as `time_base`, which is the inverse of the `mdhd` timescale.
 
 <Snippet title="Read Time Bases" explain="Video uses 1/12800 here (25 fps x 512), audio uses 1/48000, the sample rate. duration_ts is the length in those ticks." file="inspect-media-timing/lab.sh" region="timescales" />
 
@@ -49,7 +49,7 @@ Negative timestamps cannot be stored directly in an MP4 sample table, where deco
 
 <Snippet title="Mux Without An Edit List" explain="-use_editlist 0 makes the muxer drop the elst. Without it the compensation has to live in the sample tables, and the timeline shifts." file="inspect-media-timing/lab.sh" region="elst-off" />
 
-Without the edit list the video start_pts becomes 1024 (0.08 s), so the video no longer starts at zero. The audio stts has a first entry of 3840 ticks (0.08 s) in place of 1024, because the muxer stretched the first audio sample to keep audio and video aligned. The file still plays, but the shift is now baked into the data instead of declared.
+Without the edit list the video `start_pts` becomes 1024 (0.08 s), so the video no longer starts at zero. The audio `stts` has a first entry of 3840 ticks (0.08 s) in place of 1024, because the muxer stretched the first audio sample to keep audio and video aligned. The file still plays, but the shift is now baked into the data instead of declared.
 
 ## Fragmented Output
 
@@ -79,24 +79,24 @@ Third, the walk itself, which handles the 64-bit size and run-to-end cases.
 
 <Checkpoint slug="inspect-media-timing" files={["lab.sh", "boxes.js"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It needs FFmpeg, FFprobe and Node, and runs boxes.js from beside the script. Output below is from FFmpeg 8.0.1.">
 
-- Time bases are 1/12800 for video and 1/48000 for audio, with duration_ts=51200 and 192000 (both 4 s).
-- The first video packet prints pts=0 and dts=-1024 (dts_time=-0.080000); the second prints pts=1024 and dts=-512, and the third pts=512, dts=0.
-- The first audio packet has pts=-1024, flags=KD_ and skip_samples=1024.
-- The default file shows elst entries=1 with media_time=1024 on both tracks and a ctts whose first offsets are 1x1024, 1x1536, 1x512.
-- The no-edit-list file reports video start_pts=1024 (start_time=0.080000) and an audio stts starting 1x3840.
-- The fragmented file prints "100 video packets, non-increasing dts steps: 0", and its two moof boxes have video tfdt baseMediaDecodeTime=0 and 25600, audio 0 and 96000.
-- With negative_cts_offsets the trun lines show version=1 and first_sample_composition_time_offset=0.
+- Time bases are `1/12800` for video and `1/48000` for audio, with `duration_ts=51200` and `192000` (both 4 s).
+- The first video packet prints `pts=0` and `dts=-1024` (`dts_time=-0.080000`); the second prints `pts=1024` and `dts=-512`, and the third `pts=512`, `dts=0`.
+- The first audio packet has `pts=-1024`, `flags=KD_` and `skip_samples=1024`.
+- The default file shows `elst entries=1` with `media_time=1024` on both tracks and a `ctts` whose first offsets are `1x1024, 1x1536, 1x512`.
+- The no-edit-list file reports video `start_pts=1024` (`start_time=0.080000`) and an audio `stts` starting `1x3840`.
+- The fragmented file prints "100 video packets, non-increasing dts steps: 0", and its two `moof` boxes have video `tfdt` `baseMediaDecodeTime=0` and `25600`, audio `0` and `96000`.
+- With `negative_cts_offsets` the `trun` lines show `version=1` and `first_sample_composition_time_offset=0`.
 
 </Checkpoint>
 
 <Exercise title="Predict The Timeline">
 
-Re-encode with -bf 0 and repeat the pts-dts and edit list steps. Before you run it, predict what the first video dts will be and whether an elst will still be needed for video.
+Re-encode with `-bf 0` and repeat the pts-dts and edit list steps. Before you run it, predict what the first video `dts` will be and whether an `elst` will still be needed for video.
 
 Then work out the presentation time of the first audio sample the viewer actually hears, given the priming packet and the edit list.
 
-<Hint>Without B-frames, pts equals dts, so there is no composition delay and the video elst should disappear or have media_time=0. The audio priming remains, so audio still needs media_time=1024 (1024 / 48000 = about 21.3 ms skipped), which makes the first audible sample land at presentation time 0.</Hint>
+<Hint>Without B-frames, `pts` equals `dts`, so there is no composition delay and the video `elst` should disappear or have `media_time=0`. The audio priming remains, so audio still needs `media_time=1024` (1024 / 48000 = about 21.3 ms skipped), which makes the first audible sample land at presentation time 0.</Hint>
 
 </Exercise>
 
-<Demo title="Timing Evidence" mode="timeline">Timescales, composition offsets, edit lists and tfdt values are what decide where each sample lands on the media timeline.</Demo>
+<Demo title="Timing Evidence" mode="timeline">Timescales, composition offsets, edit lists and `tfdt` values are what decide where each sample lands on the media timeline.</Demo>

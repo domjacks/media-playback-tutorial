@@ -197,4 +197,10 @@ The licence server is where business rules live. Even a basic deployment needs t
 - `output-restricted`: HDCP or a display attribute does not satisfy the licence policy.
 - DRM works on desktop but not on a TV: the TV's CDM supports different init data, schemes or robustness. Test on real devices.
 
+<Question prompt="An encrypted fMP4 is appended through MSE and MediaKeys are already attached, but the page never receives an encrypted event and the video stays black. What is the most likely cause, and what is the fix?">
+
+The demuxer only fires `encrypted` when it finds initialisation data, so the most likely cause is that the init segment has no usable `pssh` box for the key system. Some packagers and FFmpeg write `tenc` and `senc` but no `pssh`. Add a `pssh` box to the `moov` (for example the W3C common box with SystemID `1077efec-c0b2-4d02-ace3-3c1e52e2fb4b`), or have the packager emit one per DRM, then append the init segment again.
+
+</Question>
+
 <Demo title="License Round Trip" mode="packets">Encrypted samples cause a key request, the licence response unlocks decryption, then decoded frames resume.</Demo>

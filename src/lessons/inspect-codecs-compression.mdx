@@ -9,7 +9,7 @@ reference: "https://ffmpeg.org/ffmpeg-codecs.html#libx264"
 
 ## One Source, Several Encodes
 
-Codec concepts are easiest to reason about when the source stays fixed. This lab uses FFmpeg's test pattern source and encodes it several ways with libx264 so you can compare file size, bitrate, GOP structure, and frame types.
+Codec concepts are easiest to reason about when the source stays fixed. This lab uses FFmpeg's test pattern source and encodes it several ways with `libx264` so you can compare file size, bitrate, GOP structure, and frame types.
 
 The commands deliberately use H.264 because that is the main codec model in this tutorial. The same inspection habits apply when you later compare HEVC, VP9, or AV1.
 
@@ -47,21 +47,21 @@ Treat these metrics as engineering signals, not truth. They are useful for compa
 
 <Checkpoint slug="inspect-codecs-compression" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe.">
 
-- ls -lh shows lab/h264-crf18.mp4 at about 4.1M and lab/h264-crf32.mp4 at about 900K: same source, same codec, roughly 4.5x size difference.
-- bit_rate for the CRF 18 encode is around 4.1 Mbps (4100631 here) against around 0.8 Mbps (788351) for CRF 32. Both report codec_name=h264 and profile=High.
-- Frame types for the default encode start I, B, P, P: B-frames are present, so pts_time order differs from decode order.
-- The GOP 25 / -bf 0 encode prints only I and P frames, with a key frame (key_frame=1) every 25 frames.
-- The -bf 2 table starts 0.000000,-0.080000,I then 0.040000,0.000000,B and 0.080000,-0.040000,P: dts is out of order against pts. The -bf 0 table has dts equal to pts on every row.
+- `ls -lh` shows `lab/h264-crf18.mp4` at about 4.1M and `lab/h264-crf32.mp4` at about 900K: same source, same codec, roughly 4.5x size difference.
+- `bit_rate` for the CRF 18 encode is around 4.1 Mbps (4100631 here) against around 0.8 Mbps (788351) for CRF 32. Both report `codec_name=h264` and `profile=High`.
+- Frame types for the default encode start I, B, P, P: B-frames are present, so `pts_time` order differs from decode order.
+- The GOP 25 / `-bf 0` encode prints only I and P frames, with a key frame (`key_frame=1`) every 25 frames.
+- The `-bf 2` table starts `0.000000,-0.080000,I` then `0.040000,0.000000,B` and `0.080000,-0.040000,P`: `dts` is out of order against `pts`. The `-bf 0` table has `dts` equal to `pts` on every row.
 
 </Checkpoint>
 
 <Exercise title="Find The CRF Sweet Spot">
 
-Encode lab/source.mkv at CRF 23 and CRF 28 (keep -g 50 and the AAC settings), then compare file size and video bit_rate with the CRF 18 and 32 results.
+Encode `lab/source.mkv` at CRF 23 and CRF 28 (keep `-g 50` and the AAC settings), then compare file size and video `bit_rate` with the CRF 18 and 32 results.
 
 Plot or tabulate size against CRF. Decide which value you would ship for this test pattern, and say what you would check before trusting that choice on real content.
 
-<Hint>Reuse the Compare CRF command with a different -crf and output name. On this source expect roughly 2.8 MB at CRF 23 and 1.5 MB at CRF 28. Read bit_rate with -show_entries stream=bit_rate. A synthetic test pattern compresses unlike real footage, so size ratios will not transfer.</Hint>
+<Hint>Reuse the Compare CRF command with a different `-crf` and output name. On this source expect roughly 2.8 MB at CRF 23 and 1.5 MB at CRF 28. Read `bit_rate` with `-show_entries stream=bit_rate`. A synthetic test pattern compresses unlike real footage, so size ratios will not transfer.</Hint>
 
 </Exercise>
 

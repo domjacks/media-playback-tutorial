@@ -11,12 +11,12 @@ reference: "https://ffmpeg.org/ffprobe.html"
 
 The previous labs created encoded audio and video. This lab looks at how the MP4 container describes those encoded samples as tracks, packets, timestamps, durations, and byte-addressed payload.
 
-FFprobe is excellent for stream, packet, frame, and timing inspection. Bento4's mp4dump complements it by showing the MP4 box tree directly, which is how you inspect ftyp, moov, trak, mdia, and mdat as container structures.
+FFprobe is excellent for stream, packet, frame, and timing inspection. Bento4's `mp4dump` complements it by showing the MP4 box tree directly, which is how you inspect `ftyp`, `moov`, `trak`, `mdia`, and `mdat` as container structures.
 
 - Streams are logical tracks such as video and audio.
 - Packets are encoded chunks with timestamps and sizes.
 - Frames are decoded pictures or audio frames exposed by the demuxer/decoder path.
-- mp4dump exposes the MP4 box hierarchy that FFprobe abstracts away.
+- `mp4dump` exposes the MP4 box hierarchy that FFprobe abstracts away.
 
 <Snippet title="Check The Tools" explain="This lab expects FFmpeg and FFprobe. Bento4's mp4dump and GPAC's MP4Box are optional box dumpers; if either is missing, a stub prints a notice and the lab carries on." file="inspect-mp4-containers/lab.sh" region="check-tools" />
 
@@ -30,38 +30,38 @@ FFprobe is excellent for stream, packet, frame, and timing inspection. Bento4's 
 
 ## Box Tree Inspection
 
-FFprobe gives you stream and packet information. mp4dump gives you the MP4 box tree. Use both views together: FFprobe shows what the media means to a demuxer, while mp4dump shows how the file is actually structured.
+FFprobe gives you stream and packet information. `mp4dump` gives you the MP4 box tree. Use both views together: FFprobe shows what the media means to a demuxer, while `mp4dump` shows how the file is actually structured.
 
 Box dumps are useful when you need to debug malformed MP4s, metadata placement, timescales, missing track metadata, or fragmented output.
 
-- ftyp identifies brands and compatibility.
-- moov contains movie and track metadata.
-- trak/tkhd/mdia describe individual tracks.
-- mdat carries encoded sample bytes.
+- `ftyp` identifies brands and compatibility.
+- `moov` contains movie and track metadata.
+- `trak`/`tkhd`/`mdia` describe individual tracks.
+- `mdat` carries encoded sample bytes.
 
 <Snippet title="Inspect The MP4 Box Tree" explain="This prints the MP4 box tree. Look for ftyp, moov, mvhd, trak, tkhd, mdia, and mdat." file="inspect-mp4-containers/lab.sh" region="box-tree" />
 
-GPAC's `MP4Box` is a second option if you already have it installed. `MP4Box -info` prints a readable summary of tracks, timescales and codec parameters. `MP4Box -diso` dumps every box as XML, to a `_info.xml` file by default or to stdout with `-std`. The XML is more verbose than mp4dump but includes sample tables, which is handy for timing work.
+GPAC's `MP4Box` is a second option if you already have it installed. `MP4Box -info` prints a readable summary of tracks, timescales and codec parameters. `MP4Box -diso` dumps every box as XML, to a `_info.xml` file by default or to stdout with `-std`. The XML is more verbose than `mp4dump` but includes sample tables, which is handy for timing work.
 
 <Snippet title="Inspect Boxes With GPAC MP4Box" explain="An alternative to mp4dump. -info gives a track summary; -diso with -std prints the box tree as XML on stdout. Skipped with a notice if MP4Box is not installed." file="inspect-mp4-containers/lab.sh" region="box-tree-gpac" />
 
 <Checkpoint slug="inspect-mp4-containers" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe. If mp4dump or MP4Box is not installed, those steps print a notice and are skipped.">
 
-- Format: format_name=mov,mp4,m4a,3gp,3g2,mj2, nb_streams=2, duration=6.000000.
-- Video stream nb_frames=150 (6 s x 25 fps); audio nb_frames=283 (AAC frames of 1024 samples).
-- The first video packet has flags=K\_\_ (keyframe) and dts_time=-0.080000 before pts_time=0.000000: B-frame reordering shows up as DTS earlier than PTS.
-- Packets in decode order have non-monotonic pts_time (0.000, 0.080, 0.040 ...).
-- The box tree lists ftyp, moov (mvhd, trak, tkhd, mdia) and mdat. Without Bento4 the lab prints "mp4dump not found; skipping box tree (install Bento4)", and without GPAC "MP4Box not found; skipping GPAC box dump (install GPAC)", and carries on.
+- Format: `format_name=mov,mp4,m4a,3gp,3g2,mj2`, `nb_streams=2`, `duration=6.000000`.
+- Video stream `nb_frames=150` (6 s x 25 fps); audio `nb_frames=283` (AAC frames of 1024 samples).
+- The first video packet has `flags=K__` (keyframe) and `dts_time=-0.080000` before `pts_time=0.000000`: B-frame reordering shows up as DTS earlier than PTS.
+- Packets in decode order have non-monotonic `pts_time` (0.000, 0.080, 0.040 ...).
+- The box tree lists `ftyp`, `moov` (`mvhd`, `trak`, `tkhd`, `mdia`) and `mdat`. Without Bento4 the lab prints "mp4dump not found; skipping box tree (install Bento4)", and without GPAC "MP4Box not found; skipping GPAC box dump (install GPAC)", and carries on.
 
 </Checkpoint>
 
 <Exercise title="Find The Keyframes">
 
-List only the video keyframe packets in lab/container-faststart.mp4 with their timestamps, and work out the keyframe interval in seconds.
+List only the video keyframe packets in `lab/container-faststart.mp4` with their timestamps, and work out the keyframe interval in seconds.
 
-Then explain why that interval follows from -g 50 and the 25 fps frame rate, and what it means for where a player can start or seek.
+Then explain why that interval follows from `-g 50` and the 25 fps frame rate, and what it means for where a player can start or seek.
 
-<Hint>Use -show_packets -show_entries packet=pts_time,flags -of csv=p=0 and filter for lines containing K. You should find keyframes at 0, 2 and 4 seconds.</Hint>
+<Hint>Use `-show_packets -show_entries packet=pts_time,flags -of csv=p=0` and filter for lines containing `K`. You should find keyframes at 0, 2 and 4 seconds.</Hint>
 
 </Exercise>
 

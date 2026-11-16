@@ -15,7 +15,7 @@ The server sends `Access-Control-Allow-Origin: *` and allows the `Range` request
 
 - Each video variant's media playlist and the audio playlist describe 6-second segments inside one file.
 - Both tracks start near 10 seconds on the media timeline, not at 0. HLS does not require timestamps to begin at zero.
-- The audio playlist is a separate rendition selected through the variant's `AUDIO` group, so the player needs two SourceBuffers.
+- The audio playlist is a separate rendition selected through the variant's `AUDIO` group, so the player needs two `SourceBuffers`.
 
 ## Parsing Playlists
 
@@ -41,14 +41,14 @@ A variant is playable only if the browser supports every codec in its `CODECS` l
 
 <Snippet title="Variant Selection" explain="CODECS filtering stops the player choosing something the device cannot decode. BANDWIDTH is a peak rate, so using it against a throughput estimate is conservative. This tutorial also restricts audio to stereo AAC; the stream offers AC-3 and E-AC-3 copies of every video rung." file="hls-vod/player.js" region="choose-variant" />
 
-With a 1 Mbps budget this selects the 640x360 variant (`BANDWIDTH=902298`). Replacing the constant with a measured throughput is the first step towards the adaptive player from the DASH lessons.
+With a 1 Mbps budget this selects the `640x360` variant (`BANDWIDTH=902298`). Replacing the constant with a measured throughput is the first step towards the adaptive player from the DASH lessons.
 
 ## One Buffer Or Two
 
-Whether you need one SourceBuffer or two depends on how the chosen variant is packaged.
+Whether you need one `SourceBuffer` or two depends on how the chosen variant is packaged.
 
-- If the variant has an `AUDIO` attribute and the matching `#EXT-X-MEDIA` rendition has a `URI`, audio and video are in separate media playlists with separate fMP4 files. Each needs its own SourceBuffer with its own MIME type: `video/mp4; codecs="avc1..."` and `audio/mp4; codecs="mp4a.40.2"`.
-- If there is no `AUDIO` attribute, the variant's segments carry both tracks in one fMP4. A single SourceBuffer with both codecs in the MIME type is correct, as in `video/mp4; codecs="avc1.64001e,mp4a.40.2"`.
+- If the variant has an `AUDIO` attribute and the matching `#EXT-X-MEDIA` rendition has a `URI`, audio and video are in separate media playlists with separate fMP4 files. Each needs its own `SourceBuffer` with its own MIME type: `video/mp4; codecs="avc1..."` and `audio/mp4; codecs="mp4a.40.2"`.
+- If there is no `AUDIO` attribute, the variant's segments carry both tracks in one fMP4. A single `SourceBuffer` with both codecs in the MIME type is correct, as in `video/mp4; codecs="avc1.64001e,mp4a.40.2"`.
 - Never put a muxed codec list on a demuxed video buffer: the audio codec would be declared but never delivered.
 
 <Snippet title="Planning The Tracks" explain="One plan per SourceBuffer: demuxed streams get a video and an audio plan, muxed streams get a single plan with every codec. The demuxed audio rendition comes from the variant's AUDIO group, taking the DEFAULT entry." file="hls-vod/player.js" region="plan-tracks" />
@@ -65,14 +65,14 @@ The append loop is in two phases. First, each track appends its init segment and
 
 - `timelineOffset` is the gap between where a segment should be on the playlist timeline and where its samples really are on the media timeline.
 - Setting `video.currentTime` to the start of the buffered range avoids waiting forever at time 0, an issue the live lessons cover as well.
-- This loop never removes media. The 360p rendition is about 55 MB for the full ten minutes, while 540p at 60 fps is about 150 MB, which is close to what some browsers allow a video SourceBuffer to hold. That is why the budget is low. The buffer management lessons show eviction.
+- This loop never removes media. The 360p rendition is about 55 MB for the full ten minutes, while 540p at 60 fps is about 150 MB, which is close to what some browsers allow a video `SourceBuffer` to hold. That is why the budget is low. The buffer management lessons show eviction.
 
 <Checkpoint slug="hls-vod" run files={["index.html","m3u8.js","player.js"]} note="No browser was available when this was written, so the playback observations come from the verified playlist data and the code, not a recorded run.">
 
-- DevTools Network shows master.m3u8, then v3/prog_index.m3u8 and a1/prog_index.m3u8, then range requests (status 206) to v3/main.mp4 and a1/main.mp4.
-- The page log prints the chosen variant (640x360, bandwidth=902298), 100 video segments, 101 audio segments, and about 600 seconds.
-- The first sample is logged near 10 seconds and playback starts there; video.buffered grows to about 30 seconds ahead of the playhead, not the whole file.
-- When playback reaches the end, endOfStream is logged and the video ends at about 610 seconds on the media timeline.
+- DevTools Network shows `master.m3u8`, then `v3/prog_index.m3u8` and `a1/prog_index.m3u8`, then range requests (status 206) to `v3/main.mp4` and `a1/main.mp4`.
+- The page log prints the chosen variant (`640x360`, `bandwidth=902298`), 100 video segments, 101 audio segments, and about 600 seconds.
+- The first sample is logged near 10 seconds and playback starts there; `video.buffered` grows to about 30 seconds ahead of the playhead, not the whole file.
+- When playback reaches the end, `endOfStream` is logged and the video ends at about 610 seconds on the media timeline.
 
 </Checkpoint>
 
@@ -80,7 +80,7 @@ The append loop is in two phases. First, each track appends its init segment and
 
 Add a select element listing the playable variants by resolution and bandwidth, and make the player use the chosen one at startup. Then go further: on a change, keep the same audio, fetch the new variant's media playlist, and start appending its segments from the one that covers `video.currentTime`.
 
-<Hint>For a start-up picker, render `byBandwidth` into a select, then wait for its change event before running the plan-tracks code. For a mid-stream switch, find the first segment whose `end` is above `currentTime` minus the track's `timelineOffset`, append the new variant's `#EXT-X-MAP` init segment first, then continue from that segment; stale video from the old rendition can be removed with `sourceBuffer.remove()` ahead of the playhead.</Hint>
+<Hint>For a start-up picker, render `byBandwidth` into a select, then wait for its `change` event before running the plan-tracks code. For a mid-stream switch, find the first segment whose `end` is above `currentTime` minus the track's `timelineOffset`, append the new variant's `#EXT-X-MAP` init segment first, then continue from that segment; stale video from the old rendition can be removed with `sourceBuffer.remove()` ahead of the playhead.</Hint>
 
 </Exercise>
 

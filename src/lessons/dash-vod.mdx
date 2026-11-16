@@ -9,16 +9,16 @@ reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mp
 
 ## Parser Boundaries
 
-A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, BaseURL, and SegmentTemplate URLs using $Number$ replacement.
+A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, `BaseURL`, and `SegmentTemplate` URLs using `$Number$` replacement.
 
-The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments. BaseURL can appear at the MPD level, the AdaptationSet level, or not at all, so resolve each optionally.
+The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments. `BaseURL` can appear at the MPD level, the AdaptationSet level, or not at all, so resolve each optionally.
 
-The parser also stops after TUTORIAL_SEGMENT_LIMIT segments. Big Buck Bunny is about 9.5 minutes long and this player appends everything up front with no buffer management, so the limit (36 segments of 3.84 seconds, about 2.3 minutes) keeps memory bounded. Later lessons add buffer goals and removal; until then, raise the limit with care.
+The parser also stops after `TUTORIAL_SEGMENT_LIMIT` segments. Big Buck Bunny is about 9.5 minutes long and this player appends everything up front with no buffer management, so the limit (36 segments of 3.84 seconds, about 2.3 minutes) keeps memory bounded. Later lessons add buffer goals and removal; until then, raise the limit with care.
 
-- Use DOMParser instead of string splitting XML.
-- Resolve segment URLs with new URL(relative, manifestUrl).
-- Codecs and mimeType can sit on the AdaptationSet or the Representation; a Representation value overrides the AdaptationSet value, they are never concatenated.
-- TUTORIAL_SEGMENT_LIMIT caps the segment list for this tutorial only; it is not part of DASH.
+- Use `DOMParser` instead of string splitting XML.
+- Resolve segment URLs with `new URL(relative, manifestUrl)`.
+- Codecs and `mimeType` can sit on the AdaptationSet or the Representation; a Representation value overrides the AdaptationSet value, they are never concatenated.
+- `TUTORIAL_SEGMENT_LIMIT` caps the segment list for this tutorial only; it is not part of DASH.
 - Keep append sequencing isolated from manifest parsing.
 
 <Diagram visual="timeline" />
@@ -31,20 +31,20 @@ The parser also stops after TUTORIAL_SEGMENT_LIMIT segments. Big Buck Bunny is a
 
 <Checkpoint slug="dash-vod" run files={["index.html","dash.js","player.js"]}>
 
-- DevTools Network shows the MPD first (redirected to vod-dash-ww-rd-live.akamaized.net), then IS.mp4 for avc1/896x504p25 and for audio/160kbps, then numbered .m4s segments.
-- 36 media segments are requested per track (TUTORIAL_SEGMENT_LIMIT), so video.buffered.end(0) ends near 138.24 (36 x 3.84 s).
-- The chosen video Representation is the lowest bandwidth (896x504p25, 1416688 bps) and the audio is the highest (160kbps).
-- Playback runs for about 2.3 minutes and ends; no segment URL is hardcoded in player.js.
+- DevTools Network shows the MPD first (redirected to `vod-dash-ww-rd-live.akamaized.net`), then `IS.mp4` for `avc1/896x504p25` and for `audio/160kbps`, then numbered `.m4s` segments.
+- 36 media segments are requested per track (`TUTORIAL_SEGMENT_LIMIT`), so `video.buffered.end(0)` ends near 138.24 (36 x 3.84 s).
+- The chosen video Representation is the lowest bandwidth (`896x504p25`, `1416688 bps`) and the audio is the highest (`160kbps`).
+- Playback runs for about 2.3 minutes and ends; no segment URL is hardcoded in `player.js`.
 
 </Checkpoint>
 
 <Exercise title="Pick The 720p Representation">
 
-Change the video choice so the player requests the 1280x720p25 Representation rather than the lowest one.
+Change the video choice so the player requests the `1280x720p25` Representation rather than the lowest one.
 
-Confirm in the Network panel that the requests are now 1280x720p25/IS.mp4 and 1280x720p25/00000N.m4s, and compare segment sizes with the 504p ones.
+Confirm in the Network panel that the requests are now `1280x720p25/IS.mp4` and `1280x720p25/00000N.m4s`, and compare segment sizes with the 504p ones.
 
-<Hint>Replace chooseLowest(video) with video.find((rep) => rep.id === "1280x720p25") ?? chooseLowest(video). Representation ids come straight from the MPD, and they are also available through dash.representations.video.</Hint>
+<Hint>Replace `chooseLowest(video)` with `video.find((rep) => rep.id === "1280x720p25") ?? chooseLowest(video)`. Representation ids come straight from the MPD, and they are also available through `dash.representations.video`.</Hint>
 
 </Exercise>
 

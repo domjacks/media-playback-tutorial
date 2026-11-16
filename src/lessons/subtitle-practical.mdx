@@ -9,13 +9,13 @@ reference: "https://developer.mozilla.org/en-US/docs/Web/API/TextTrack"
 
 ## Use The Platform First
 
-For sidecar WebVTT, the browser already has a renderer. Create track elements, set kind, label, srclang, and src, then toggle TextTrack mode.
+For sidecar WebVTT, the browser already has a renderer. Create `track` elements, set `kind`, `label`, `srclang`, and `src`, then toggle `TextTrack` mode.
 
 A custom renderer is useful for advanced styling or segmented TTML, but the native track path is the simplest correct first version.
 
-- Use kind="subtitles" for translations and kind="captions" for accessibility captions.
-- Set one track to showing and the others to disabled.
-- Keep subtitle state separate from SourceBuffer state.
+- Use `kind="subtitles"` for translations and `kind="captions"` for accessibility captions.
+- Set one track to `showing` and the others to `disabled`.
+- Keep subtitle state separate from `SourceBuffer` state.
 
 <Diagram visual="timeline" />
 
@@ -25,20 +25,20 @@ A custom renderer is useful for advanced styling or segmented TTML, but the nati
 
 <Checkpoint slug="subtitle-practical" run files={["index.html","dash.js","player.js","subtitles.js","sample.vtt"]} note="This snapshot is the adaptive-bitrate player plus subtitles.js, sample.vtt and two buttons.">
 
-- Network shows sample.vtt fetched once with status 200.
-- In the console, video.textTracks.length is 1 and video.textTracks\[0\].mode is "showing".
+- Network shows `sample.vtt` fetched once with status 200.
+- In the console, `video.textTracks.length` is 1 and `video.textTracks[0].mode` is `"showing"`.
 - "Big Buck Bunny starts in a quiet field." appears from 1.0 to 4.0 s, and "Captions are synchronized to media time." from 5.5 to 8.0 s, rendered by the browser.
-- Off hides the cue and sets mode to "disabled"; English shows it again. Seeking back to 0 replays the cues at the right times.
+- Off hides the cue and sets `mode` to `"disabled"`; English shows it again. Seeking back to 0 replays the cues at the right times.
 
 </Checkpoint>
 
 <Exercise title="Add A Second Language">
 
-Write a sample.fr.vtt file with the same two cue times and French text, add it with addSubtitleTrack using language fr, and add a French button to index.html.
+Write a `sample.fr.vtt` file with the same two cue times and French text, add it with `addSubtitleTrack` using language `fr`, and add a French button to `index.html`.
 
-Confirm that only one language shows at a time and that video.textTracks.length is 2.
+Confirm that only one language shows at a time and that `video.textTracks.length` is 2.
 
-<Hint>Call addSubtitleTrack twice (only the English track should set defaultTrack) and wire a third button to showSubtitle(video, "fr").</Hint>
+<Hint>Call `addSubtitleTrack` twice (only the English track should set `defaultTrack`) and wire a third button to `showSubtitle(video, "fr")`.</Hint>
 
 </Exercise>
 

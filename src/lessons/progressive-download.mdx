@@ -9,7 +9,7 @@ reference: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/video"
 
 ## Let The Browser Be The Player
 
-The simplest web media player is a video element with a src. You give the browser a URL to a media resource, and the browser handles fetching, buffering, demuxing, decoding, A/V sync, seeking, and controls.
+The simplest web media player is a video element with a `src`. You give the browser a URL to a media resource, and the browser handles fetching, buffering, demuxing, decoding, A/V sync, seeking, and controls.
 
 This is called progressive download. The browser can start playback before the whole file has downloaded, but the resource is still one media file rather than a manifest plus many short segments.
 
@@ -23,12 +23,12 @@ This is called progressive download. The browser can start playback before the w
 
 ## What The Browser Expects
 
-The URL should point to a browser-supported media file, such as MP4 with H.264/AAC or WebM with VP9/Opus. The server should send the correct Content-Type and ideally support byte ranges so seeking does not require downloading the entire file.
+The URL should point to a browser-supported media file, such as MP4 with H.264/AAC or WebM with VP9/Opus. The server should send the correct `Content-Type` and ideally support byte ranges so seeking does not require downloading the entire file.
 
 For MP4, metadata placement matters. If the important movie metadata is near the beginning of the file, the browser can discover duration, tracks, and dimensions quickly. If metadata is only at the end, startup can be slower.
 
-- A single src works when the browser can handle the container and codecs by itself.
-- The video element populates properties like duration, videoWidth, buffered, seekable, and readyState.
+- A single `src` works when the browser can handle the container and codecs by itself.
+- The video element populates properties like `duration`, `videoWidth`, `buffered`, `seekable`, and `readyState`.
 - You do not get to choose individual qualities, segments, or append order.
 
 <Snippet title="player.js" explain="This code observes what the browser is doing instead of fetching media bytes itself." file="progressive-download/player.js" />
@@ -58,20 +58,20 @@ video.src = url
 
 <Checkpoint slug="progressive-download" run files={["index.html","player.js"]}>
 
-- DevTools Network shows one request for flower.mp4 (status 200, or 206 Partial Content for range requests) and no .m4s segment requests.
-- Console prints duration 5.0 and size 960 540 once, then repeated buffered 0 \<n> lines as the file downloads.
-- Console prints ready to play 3 or 4 (HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA); the native controls play, pause and seek.
-- video.buffered in the console reports the same range the progress logs show.
+- DevTools Network shows one request for `flower.mp4` (status 200, or 206 Partial Content for range requests) and no `.m4s` segment requests.
+- Console prints `duration 5.0` and `size 960 540` once, then repeated `buffered 0 <n>` lines as the file downloads.
+- Console prints `ready to play 3` or `4` (`HAVE_FUTURE_DATA` or `HAVE_ENOUGH_DATA`); the native controls play, pause and seek.
+- `video.buffered` in the console reports the same range the progress logs show.
 
 </Checkpoint>
 
 <Exercise title="Watch The Browser Buffer">
 
-Add waiting, seeking and seeked listeners that log currentTime and the buffered ranges. Throttle the network to Slow 3G in DevTools, hard-reload, and press play.
+Add `waiting`, `seeking` and `seeked` listeners that log `currentTime` and the buffered ranges. Throttle the network to Slow 3G in DevTools, hard-reload, and press play.
 
-Note when waiting fires relative to the buffered end, then seek past the buffered end and see what the Network panel does.
+Note when `waiting` fires relative to the buffered end, then seek past the buffered end and see what the Network panel does.
 
-<Hint>Use video.addEventListener("waiting", ...) and reuse logRanges. Disable cache in DevTools so the file really re-downloads.</Hint>
+<Hint>Use `video.addEventListener("waiting", ...)` and reuse `logRanges`. Disable cache in DevTools so the file really re-downloads.</Hint>
 
 </Exercise>
 

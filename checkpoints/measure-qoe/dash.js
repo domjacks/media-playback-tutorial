@@ -1,7 +1,6 @@
 // ~2.3 minutes of BBB (36 x 3.84 s); keeps memory bounded until buffer management is added.
 const TUTORIAL_SEGMENT_LIMIT = 36;
 
-// #region expose-representations
 function parseAdaptation(adaptation, doc, mpdUrl) {
   const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
   const baseUrl = resolveBaseUrl(doc, adaptation, mpdUrl);
@@ -51,7 +50,6 @@ export async function loadDashVod(mpdUrl, options = {}) {
     representations: { video, audio }
   };
 }
-// #endregion expose-representations
 
 function findAdaptation(doc, mimeType, contentType) {
   return [...doc.querySelectorAll("AdaptationSet")]
@@ -82,7 +80,6 @@ function parseIsoDuration(value) {
   return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
 }
 
-// #region startup-abr
 export function estimateInitialThroughput() {
   const downlinkMbps = navigator.connection?.downlink;
   return downlinkMbps ? downlinkMbps * 1_000_000 : 2_500_000;
@@ -109,9 +106,7 @@ export async function measureFetch(url) {
     throughputBps: (bytes.byteLength * 8) / seconds
   };
 }
-// #endregion startup-abr
 
-// #region ewma
 export function createEwma(initialEstimate, weight = 0.35) {
   let estimate = initialEstimate;
 
@@ -125,9 +120,7 @@ export function createEwma(initialEstimate, weight = 0.35) {
     }
   };
 }
-// #endregion ewma
 
-// #region runtime-choice
 // A switch is safe when the container type matches and either the codec strings are
 // identical or the browser can reconfigure the SourceBuffer with changeType().
 export function canSwitchTo(current, next) {
@@ -156,4 +149,3 @@ export function chooseRuntimeRepresentation(representations, current, state) {
 
   return candidateIndex > currentIndex ? maxStepUp : current;
 }
-// #endregion runtime-choice
