@@ -2,8 +2,8 @@
 slug: "drm-practical"
 title: "Add Optional ClearKey DRM"
 kind: "Practical"
-summary: "Wire a minimal ClearKey EME flow so users can see the browser DRM lifecycle."
-outcome: "The player can attach MediaKeys and update a ClearKey session for compatible encrypted samples."
+summary: "Encrypt a small fragmented MP4 with FFmpeg, inspect the encryption boxes, then play it through a real EME ClearKey flow."
+outcome: "You can produce CENC test media, find tenc, senc and pssh in it, and watch the encrypted event, licence message and key status log while the video plays."
 reference: "https://developer.mozilla.org/en-US/docs/Web/API/MediaKeySession"
 ---
 
@@ -11,35 +11,96 @@ reference: "https://developer.mozilla.org/en-US/docs/Web/API/MediaKeySession"
 
 DRM support varies by browser, OS, and security context. Treat the DRM lesson as an optional branch of the player, not as a requirement for the rest of playback.
 
-ClearKey uses JSON Web Key Set data, which makes it suitable for a tutorial. The structure is not how production services should expose keys.
+ClearKey uses JSON Web Key Set data, which makes it suitable for a tutorial. The structure is not how production services should expose keys: the key travels in the clear and the page that holds it can read it.
 
-Both kid and k in a ClearKey JWK must be base64url (no padding) of the raw 16-byte key ID and key. If you hold them as 32-character hex strings, as most packaging tools print them, convert with the hexToBase64Url helper. Plain base64 or hex in those fields makes the CDM reject the licence.
+EME needs a secure context. A page served from `http://localhost` qualifies, as does any `https://` origin such as the deployed site. A plain `http://` address on another host, or a `file://` URL, does not: `requestMediaKeySystemAccess` is not available and `installClearKey` throws.
+
+## Generate Encrypted Test Media
+
+The lab script builds everything from FFmpeg test sources, so the repository holds no copyrighted media and you can change any parameter. The key ID and key are fixed, published test values.
+
+<Snippet title="Test Key And Clear Source" explain="Both values are 16 bytes written as 32 hex characters, the form packagers print and drm.js accepts. These are TEST ONLY: anyone reading this lesson knows them. The source is 4 seconds of testsrc2 video plus a sine tone, with no B-frames and a keyframe every second." file="drm-practical/lab.sh" region="keys" />
+
+<Snippet title="Clear Source" explain="A small H.264 and AAC file. It is deleted at the end of the script, which keeps only the encrypted outputs in media/." file="drm-practical/lab.sh" region="clear-source" />
+
+FFmpeg's `mov` muxer can apply CENC itself. Video and audio are written as separate files, each with a single `moof` fragment.
+
+<Snippet title="Encrypt Each Track" explain="-encryption_scheme cenc-aes-ctr selects AES-CTR CENC, and -encryption_kid sets default_KID in tenc. Both tracks use the same KID and key to keep the lesson to a single licence. The comment records why there is exactly one fragment per file." file="drm-practical/lab.sh" region="encrypt" />
+
+Separate files are a deliberate choice. Each track goes into its own `SourceBuffer` anyway, and in testing, this FFmpeg build (8.0.1) produced a muxed file whose second and later fragments had cumulative `senc` and `saiz` tables (fragment 2 listed 50 samples, not 25), which FFmpeg's own decryptor rejected. A single fragment per track avoids that, and a production packager (Shaka Packager, Bento4, a cloud packager) is the right tool for multi-fragment encrypted CMAF.
+
+## Look At The Encryption Boxes
+
+Dump the boxes of `media/video.mp4`. If you have Bento4, `mp4dump` prints them; otherwise a few lines of Node can walk them. This is what the walker printed for the committed files.
+
+- `sinf` appears inside the `encv` (video) and `enca` (audio) sample entries. `frma` reports the original type (`avc1`, `mp4a`) and `schm` reports scheme `cenc`.
+- `tenc` reports `isProtected=1`, an 8-byte per-sample IV, and `default_KID` 00112233445566778899aabbccddeeff.
+- In the `moof`, `senc` lists 100 samples for video. Its flags value is 2, meaning each sample carries subsample ranges: clear NAL headers, encrypted slice data. Audio has flags 0: whole AAC frames are encrypted, so no subsamples. `saiz` and `saio` index the same data.
+- There is no `pssh` box. FFmpeg writes `tenc` and `senc` but no `pssh` for any DRM, and without initialisation data the browser has nothing to put in the `encrypted` event.
+
+That last point matters for any hand-made encrypted file. The fix is to add a `pssh` box ourselves, using the W3C common SystemID `1077efec-c0b2-4d02-ace3-3c1e52e2fb4b`. A version 1 box lists KIDs and needs no payload. Chrome's ClearKey accepts it, and the CDM turns it into a request for that KID.
+
+<Snippet title="Run The Injector" explain="lab.sh calls add-pssh.js once per track with the same KID it passed to FFmpeg." file="drm-practical/lab.sh" region="add-pssh" />
+
+<Snippet title="Inject A Common pssh Box" explain="A pssh box is size, type, version and flags, the 16-byte SystemID, a KID count and KIDs, then a data size (zero here). addPsshToMoov appends it as the last child of moov and grows moov's size field. Nothing else needs fixing up, because moov comes before any moof so no chunk offsets move." file="drm-practical/add-pssh.js" region="add-pssh" />
+
+<Snippet title="Run It And Prove Decryption" explain="lab.sh then proves the encrypted bytes are correct. It remuxes the clear tracks with the same flags, decrypts the encrypted files with FFmpeg and -decryption_key, and compares per-frame MD5 hashes (framemd5). Without the key the hashes must not match. Remuxing the clear source the same way matters: the fragmented files drop AAC's priming edit list, so the original source has one fewer audio frame." file="drm-practical/lab.sh" region="verify" />
+
+Running `./lab.sh` printed:
+
+- video: 100 frames identical after decryption
+- audio: 174 frames identical after decryption
+- encrypted files do not match clear without the key
+
+The committed `media/video.mp4` (about 206 KB) and `media/audio.mp4` (about 36 KB) are the output, so you can run the player without FFmpeg.
+
+## The EME Flow In Code
+
+<Diagram visual="packets" />
+
+The player module `drm.js` carries the EME logic. It is the same module as before, with an optional `log` callback so the page can show each step.
 
 - Request key system access, with both video and audio capabilities, before attaching encrypted media.
 - Attach MediaKeys to the video element.
 - Audio and video each fire encrypted, often with identical initData, so create one session per distinct initData (keyed by its base64) rather than per event.
 - In the session's message handler, parse the request JSON (\{ kids, type \}) and update the session with a JWK set containing only the requested keys: \{ keys: \[\{ kty: "oct", kid, k \}\], type: "temporary" \}.
 
-<Diagram visual="packets" />
+<Snippet title="Access And MediaKeys" explain="The ClearKey key system name is org.w3.clearkey. The configuration asks for cenc init data and both capabilities. After setMediaKeys the video element can hand encrypted samples to the CDM." file="drm-practical/drm.js" region="request-access" />
 
-<Snippet title="drm.js" explain="This is the smallest useful EME shape. It creates one session per distinct initData, answers the license request with only the keys the CDM asked for, and requests both video and audio capabilities. Production DRM replaces createClearKeyLicense with a license server fetch." file="drm-practical/drm.js" />
+<Snippet title="The encrypted Handler" explain="Each encrypted event is logged, deduplicated by initData, and turned into at most one session. The message handler answers the licence request locally, and keystatuseschange logs each kid and its status." file="drm-practical/drm.js" region="encrypted-handler" />
 
-<Checkpoint slug="drm-practical" files={["drm.js"]} note="No runnable page yet: a ClearKey-encrypted test asset arrives in a later DRM chunk. For now this checkpoint is a module you can exercise from the console.">
+<Snippet title="Building The Licence" explain="Both kid and k in a ClearKey JWK must be base64url (no padding) of the raw 16-byte values. createClearKeyLicense filters to the kids the CDM asked for and throws if none are known." file="drm-practical/drm.js" region="license-builder" />
 
-- node --check passes on drm.js, and it imports cleanly as an ES module in the browser console on localhost or HTTPS.
-- hexToBase64Url("00112233445566778899aabbccddeeff") returns "ABEiM0RVZneImaq7zN3u_w": 22 characters, no padding, no + or /.
-- hexToBase64Url throws for anything that is not 32 hex characters.
-- createClearKeyLicense returns JSON bytes shaped like \{"keys":\[\{"kty":"oct","kid":...,"k":...\}\],"type":"temporary"\} for a requested kid it knows, and throws for an unknown kid.
+<Snippet title="Hex To base64url" explain="If you hold kid and key as 32-character hex strings, as most packaging tools print them, convert with this helper. Plain base64 or hex in those JWK fields makes the CDM reject the licence." file="drm-practical/drm.js" region="hex-to-base64url" />
+
+In a real service, `createClearKeyLicense` is replaced by a `fetch` to a licence server, with an authorisation token, as described in the theory lesson.
+
+## The Player Page
+
+`player.js` installs ClearKey first, because the `encrypted` event can fire as soon as the first encrypted bytes are parsed. It then creates a `MediaSource`, adds one `SourceBuffer` for each track, and appends each whole file. A fragmented file that has an init segment followed by one fragment can be appended in a single `appendBuffer` call.
+
+<Snippet title="Test Key And Tracks" explain="The page holds the same test KID and key as lab.sh, plus the MIME type and URL for each track. The codec strings must match the files: avc1.64001f is High profile level 3.1 and mp4a.40.2 is AAC-LC." file="drm-practical/player.js" region="test-key" />
+
+<Snippet title="Start Playback" explain="start installs EME, opens a MediaSource, then fetches and appends both tracks and ends the stream. Every step writes to the on-page log, so you can read the EME lifecycle alongside the video." file="drm-practical/player.js" region="start" />
+
+<Checkpoint slug="drm-practical" run files={["index.html","player.js","drm.js","lab.sh","add-pssh.js"]} note="Serve the repository from localhost or HTTPS. EME is unavailable on plain http:// hosts and file:// URLs. The first play needs a browser with ClearKey, such as Chrome, Edge or Firefox.">
+
+- The log shows "key system org.w3.clearkey ready, MediaKeys attached" before any append line.
+- An encrypted event appears with initDataType "cenc" and 52 bytes, the size of the pssh box. It appears twice (video and audio) but only one session is created.
+- The log shows a message of type "license-request" whose JSON contains the kid ABEiM0RVZneImaq7zN3u_w, then "session.update() resolved".
+- keystatuseschange lists kid 00112233445566778899aabbccddeeff as "usable".
+- Both files append, the log says the duration is about 4 seconds, and pressing play shows the test pattern with a running timer, with the video playing to the end.
+- Run ./lab.sh in the checkpoint directory (it needs ffmpeg and node): it prints "100 frames identical" for video and "174 frames identical" for audio.
 
 </Checkpoint>
 
-<Exercise title="Test The License Builder">
+<Exercise title="Break The Key, Then Rotate It">
 
-In a scratch module or the browser console, import drm.js and build a key table with one kid and key using hexToBase64Url. Encode a request message with TextEncoder as \{"kids":\[\<base64url kid>\],"type":"temporary"\}.
+First change the key in `player.js` to a different 32-character hex string and reload. Observe the log: the licence request is still answered, because the kid matches, but the key is wrong. Note whether the video decodes or shows corrupt frames or errors, and whether `keystatuseschange` still reports "usable".
 
-Call createClearKeyLicense and decode the result. Then request an unknown kid and confirm it throws, and explain why filtering to known kids matters.
+Then restore the key and change only the kid in `TEST_KEYS`. The CDM asks for kid ABEiM0RVZneImaq7zN3u_w, `createClearKeyLicense` finds no match and throws, and the session never reaches a usable state. Compare the console error with the first case, then explain why a ClearKey CDM cannot tell you in advance that a key is wrong.
 
-<Hint>keyTable is a Map from base64url kid to base64url key, exactly as installClearKey builds it. new TextDecoder().decode(result) gives you the JSON to read.</Hint>
+<Hint>A CDM checks only that the licence is well formed and names the requested kid, not that the key will decrypt anything. AES-CTR decrypts any bytes with any key and produces garbage. A wrong key therefore shows up as a decode error or corrupted picture, not as a key status. A missing kid never creates a key at all.</Hint>
 
 </Exercise>
 

@@ -2,21 +2,199 @@
 slug: "drm-theory"
 title: "DRM And EME"
 kind: "Theory"
-summary: "Understand encrypted media at the browser boundary without hiding the moving parts."
-outcome: "You understand init data, key systems, MediaKeys, sessions, licenses, and ClearKey limitations."
+summary: "Understand encrypted media from the packager to the browser's CDM: Common Encryption, pssh, key systems, the EME flow, robustness and licence servers."
+outcome: "You can read the encryption metadata in an MP4, describe the EME licence round trip, and reason about key systems, schemes, robustness and licence policy."
 reference: "https://developer.mozilla.org/en-US/docs/Web/API/Navigator/requestMediaKeySystemAccess"
 ---
 
-## Encrypted Media Extensions
+## What EME Is, And Is Not
 
-EME does not decrypt media in your JavaScript. It lets JavaScript negotiate with a browser CDM, attach MediaKeys to a media element, and pass license messages between the CDM and a license service.
+Encrypted Media Extensions is a small API that lets JavaScript negotiate with a Content Decryption Module (CDM) built into, or supplied with, the browser or operating system. JavaScript never sees the keys or the clear samples. The CDM decrypts inside the media pipeline, and in the strongest configurations the clear data never leaves a hardware-protected path between the decryptor, the decoder and the display.
 
-ClearKey is useful for learning because keys can be provided directly. Production DRM systems such as Widevine, PlayReady, and FairPlay require provider-specific license services and packaging.
+EME is therefore a message broker, not a cipher. Your page does four jobs: pick a key system the device supports, attach `MediaKeys` to the `video` element, forward opaque messages between the CDM and a licence server, and react to key status changes. Everything cryptographic and policy-related happens elsewhere.
 
-- Encrypted samples carry metadata that triggers an encrypted event.
-- A MediaKeySession produces a license request message.
-- Playback can continue only after the session receives usable keys.
+- EME does not define a DRM. Each key system (Widevine, PlayReady, FairPlay, ClearKey) defines its own licence format, licence server protocol and security levels.
+- EME does not define the encryption of the media. That is Common Encryption, applied by the packager and parsed by the browser's demuxer.
+- EME does not stop screen capture of an unprotected output, or a determined attacker with a rooted device. It raises the cost of copying and gives rights holders enforceable policy (output protection, resolution caps, licence expiry).
+- EME works with MSE and with plain `src` playback. Encrypted MSE is the usual case for streaming.
 
 <Diagram visual="packets" />
 
-<Demo title="License Round Trip" mode="packets">Encrypted samples cause a key request, the license response unlocks decryption, then decoded frames resume.</Demo>
+## Key Systems And Platforms
+
+A key system is identified by a reverse-DNS string passed to `requestMediaKeySystemAccess`. Availability depends on the browser, the operating system and the hardware, so treat this table as a guide and test your own device matrix.
+
+- Widevine (`com.widevine.alpha`): Google. Chrome and Chromium-based browsers on desktop and Android, Firefox (via a downloaded CDM), most Android TV and many other smart TV and set-top platforms. Software (L3) everywhere, hardware (L1/L2) on supported devices.
+- PlayReady (`com.microsoft.playready`): Microsoft. Edge on Windows, Xbox, and a large share of smart TVs and set-top boxes. SL3000 hardware profiles use the `com.microsoft.playready.recommendation` key system in Edge (check current documentation, as this has changed over time).
+- FairPlay Streaming (`com.apple.fps`): Apple. Safari on macOS, iOS and iPadOS, and Apple TV. The older prefixed `webkitneedkey` API still exists but modern Safari supports standard EME. FairPlay needs an application certificate fetched from Apple and a server-side key security module.
+- ClearKey (`org.w3.clearkey`): a W3C reference system. Licences are plain JSON Web Key sets, so there is no protection at all. It is mandatory for EME implementations, which makes it the right tool for learning and for testing the packaging and player plumbing without a DRM vendor.
+
+Two other things to note. Safari's FairPlay path expects `cbcs` content and its own init data types (`sinf` or `skd`) rather than `cenc` pssh boxes. And on Windows, Edge and Chrome expose different key systems, so a "works in Chrome" test says little about Edge.
+
+## Common Encryption
+
+Common Encryption (CENC, ISO/IEC 23001-7) defines how samples in an ISO BMFF file are encrypted and how the decryption metadata is signalled, independently of the DRM. One encrypted file can therefore carry several `pssh` boxes, one per DRM, and any of those licence servers can issue the same content key.
+
+Two schemes matter, identified by a four-character code in the `schm` box.
+
+- `cenc`: AES-128 in CTR mode. Every encrypted byte is XORed with a keystream derived from a per-sample IV and the byte offset. The whole sample, or the encrypted ranges within it, are encrypted. Used first by Widevine, PlayReady and ClearKey.
+- `cbcs`: AES-128 in CBC mode with pattern encryption. For video, only 1 block of 16 bytes in every 10 is encrypted (a 1:9 crypt/skip pattern), which cuts decryption cost and tolerates partial-block ends. Audio is normally fully encrypted. IVs are usually constant for the whole track. FairPlay requires `cbcs`.
+
+Two more schemes exist (`cens`, `cbc1`) but are rarely seen in practice.
+
+Because Apple needs `cbcs`, a single `cbcs` CMAF set can in principle be served to Widevine, PlayReady and FairPlay devices, which halves storage and CDN footprint compared with `cenc` plus `cbcs` copies. Support for `cbcs` in current Widevine and PlayReady implementations is broad, but older devices and some embedded CDMs accept only `cenc`. Check each target device family, and expect to keep a second `cenc` rendition if you must support legacy hardware. Query support at runtime rather than guessing, as shown in the EME flow below (`encryptionScheme` in the capability, where supported).
+
+### Subsample Encryption
+
+Encrypting a whole H.264 or HEVC sample would hide the NAL unit headers and slice headers the decoder needs to find the data. Instead, CENC lets each sample be described as a list of subsamples, each with a clear byte count followed by an encrypted byte count. For video, the NAL length prefix and header (and in `cbcs`, usually the slice header) stay clear and the slice payload is encrypted. The CDM and the demuxer can see the structure without a key, which also lets players parse and seek encrypted media.
+
+For audio, AAC frames are commonly encrypted in full, so there are no subsamples: the `senc` flag for subsample information is clear, exactly as you will see in the practical lesson.
+
+### The Boxes
+
+- `sinf` inside the sample entry: the protection scheme information. The original sample entry type is saved in `frma` (for example `avc1`), and the visible entry type becomes `encv` or `enca`.
+- `schm`: names the scheme (`cenc`, `cbcs`) and version.
+- `tenc` (track encryption): defaults for the track, including `default_isProtected`, the per-sample IV size (8 or 16 bytes), and `default_KID`, the 16-byte key identifier. For `cbcs` it also carries the crypt and skip pattern and a constant IV.
+- `senc` (sample encryption) in each `traf`: per-sample IVs and optional subsample lists. Without it, a player cannot decrypt.
+- `saiz` and `saio`: sizes and offsets of the same auxiliary information, locating it independently of `senc`. Both may be present.
+- `pssh` (protection system specific header): in the `moov` and optionally in `moof`. It contains a SystemID that names a DRM and an opaque payload for that DRM. Version 1 can also list KIDs.
+
+Key identifiers are not keys. The KID is a public label (typically a UUID) the licence server uses to look up the key. Players use the KID to ask for the right key and to know when a track needs a different one.
+
+### System IDs
+
+Each DRM has a registered SystemID that appears in `pssh` boxes, in DASH `ContentProtection` elements and in HLS `KEYFORMAT`.
+
+- Widevine: `edef8ba9-79d6-4ace-a3c8-27dcd51d21ed`
+- PlayReady: `9a04f079-9840-4286-ab92-e65be0885f95`
+- FairPlay: `94ce86fb-07ff-4f43-adb8-93d2fa968ca2`
+- W3C common PSSH box (ClearKey in browsers, and a generic carrier for KID lists): `1077efec-c0b2-4d02-ace3-3c1e52e2fb4b`
+- DASH-IF ClearKey: `e2719d58-a985-b3c9-781a-b030af78d30e`, used with a licence server URL rather than a pssh payload.
+
+## Signalling In Manifests
+
+The manifest tells a player which DRMs are available before it downloads a byte of media, so it can choose a key system and send the right initialisation data.
+
+<Snippet title="DASH ContentProtection" explain="One mp4protection element announces that the content uses Common Encryption, with the default KID and scheme. Then each DRM adds its own urn:uuid element, optionally with an inline cenc:pssh payload so the player can start the licence request without waiting for the init segment.">
+
+```xml
+<AdaptationSet contentType="video" mimeType="video/mp4">
+  <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011"
+                     value="cenc"
+                     cenc:default_KID="00112233-4455-6677-8899-aabbccddeeff"/>
+  <ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed">
+    <cenc:pssh>AAAA...base64 pssh box...</cenc:pssh>
+  </ContentProtection>
+  <ContentProtection schemeIdUri="urn:uuid:9a04f079-9840-4286-ab92-e65be0885f95">
+    <mspr:pro>...base64 PlayReady object...</mspr:pro>
+  </ContentProtection>
+  ...
+</AdaptationSet>
+```
+
+</Snippet>
+
+The `value` is `cenc` or `cbcs`. In HLS the equivalent is the `#EXT-X-KEY` tag, and the `METHOD` selects the scheme.
+
+<Snippet title="HLS EXT-X-KEY" explain="SAMPLE-AES with fMP4 means cbcs. SAMPLE-AES-CTR is the cenc equivalent, but few players support it, so cenc over HLS is rare. KEYFORMAT selects the DRM and the URI carries what that DRM needs (a skd:// key URI for FairPlay, a data URI containing a pssh box for Widevine).">
+
+```text
+#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://key-id",KEYFORMAT="com.apple.streamingkeydelivery",KEYFORMATVERSIONS="1"
+#EXT-X-KEY:METHOD=SAMPLE-AES,URI="data:text/plain;base64,AAAA...",KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",KEYFORMATVERSIONS="1"
+#EXT-X-KEY:METHOD=SAMPLE-AES-CTR,URI="data:text/plain;base64,AAAA...",KEYFORMAT="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed",KEYFORMATVERSIONS="1"
+```
+
+</Snippet>
+
+The player's choice of key system decides which `KEYFORMAT` entry it uses. Safari ignores formats it does not recognise, so the same playlist can carry several.
+
+## The EME Flow
+
+<Snippet title="The Standard Sequence" explain="This is the whole life of an EME session. Capabilities are checked once, MediaKeys are attached once, and each distinct initData produces a session whose message events are the licence round trip. A real player replaces the commented fetch with a call to its licence server.">
+
+```js
+const config = [{
+  initDataTypes: ["cenc"],
+  videoCapabilities: [{
+    contentType: 'video/mp4; codecs="avc1.64001f"',
+    robustness: "SW_SECURE_DECODE"
+  }],
+  audioCapabilities: [{
+    contentType: 'audio/mp4; codecs="mp4a.40.2"',
+    robustness: "SW_SECURE_CRYPTO"
+  }],
+  persistentState: "optional",
+  sessionTypes: ["temporary"]
+}];
+
+const access = await navigator.requestMediaKeySystemAccess("com.widevine.alpha", config);
+const mediaKeys = await access.createMediaKeys();
+await video.setMediaKeys(mediaKeys);
+
+video.addEventListener("encrypted", async (event) => {
+  const session = mediaKeys.createSession("temporary");
+  session.addEventListener("message", async ({ message, messageType }) => {
+    // messageType: "license-request" | "license-renewal" | "license-release" | "individualization-request"
+    const response = await fetch(LICENSE_URL, { method: "POST", body: message, headers: { Authorization: token } });
+    await session.update(await response.arrayBuffer());
+  });
+  session.addEventListener("keystatuseschange", () => {
+    for (const [keyId, status] of session.keyStatuses) console.log(status);
+  });
+  await session.generateRequest(event.initDataType, event.initData);
+});
+```
+
+</Snippet>
+
+Step by step:
+
+- `requestMediaKeySystemAccess(keySystem, configs)` resolves with the first configuration the device can satisfy, or rejects. Capabilities name the MIME type and codecs, and `robustness` is a key-system-specific string. The returned `getConfiguration()` tells you what you actually got, so inspect it rather than assuming. Recent Chromium versions also accept `encryptionScheme` (`cenc` or `cbcs`) on a capability, which lets you ask whether the CDM supports a scheme before you commit to a rendition. This property is not available everywhere, so treat it as an optional probe.
+- `createMediaKeys()` then `video.setMediaKeys()` binds a CDM instance to the element. Do this before encrypted samples arrive or the media pipeline stalls waiting for it.
+- The `encrypted` event fires on the media element when the demuxer finds encrypted data. It carries `initDataType` (`cenc`, `keyids`, `webm`, or for Safari FairPlay `sinf`/`skd`) and the `initData`, which for `cenc` is the concatenated `pssh` boxes. In MSE the event arrives after the init segment is appended.
+- `createSession()` and `generateRequest(initDataType, initData)` ask the CDM to produce a licence request. The `message` event delivers it.
+- The licence server returns bytes that you pass to `session.update()`. The CDM validates, extracts keys and policy, and reports each key's status in `keyStatuses`, firing `keystatuseschange`.
+- Playback proceeds once the needed keys are `usable`.
+
+Key statuses are: `usable`, `expired`, `released`, `output-restricted`, `output-downscaled`, `status-pending` and `internal-error`. A track whose key is `output-restricted` or `output-downscaled` is the browser applying policy, for example because an HDCP link is below the required version.
+
+Audio and video usually share the same `pssh` data, so you will see more than one `encrypted` event with identical `initData`. Create one session per distinct value, as the practical lesson's `drm.js` does. A mismatch (separate KIDs per track, or per-resolution keys) produces separate licence requests, and the licence server decides which keys to return for each.
+
+### Persistent Sessions And Offline Playback
+
+A `temporary` session dies with the page or `MediaKeys`. A `persistent-license` session stores the licence in the CDM's storage so playback can resume without a server round trip. It needs `persistentState: "required"` and `sessionTypes: ["persistent-license"]` in the capability, then later `session.load(savedSessionId)`. Always `close()` and `remove()` sessions you no longer need, since `remove()` produces a `license-release` message the server can use to confirm that the offline licence is gone. Persistent sessions are well supported by Widevine on Chromium and Android, but not guaranteed for every key system and device, and browsers may clear the storage at will.
+
+### Server Certificates And Individualisation
+
+Some key systems need extra messages. FairPlay requires an application certificate set with `mediaKeys.setServerCertificate()` before a session. Widevine can use one to encrypt client identifying information (privacy mode). Widevine and PlayReady may emit an `individualization-request` message the first time a CDM instance runs, which the player forwards to the provider's server, not the licence server.
+
+## Robustness, HDCP And Output Protection
+
+Robustness describes how well the CDM and platform defend the keys and decoded media. Studios license content on condition that high resolutions use a high robustness level.
+
+- Widevine levels: L3 is software only (strings `SW_SECURE_CRYPTO`, `SW_SECURE_DECODE`). L2 does crypto in hardware, with video processed in software (`HW_SECURE_CRYPTO`). L1 does all processing in a trusted execution environment (`HW_SECURE_DECODE`, `HW_SECURE_ALL`). Licence servers typically cap SD or HD at L3 and require L1 for HD and UHD. Desktop browsers mostly offer L3. L1 is common on Android and TVs.
+- PlayReady levels: SL150 (test), SL2000 (software or hardware, the general commercial level) and SL3000 (hardware only, required for most 4K and HDR). Robustness is expressed in `requestMediaKeySystemAccess` through the key system name and strings such as `3000`.
+- FairPlay does not expose robustness levels through EME. Device capability is handled in the server-side policy.
+
+HDCP and output protection restrict what a display chain may do. A licence can require HDCP 1.4 or 2.2 on digital outputs before a resolution is allowed. The CDM reports violations as `output-restricted` or `output-downscaled` key status. In Chromium-based browsers you can probe in advance using `mediaKeys.getStatusForPolicy({ minHdcpVersion: "2.2" })`, which resolves with a status such as `usable` or `output-restricted`. That method is not available in all browsers, and the MDN compatibility table is the place to check current support before relying on it.
+
+## Licence Server Concerns
+
+The licence server is where business rules live. Even a basic deployment needs to settle these questions.
+
+- Authentication: the browser calls the licence URL, so the request must be tied to an entitlement. Common approaches are a short-lived signed token (a JWT) in a header or query string, or a token embedded in the licence request itself. Cookies are fragile cross-origin. Never expose a permanent API credential in client code.
+- Key lookup and rotation: the server maps a KID to a key. Key rotation changes the KID at intervals (each period has its own KID in `senc`/`tenc` or in `moof`-level `pssh`), limiting damage from a single leaked key. The player sees new `encrypted` events or key status changes at period boundaries, and the licence must authorise every KID in the stream.
+- Policy: licence duration, playback duration after first play, renewal interval, minimum robustness, resolution per robustness, output protection, and persistence rules are all properties of the licence, enforced by the CDM.
+- Concurrency and stream limits: the server counts active sessions per user or device, usually with renewal messages as a heartbeat. Be careful to release sessions on stop and handle denial gracefully.
+- Offline: persistent licences need a longer lease and a release path. Plan for devices that never come back to confirm release.
+- Latency: licence requests sit on the critical path to first frame. Prefetch licences when possible, put the server close to users and keep responses small.
+
+## Failure Modes
+
+- `requestMediaKeySystemAccess` rejects: the key system, scheme or robustness is unsupported. Retry with a lower robustness or another key system, as production players do.
+- No `encrypted` event: the init segment lacks a usable `pssh` for the key system, or `setMediaKeys` ran too late. This lab's FFmpeg output hit exactly this.
+- Black video with a `usable` key: the wrong key or scheme, or a subsample map that does not match the data.
+- `output-restricted`: HDCP or a display attribute does not satisfy the licence policy.
+- DRM works on desktop but not on a TV: the TV's CDM supports different init data, schemes or robustness. Test on real devices.
+
+<Demo title="License Round Trip" mode="packets">Encrypted samples cause a key request, the licence response unlocks decryption, then decoded frames resume.</Demo>
