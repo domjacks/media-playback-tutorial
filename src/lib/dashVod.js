@@ -37,6 +37,32 @@ export function chooseRepresentation(representations, { throughputBps = estimate
   return sorted.filter((representation) => representation.bandwidth <= budget).at(-1) ?? sorted[0];
 }
 
+export function chooseRuntimeRepresentation(representations, current, { throughputBps, bufferSeconds }) {
+  const playable = representations
+    .filter((representation) => canPlay(representation.mime) && (!current || representation.mime === current.mime))
+    .sort((a, b) => a.bandwidth - b.bandwidth);
+  const sorted = playable.length
+    ? playable
+    : [...representations]
+      .filter((representation) => !current || representation.mime === current.mime)
+      .sort((a, b) => a.bandwidth - b.bandwidth);
+  const safety = bufferSeconds < 6 ? 0.55 : bufferSeconds < 14 ? 0.7 : 0.85;
+  const budget = throughputBps * safety;
+  const candidate = sorted.filter((representation) => representation.bandwidth <= budget).at(-1) ?? sorted[0];
+
+  if (!current || candidate.bandwidth < current.bandwidth) {
+    return candidate;
+  }
+
+  const currentIndex = sorted.findIndex((representation) => representation.id === current.id);
+  const candidateIndex = sorted.findIndex((representation) => representation.id === candidate.id);
+  if (currentIndex < 0 || candidateIndex <= currentIndex) {
+    return current;
+  }
+
+  return sorted[Math.min(currentIndex + 1, sorted.length - 1)];
+}
+
 export function chooseAudioRepresentation(representations) {
   const playable = representations
     .filter((representation) => canPlay(representation.mime))
@@ -47,6 +73,20 @@ export function chooseAudioRepresentation(representations) {
 
 export function estimateInitialThroughput() {
   return navigator.connection?.downlink ? navigator.connection.downlink * 1_000_000 : 2_500_000;
+}
+
+export function createEwma(initialEstimate, weight = 0.35) {
+  let estimate = initialEstimate;
+
+  return {
+    sample(value) {
+      estimate = estimate * (1 - weight) + value * weight;
+      return estimate;
+    },
+    value() {
+      return estimate;
+    }
+  };
 }
 
 export async function measureFetch(url) {

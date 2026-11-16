@@ -810,7 +810,7 @@ console.log(MediaSource.isTypeSupported(audioBuffer));`
     slug: "inspect-mp4-containers",
     title: "Inspect MP4 Containers",
     kind: "Practical",
-    summary: "Use FFprobe and optional MP4 box tools to inspect tracks, packets, timestamps, keyframes, and MP4 box structure.",
+    summary: "Use FFprobe and Bento4 mp4dump to inspect tracks, packets, timestamps, keyframes, and MP4 box structure.",
     reference: "https://ffmpeg.org/ffprobe.html",
     blocks: [
       {
@@ -818,13 +818,23 @@ console.log(MediaSource.isTypeSupported(audioBuffer));`
         heading: "Inspect The Container, Not Just The Codec",
         body: [
           "The previous labs created encoded audio and video. This lab looks at how the MP4 container describes those encoded samples as tracks, packets, timestamps, durations, and byte-addressed payload.",
-          "FFprobe does not show every MP4 box in the same way a dedicated MP4 parser does, but it is excellent for stream, packet, frame, and timing inspection. If you install Bento4, mp4dump can show the box tree directly."
+          "FFprobe is excellent for stream, packet, frame, and timing inspection. Bento4's mp4dump complements it by showing the MP4 box tree directly, which is how you inspect ftyp, moov, trak, mdia, and mdat as container structures."
         ],
         points: [
           "Streams are logical tracks such as video and audio.",
           "Packets are encoded chunks with timestamps and sizes.",
-          "Frames are decoded pictures or audio frames exposed by the demuxer/decoder path."
+          "Frames are decoded pictures or audio frames exposed by the demuxer/decoder path.",
+          "mp4dump exposes the MP4 box hierarchy that FFprobe abstracts away."
         ]
+      },
+      {
+        type: "code",
+        title: "Check The Tools",
+        explain: "This lab expects FFmpeg, FFprobe, and Bento4's mp4dump to be available on your command line.",
+        code: `
+ffmpeg -version
+ffprobe -version
+mp4dump --version`
       },
       {
         type: "code",
@@ -877,10 +887,10 @@ ffprobe -v error \\
       },
       {
         type: "text",
-        heading: "Optional Box Tree Inspection",
+        heading: "Box Tree Inspection",
         body: [
-          "FFprobe gives you stream and packet information. To inspect MP4 boxes directly, install Bento4 and use mp4dump. That lets you see ftyp, moov, mvhd, trak, tkhd, mdia, and mdat as container boxes.",
-          "This is optional because FFmpeg is enough for the rest of the tutorial. Box dumps are useful when you need to debug malformed MP4s, metadata placement, timescales, or fragmented output."
+          "FFprobe gives you stream and packet information. mp4dump gives you the MP4 box tree. Use both views together: FFprobe shows what the media means to a demuxer, while mp4dump shows how the file is actually structured.",
+          "Box dumps are useful when you need to debug malformed MP4s, metadata placement, timescales, missing track metadata, or fragmented output."
         ],
         points: [
           "ftyp identifies brands and compatibility.",
@@ -891,8 +901,8 @@ ffprobe -v error \\
       },
       {
         type: "code",
-        title: "Optional: mp4dump",
-        explain: "If Bento4 is installed, this prints the MP4 box tree. The command is optional and may not exist on every machine.",
+        title: "Inspect The MP4 Box Tree",
+        explain: "This prints the MP4 box tree. Look for ftyp, moov, mvhd, trak, tkhd, mdia, and mdat.",
         code: `
 mp4dump lab/container-faststart.mp4 | head -80`
       },
@@ -903,7 +913,7 @@ mp4dump lab/container-faststart.mp4 | head -80`
         text: "A container maps encoded packets to tracks, timestamps, byte sizes, keyframes, and presentation order."
       }
     ],
-    outcome: "You can inspect an MP4 as streams, packets, frames, timestamps, keyframes, and optionally as a box tree."
+    outcome: "You can inspect an MP4 as streams, packets, frames, timestamps, keyframes, and a concrete MP4 box tree."
   },
   {
     slug: "fragmented-mp4-cmaf",
@@ -1079,8 +1089,8 @@ ffprobe -hide_banner -show_format -show_streams lab/fragmented.mp4`
       },
       {
         type: "code",
-        title: "Optional: Inspect Fragment Boxes",
-        explain: "If Bento4 is installed, look for ftyp, moov, repeated moof boxes, and mdat payload boxes.",
+        title: "Inspect Fragment Boxes",
+        explain: "Use mp4dump to inspect the fragmented MP4. Look for ftyp, moov, repeated moof boxes, and mdat payload boxes.",
         code: `
 mp4dump lab/fragmented.mp4 | head -120`
       },
@@ -1623,6 +1633,144 @@ async function fetchBytes(url) {
     outcome: "A plain HTML page and ESM module append remote Big Buck Bunny audio/video bytes to SourceBuffers."
   },
   {
+    slug: "mse-debugging",
+    title: "MSE Debugging And Failure Modes",
+    kind: "Theory",
+    summary: "Learn how to inspect MSE state, browser media errors, append failures, and timestamp problems when playback does not work.",
+    reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API",
+    blocks: [
+      {
+        type: "text",
+        heading: "Debug State, Not Just Code",
+        body: [
+          "MSE failures often look opaque because the browser owns parsing, decode, buffering, and A/V synchronization. A player engineer needs to inspect state at several layers: the media element, the MediaSource, each SourceBuffer, network requests, and the encoded media itself.",
+          "The fastest debugging path is to ask where the pipeline stopped. Did fetch fail? Did addSourceBuffer reject the MIME string? Did appendBuffer throw? Did updateend never fire? Did bytes append but produce no buffered time? Did buffered time exist but decode fail?"
+        ],
+        points: [
+          "HTMLMediaElement exposes playback state and final media errors.",
+          "MediaSource exposes whether the append pipeline is open, ended, or closed.",
+          "SourceBuffer exposes whether an append or remove operation is still updating."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "buffer"
+      },
+      {
+        type: "code",
+        title: "Log The Browser Media State",
+        explain: "Start with the media element because it tells you whether the browser thinks it has data, can play, is waiting, or has hit a fatal error.",
+        code: `
+const video = document.querySelector("video");
+
+for (const eventName of ["loadedmetadata", "canplay", "waiting", "stalled", "error"]) {
+  video.addEventListener(eventName, () => {
+    console.log(eventName, {
+      currentTime: video.currentTime,
+      readyState: video.readyState,
+      networkState: video.networkState,
+      error: video.error?.message ?? video.error?.code
+    });
+    logRanges("buffered", video.buffered);
+    logRanges("seekable", video.seekable);
+  });
+}
+
+function logRanges(label, ranges) {
+  console.log(label, Array.from({ length: ranges.length }, (_, i) => [
+    ranges.start(i),
+    ranges.end(i)
+  ]));
+}`
+      },
+      {
+        type: "text",
+        heading: "SourceBuffer Rules",
+        body: [
+          "A SourceBuffer is strict. You cannot append while it is updating. You cannot append bytes with a MIME type or codec the browser does not support. You cannot rely on downloaded bytes becoming playable time if the timestamps are missing, discontinuous, overlapping in the wrong way, or incompatible with previous appends.",
+          "Most MSE bugs fall into a small set: wrong codec string, missing init segment, append called while updating, media segments appended out of order, timestamp gaps, quota pressure, or a decode error in the media bytes."
+        ],
+        points: [
+          "Check MediaSource.isTypeSupported before addSourceBuffer.",
+          "Append initialization data before media fragments.",
+          "Wait for updateend before appending the next chunk.",
+          "Inspect buffered ranges after append; do not assume bytes equal playable time."
+        ]
+      },
+      {
+        type: "code",
+        title: "Guard Append Operations",
+        explain: "This wrapper makes append failures visible and logs useful SourceBuffer state.",
+        code: `
+function appendBufferChecked(sourceBuffer, bytes, label) {
+  if (sourceBuffer.updating) {
+    throw new Error(\`\${label}: SourceBuffer is still updating\`);
+  }
+
+  return new Promise((resolve, reject) => {
+    sourceBuffer.addEventListener("updateend", resolve, { once: true });
+    sourceBuffer.addEventListener("error", () => reject(new Error(\`\${label}: SourceBuffer error\`)), { once: true });
+    sourceBuffer.addEventListener("abort", () => reject(new Error(\`\${label}: SourceBuffer abort\`)), { once: true });
+
+    try {
+      sourceBuffer.appendBuffer(bytes);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}`
+      },
+      {
+        type: "text",
+        heading: "Common Failure Modes",
+        body: [
+          "Unsupported codec strings usually fail at addSourceBuffer or decode. CORS and HTTP errors fail before append. QuotaExceededError means the browser refused more buffered data, usually because the player appended too much without removing old ranges. Timestamp gaps can append successfully but create disjoint buffered ranges that stall at the gap.",
+          "DevTools is part of the workflow. Use the Network panel to inspect status codes, CORS headers, Content-Type, range requests, and segment sizes. Use the Media panel to inspect ready state, buffered ranges, errors, and selected tracks."
+        ],
+        points: [
+          "If addSourceBuffer throws, check MIME and codec strings first.",
+          "If fetch throws, check URL resolution, CORS, status code, and content type.",
+          "If append throws QuotaExceededError, remove old buffered media or reduce buffer target.",
+          "If playback stalls with buffered data, inspect gaps and A/V alignment."
+        ]
+      },
+      {
+        type: "code",
+        title: "Check Support Before Appending",
+        explain: "Make unsupported codec problems explicit instead of letting them fail later in the pipeline.",
+        code: `
+function requireSupported(mime) {
+  if (!MediaSource.isTypeSupported(mime)) {
+    throw new Error(\`Unsupported SourceBuffer type: \${mime}\`);
+  }
+}
+
+requireSupported('video/mp4; codecs="avc1.64001f"');
+requireSupported('audio/mp4; codecs="mp4a.40.2"');`
+      },
+      {
+        type: "text",
+        heading: "When Bytes Append But Playback Fails",
+        body: [
+          "The hardest class of bugs happens after appendBuffer succeeds. That only proves the browser accepted bytes for parsing. It does not prove the decoded samples form a continuous, synchronized timeline.",
+          "At that point, inspect media structure. Use ffprobe, mp4dump, or browser DevTools to check whether init segments match media segments, whether decode and presentation timestamps are continuous, whether the segment starts with a usable random access point, and whether audio and video describe the same timeline."
+        ],
+        points: [
+          "Successful append is not the same as successful decode.",
+          "Continuous video without matching audio can still stall.",
+          "A gap in TimeRanges is usually a timestamp or missing-segment problem."
+        ]
+      },
+      {
+        type: "demo",
+        title: "Failure Pipeline",
+        mode: "buffer",
+        text: "Debug MSE by locating the failed stage: network, MIME support, append sequencing, timestamp continuity, decode, or playback state."
+      }
+    ],
+    outcome: "You can inspect MSE playback failures using media element state, MediaSource state, SourceBuffer events, buffered ranges, DevTools, and media-file inspection."
+  },
+  {
     slug: "protocols",
     title: "Streaming Protocols",
     kind: "Theory",
@@ -2078,13 +2226,123 @@ await Promise.all([
 ]);`
       },
       {
+        type: "text",
+        heading: "Runtime ABR",
+        body: [
+          "Runtime ABR repeats the decision while playback is already running. Instead of building one segment queue for one selected video Representation, the player chooses a representation for each future segment request. The decision uses measured throughput, current buffer depth, the current representation, and switching rules.",
+          "The goal is stability, not always maximum quality. A runtime algorithm should switch down quickly when throughput or buffer depth becomes risky, and switch up more slowly so it does not oscillate between qualities."
+        ],
+        points: [
+          "Measure every segment download and smooth the result.",
+          "Use buffer depth to decide how much risk is acceptable.",
+          "Only switch between compatible, aligned representations.",
+          "Avoid switching up unless the higher representation has been affordable for multiple decisions."
+        ]
+      },
+      {
+        type: "code",
+        title: "Smooth Throughput With EWMA",
+        explain: "A single segment download can be noisy. EWMA gives recent measurements more weight while preserving some history.",
+        code: `
+export function createEwma(initialEstimate, weight = 0.35) {
+  let estimate = initialEstimate;
+
+  return {
+    sample(value) {
+      estimate = estimate * (1 - weight) + value * weight;
+      return estimate;
+    },
+    value() {
+      return estimate;
+    }
+  };
+}`
+      },
+      {
+        type: "code",
+        title: "Measure Buffer Depth",
+        explain: "Runtime ABR needs playable seconds ahead of currentTime, not downloaded bytes.",
+        code: `
+function bufferAhead(video) {
+  for (let i = 0; i < video.buffered.length; i += 1) {
+    const start = video.buffered.start(i);
+    const end = video.buffered.end(i);
+    if (start <= video.currentTime && video.currentTime <= end) {
+      return end - video.currentTime;
+    }
+  }
+
+  return 0;
+}`
+      },
+      {
+        type: "code",
+        title: "Runtime Representation Choice",
+        explain: "This keeps the startup selector but adds switch-down urgency and switch-up caution.",
+        code: `
+function chooseRuntimeRepresentation(representations, current, state) {
+  const sorted = [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
+  const bufferSeconds = state.bufferSeconds;
+  const budget = state.throughputBps * (bufferSeconds < 6 ? 0.55 : bufferSeconds < 14 ? 0.7 : 0.85);
+  const affordable = sorted.filter((rep) => rep.bandwidth <= budget);
+  const candidate = affordable.at(-1) ?? sorted[0];
+
+  if (candidate.bandwidth < current.bandwidth) {
+    return candidate; // switch down immediately
+  }
+
+  const currentIndex = sorted.findIndex((rep) => rep.id === current.id);
+  const candidateIndex = sorted.findIndex((rep) => rep.id === candidate.id);
+  const maxStepUp = sorted[Math.min(currentIndex + 1, sorted.length - 1)];
+
+  return candidateIndex > currentIndex ? maxStepUp : current;
+}`
+      },
+      {
+        type: "code",
+        title: "Segment-By-Segment ABR Loop",
+        explain: "The player chooses the video representation before each segment request, then measures the result for the next decision.",
+        code: `
+const throughput = createEwma(estimateInitialThroughput());
+let currentVideo = chooseRepresentation(dash.representations.video, {
+  throughputBps: throughput.value(),
+  bufferSeconds: 0
+});
+
+for (let index = 0; index < currentVideo.segments.length; index += 1) {
+  currentVideo = chooseRuntimeRepresentation(dash.representations.video, currentVideo, {
+    throughputBps: throughput.value(),
+    bufferSeconds: bufferAhead(video)
+  });
+
+  const segment = currentVideo.segments[index];
+  const result = await measureFetch(segment.url);
+  throughput.sample(result.throughputBps);
+  await appendBufferChecked(videoBuffer, result.bytes, \`video segment \${segment.number}\`);
+}`
+      },
+      {
+        type: "text",
+        heading: "Runtime Switching Constraints",
+        body: [
+          "The simplified loop assumes every Representation has aligned segment timing and compatible codec configuration. A real player checks that the target Representation can be appended into the existing SourceBuffer without changing codec, track configuration, or timestamp continuity in a way the browser rejects.",
+          "Runtime ABR also coordinates audio and video. Audio often stays on one Representation because it is much cheaper than video, but the player still has to keep audio and video append queues synchronized around the same media time."
+        ],
+        points: [
+          "Switch only at aligned segment boundaries.",
+          "Avoid switching across incompatible codec strings or profiles.",
+          "Do not abandon audio buffering while chasing video quality.",
+          "Keep enough buffer to survive the next request before switching up."
+        ]
+      },
+      {
         type: "demo",
         title: "ABR Decision Loop",
         mode: "timeline",
         text: "The player compares representation bandwidth with measured throughput and buffer depth before choosing quality."
       }
     ],
-    outcome: "The DASH player selects the initial video representation with a small ABR algorithm instead of always hardcoding one quality."
+    outcome: "The DASH player selects an initial video representation, then uses runtime ABR concepts to choose future segments from throughput and buffer signals."
   },
   {
     slug: "live-theory",
@@ -2124,31 +2382,60 @@ await Promise.all([
         ]
       },
       {
+        type: "text",
+        heading: "Wall Clock Versus Media Time",
+        body: [
+          "Live DASH adds wall-clock time to the normal media timeline. Wall-clock time is real time, usually UTC. Media time is the presentation timeline used by segments, timestamps, SourceBuffers, and video.currentTime.",
+          "The bridge between those worlds is availabilityStartTime. It anchors the start of the live presentation to wall-clock time. A player estimates the live presentation time by subtracting availabilityStartTime from the current wall clock, then applies latency and availability rules before choosing segments."
+        ],
+        points: [
+          "Wall-clock time answers: what time is it now?",
+          "Media time answers: which presentation time should this segment cover?",
+          "Live playback is the process of staying near a moving media time derived from wall-clock state."
+        ]
+      },
+      {
         type: "code",
-        title: "Live Edge Mental Model",
-        explain: "A simple player can think in segment numbers before dealing with wall-clock timing details.",
+        title: "Live Edge From Wall Clock",
+        explain: "This is the core mental model. A real player also accounts for server clock accuracy, MPD publish time, segment production delay, and presentation delay.",
         code: `
-const segmentDuration = 4;
-const newestSegmentNumber = 120;
-const targetLatencySegments = 3;
+const availabilityStartTimeMs = Date.parse(mpd.getAttribute("availabilityStartTime"));
+const nowSeconds = Date.now() / 1000;
+const astSeconds = availabilityStartTimeMs / 1000;
 
-const startSegmentNumber = newestSegmentNumber - targetLatencySegments;
-const approximateLatency = targetLatencySegments * segmentDuration;
+const livePresentationTime = nowSeconds - astSeconds;
+const targetLatency = suggestedPresentationDelay || segmentDuration * 3;
+const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
 
-console.log(startSegmentNumber);   // 117
-console.log(approximateLatency);   // 12 seconds`
+console.log("live edge", livePresentationTime);
+console.log("target playback time", targetPlaybackTime);`
       },
       {
         type: "text",
         heading: "Manifest Refresh",
         body: [
-          "A live manifest is not a static table. The player must refresh it to discover newly available segments and to learn when older segments have expired. DASH uses fields such as type=\"dynamic\", availabilityStartTime, timeShiftBufferDepth, minimumUpdatePeriod, and suggestedPresentationDelay to describe live behavior.",
-          "The practical lesson keeps this deliberately small: refresh the manifest, calculate the segment numbers that should now be available, append missing segments, and schedule the next refresh."
+          "A live manifest is not a static table. The player must refresh it to discover newly available segments, detect changed timing metadata, and learn when older segments have expired. DASH uses fields such as type=\"dynamic\", availabilityStartTime, publishTime, timeShiftBufferDepth, minimumUpdatePeriod, and suggestedPresentationDelay to describe live behavior.",
+          "minimumUpdatePeriod is a refresh hint, not a guarantee that every refresh contains new segments. publishTime can help identify whether a refreshed MPD is newer than the one already loaded."
         ],
         points: [
           "minimumUpdatePeriod tells the player how often the MPD may need refreshing.",
+          "publishTime identifies when this version of the MPD was published.",
           "timeShiftBufferDepth describes how much recent history is available for seeking.",
           "suggestedPresentationDelay gives the service's recommended distance behind the live edge."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Segment Availability",
+        body: [
+          "For simple SegmentTemplate streams with fixed duration, the player can estimate segment numbers from media time. Divide presentation time by segment duration and add startNumber. The first available segment is bounded by the time-shift buffer. The newest safe segment is behind the live edge by the target latency or by a service-specific availability delay.",
+          "This tutorial keeps the formula deliberately simple because live DASH can become more complex. SegmentTimeline, multiple Periods, clock synchronization, and low-latency chunked transfer all refine the same basic idea: determine which media times are currently requestable."
+        ],
+        points: [
+          "segmentDurationSeconds = duration / timescale.",
+          "newest = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).",
+          "first = newest - floor(timeShiftBufferDepth / segmentDurationSeconds).",
+          "SegmentTimeline streams should use explicit S elements instead of assuming fixed duration."
         ]
       },
       {
@@ -2165,13 +2452,144 @@ console.log(approximateLatency);   // 12 seconds`
         ]
       },
       {
+        type: "text",
+        heading: "404s, Drift, And Catch-Up",
+        body: [
+          "Live players must tolerate uncertainty. A segment near the live edge may return 404 because the MPD advertised it before the object reached the CDN edge, or because the player clock is ahead of the server clock. A robust player treats near-edge 404s as retryable rather than fatal.",
+          "Players also drift. If playback falls too far behind the target latency, the player can seek closer to live or temporarily raise playbackRate slightly above 1.0. If playback gets too close to the edge, it should slow requests or increase target latency before it starts stalling."
+        ],
+        points: [
+          "Retry near-edge 404s with backoff.",
+          "Use playbackRate catch-up conservatively, such as 1.03x to 1.08x.",
+          "Avoid seeking over buffered media unless latency is far outside the target."
+        ]
+      },
+      {
         type: "demo",
         title: "Sliding Live Window",
         mode: "timeline",
         text: "Live playback follows a moving segment window, targeting a stable delay behind the newest available media."
       }
     ],
-    outcome: "You can explain live edge, live latency, sliding availability windows, MPD refresh, and why live buffers need cleanup."
+    outcome: "You can explain live edge, live latency, wall-clock versus media time, segment availability, MPD refresh, retry behavior, catch-up, and live buffer cleanup."
+  },
+  {
+    slug: "dash-live-timing",
+    title: "DASH Live Timing",
+    kind: "Theory",
+    summary: "Turn a dynamic MPD into live segment availability calculations using wall-clock time, presentation time, and SegmentTemplate timing.",
+    reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf",
+    blocks: [
+      {
+        type: "text",
+        heading: "Dynamic MPDs",
+        body: [
+          "A DASH live stream usually uses an MPD with type=\"dynamic\". Unlike a static VOD MPD, a dynamic MPD describes a presentation that is still moving forward. The MPD is a snapshot of rules and currently useful metadata, not a complete list of all media that will ever exist.",
+          "The key engineering task is to convert MPD timing fields into segment requests that are likely to exist now. That means combining wall-clock time, availabilityStartTime, Period timing, SegmentTemplate timing, and the service's latency guidance."
+        ],
+        points: [
+          "availabilityStartTime anchors the presentation timeline to UTC wall-clock time.",
+          "publishTime tells you when this MPD snapshot was generated.",
+          "minimumUpdatePeriod tells you when it is useful to refresh the MPD.",
+          "suggestedPresentationDelay tells you how far behind live the service expects playback to run."
+        ]
+      },
+      {
+        type: "diagram",
+        visual: "timeline"
+      },
+      {
+        type: "text",
+        heading: "Wall Clock To Presentation Time",
+        body: [
+          "DASH live timing starts by estimating where the live presentation is right now. If the wall clock says it is 12:00:30 and availabilityStartTime was 12:00:00, the live presentation is roughly 30 seconds from the start of the live timeline.",
+          "Players then subtract a target latency to avoid requesting media too close to the live edge. If the service suggests 12 seconds of presentation delay, the target playback time is around 18 seconds into the presentation."
+        ],
+        points: [
+          "livePresentationTime = now - availabilityStartTime.",
+          "targetPlaybackTime = livePresentationTime - suggestedPresentationDelay.",
+          "For real services, clock synchronization and CDN propagation can make this estimate imperfect."
+        ]
+      },
+      {
+        type: "code",
+        title: "Live Presentation Time",
+        explain: "This calculation turns wall-clock time into media presentation time, then applies presentation delay.",
+        code: `
+const astMs = Date.parse(mpd.getAttribute("availabilityStartTime"));
+const nowSeconds = Date.now() / 1000;
+const livePresentationTime = nowSeconds - (astMs / 1000);
+
+const suggestedDelay = parseDuration(mpd.getAttribute("suggestedPresentationDelay"));
+const targetPlaybackTime = Math.max(0, livePresentationTime - suggestedDelay);`
+      },
+      {
+        type: "text",
+        heading: "SegmentTemplate Timing",
+        body: [
+          "With a fixed-duration SegmentTemplate, each segment covers duration / timescale seconds. The player can convert target playback time into a segment number by dividing by the segment duration and adding startNumber.",
+          "This is the easiest live timing mode to teach, but it is not the only one. Streams that use SegmentTimeline should follow explicit S elements because segment durations may vary or include repeats. Streams with multiple Periods must account for Period@start before mapping media time to segment number."
+        ],
+        points: [
+          "segmentDurationSeconds = SegmentTemplate@duration / SegmentTemplate@timescale.",
+          "segmentNumber = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).",
+          "SegmentTimeline is more precise for variable durations and should not be approximated as fixed duration."
+        ]
+      },
+      {
+        type: "code",
+        title: "Fixed Duration Segment Range",
+        explain: "This is the core calculation used by the practical lesson for a simple fixed-duration SegmentTemplate live stream.",
+        code: `
+function getLiveSegmentRange(timing, nowMs = Date.now()) {
+  const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
+  const targetLatency = timing.suggestedPresentationDelay || timing.segmentDuration * 3;
+  const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
+  const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
+
+  const newest = timing.startNumber + Math.floor(targetPlaybackTime / timing.segmentDuration);
+  const first = Math.max(
+    timing.startNumber,
+    newest - Math.floor(windowDepth / timing.segmentDuration)
+  );
+
+  return { first, newest, targetPlaybackTime, livePresentationTime };
+}`
+      },
+      {
+        type: "text",
+        heading: "Time Shift Buffer",
+        body: [
+          "timeShiftBufferDepth defines how much live history is available. If the time-shift buffer is 120 seconds and segment duration is 4 seconds, the live window contains roughly the newest 30 segments. Segments older than that can disappear from the manifest or return 404/410 from the server.",
+          "A player should keep its seekable UI and request logic inside this window. The MSE buffer can also contain old appended media, but that does not mean the server can still re-fetch it."
+        ],
+        points: [
+          "The seekable live window is a server availability concept.",
+          "The buffered range is local media already appended into MSE.",
+          "A live player has to manage both ranges and keep them coherent."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Refresh And Publish Time",
+        body: [
+          "minimumUpdatePeriod is the cadence for checking whether the MPD has changed. It does not guarantee that every refresh contains new media. publishTime can help detect whether the response is a newer snapshot or effectively the same MPD.",
+          "The player should avoid refreshing too aggressively, but it should also recover if a refresh arrives late or a segment request near the edge fails. That is why live controllers combine MPD refresh, request retries, and target latency."
+        ],
+        points: [
+          "Refresh at or after minimumUpdatePeriod unless the service documents a tighter loop.",
+          "Compare publishTime when deciding whether metadata actually changed.",
+          "Treat near-edge 404s as a timing signal, not always as a fatal error."
+        ]
+      },
+      {
+        type: "demo",
+        title: "DASH Live Clock",
+        mode: "timeline",
+        text: "DASH live timing maps wall-clock time through MPD timing fields into a safe segment range behind the live edge."
+      }
+    ],
+    outcome: "You can derive a simple DASH live segment range from availabilityStartTime, suggestedPresentationDelay, timeShiftBufferDepth, startNumber, duration, and timescale."
   },
   {
     slug: "live",
@@ -2184,13 +2602,13 @@ console.log(approximateLatency);   // 12 seconds`
         type: "text",
         heading: "Live Is Moving VOD",
         body: [
-          "A live manifest changes over time. Segments expire from the back of the availability window and new segments appear near the live edge.",
-          "The player should not chase the newest byte exactly. It should target a small latency behind live edge so downloads and decode have room to recover."
+          "A live manifest changes over time. Segments expire from the back of the availability window and new segments appear near the live edge. The practical player needs to parse live MPD timing, turn wall-clock time into segment numbers, append missing segments, and prune old buffers.",
+          "The player should not chase the newest byte exactly. It should target a small latency behind live edge so downloads, CDN propagation, MSE append, and decode have room to recover."
         ],
         points: [
-          "Refresh the MPD using minimumUpdatePeriod.",
-          "Start a few segments behind the newest available segment.",
-          "Remove old buffered ranges after playback has moved past them."
+          "Parse live DASH timing fields instead of assuming first and last segment numbers exist.",
+          "Start behind the live edge using suggestedPresentationDelay or a segment-count fallback.",
+          "Handle near-edge 404s as retryable and remove old buffered ranges after playback moves past them."
         ]
       },
       {
@@ -2199,32 +2617,128 @@ console.log(approximateLatency);   // 12 seconds`
       },
       {
         type: "code",
-        title: "live.js",
-        explain: "This sketch shows the control loop: refresh manifest, compute available numbers, append missing segments.",
+        title: "Parse Live MPD Timing",
+        explain: "Start by extracting the fields that connect wall-clock time, media time, refresh cadence, and the live window.",
         code: `
-export function createLiveController({ refreshManifest, appendSegment, targetLatencySegments = 3 }) {
+export function parseLiveTiming(doc, template) {
+  const mpd = doc.documentElement;
+  const timescale = Number(template.getAttribute("timescale") ?? 1);
+  const duration = Number(template.getAttribute("duration"));
+
+  return {
+    type: mpd.getAttribute("type"),
+    availabilityStartTimeMs: Date.parse(mpd.getAttribute("availabilityStartTime")),
+    publishTimeMs: Date.parse(mpd.getAttribute("publishTime") ?? ""),
+    minimumUpdatePeriodMs: parseDuration(mpd.getAttribute("minimumUpdatePeriod")) * 1000,
+    timeShiftBufferDepth: parseDuration(mpd.getAttribute("timeShiftBufferDepth")),
+    suggestedPresentationDelay: parseDuration(mpd.getAttribute("suggestedPresentationDelay")),
+    startNumber: Number(template.getAttribute("startNumber") ?? 1),
+    segmentDuration: duration / timescale
+  };
+}`
+      },
+      {
+        type: "code",
+        title: "Calculate The Available Segment Range",
+        explain: "For fixed-duration SegmentTemplate streams, convert wall-clock time into the segment numbers that are likely requestable.",
+        code: `
+export function getLiveSegmentRange(timing, nowMs = Date.now()) {
+  const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
+  const targetLatency = timing.suggestedPresentationDelay || timing.segmentDuration * 3;
+  const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
+  const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
+
+  const newest = timing.startNumber + Math.floor(targetPlaybackTime / timing.segmentDuration);
+  const first = Math.max(
+    timing.startNumber,
+    newest - Math.floor(windowDepth / timing.segmentDuration)
+  );
+
+  return { first, newest, targetPlaybackTime, livePresentationTime };
+}`
+      },
+      {
+        type: "code",
+        title: "Live Refresh Controller",
+        explain: "The controller refreshes the MPD, calculates the current window, appends missing segments, and schedules the next refresh.",
+        code: `
+export function createLiveController({ refreshManifest, appendSegment, segmentUrl, retryDelayMs = 750 }) {
   const appended = new Set();
   let timer = 0;
 
-  async function tick() {
-    const manifest = await refreshManifest();
-    const newest = manifest.lastSegmentNumber;
-    const firstWanted = Math.max(manifest.firstSegmentNumber, newest - targetLatencySegments);
+  return {
+    async start() {
+      await tick();
+    },
+    stop: () => clearTimeout(timer)
+  };
 
-    for (let number = firstWanted; number <= newest; number += 1) {
-      if (!appended.has(number)) {
+  async function tick() {
+    const { timing } = await refreshManifest();
+    const range = getLiveSegmentRange(timing);
+
+    for (let number = range.first; number <= range.newest; number += 1) {
+      if (appended.has(number)) continue;
+
+      try {
+        await appendSegment(segmentUrl(number));
         appended.add(number);
-        await appendSegment(manifest.segmentUrl(number));
+      } catch (error) {
+        if (isNearLiveEdge404(error, number, range.newest)) {
+          await delay(retryDelayMs);
+          break;
+        }
+        throw error;
       }
     }
 
-    timer = setTimeout(tick, manifest.minimumUpdatePeriodMs);
+    timer = setTimeout(tick, Math.max(timing.minimumUpdatePeriodMs || 1000, 500));
   }
+}`
+      },
+      {
+        type: "code",
+        title: "Near-Edge Retry",
+        explain: "A segment close to live edge can briefly 404 while it propagates through packaging and CDN layers.",
+        code: `
+function isNearLiveEdge404(error, number, newest) {
+  return error.status === 404 && number >= newest - 1;
+}
 
-  return {
-    start: tick,
-    stop: () => clearTimeout(timer)
-  };
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}`
+      },
+      {
+        type: "code",
+        title: "Catch Up To Target Latency",
+        explain: "A small playbackRate increase can gently reduce excess live latency without a visible seek.",
+        code: `
+export function updateLiveCatchup(video, { livePresentationTime, targetLatency }) {
+  const currentLatency = livePresentationTime - video.currentTime;
+  const drift = currentLatency - targetLatency;
+
+  if (drift > 6) {
+    video.playbackRate = 1.06;
+  } else if (drift < 1) {
+    video.playbackRate = 1;
+  }
+}`
+      },
+      {
+        type: "code",
+        title: "Prune Old Buffers",
+        explain: "Live players must remove old media, but not too close to the playhead.",
+        code: `
+export async function removeOldBuffer(sourceBuffer, currentTime, keepBehind = 30) {
+  const removeEnd = currentTime - keepBehind;
+  if (removeEnd <= 0 || sourceBuffer.updating) return;
+
+  await new Promise((resolve, reject) => {
+    sourceBuffer.addEventListener("updateend", resolve, { once: true });
+    sourceBuffer.addEventListener("error", reject, { once: true });
+    sourceBuffer.remove(0, removeEnd);
+  });
 }`
       },
       {
@@ -2234,7 +2748,7 @@ export function createLiveController({ refreshManifest, appendSegment, targetLat
         text: "The live window slides forward while playback follows a few segments behind the edge."
       }
     ],
-    outcome: "The player refreshes a dynamic MPD and appends newly available segments near the live edge."
+    outcome: "The player parses live MPD timing, estimates segment availability, refreshes the manifest, retries near-edge segments, catches up to target latency, and prunes old buffer."
   },
   {
     slug: "subtitle-theory",
@@ -2650,18 +3164,19 @@ function createClearKeyLicense(keys) {
     slug: "putting-it-all-together",
     title: "Putting It All Together",
     kind: "Practical",
-    summary: "Run the finished in-app player: DASH manifest parsing, audio/video MSE appends, playback controls, ABR startup selection, and custom subtitles.",
+    summary: "Run the finished in-app player: DASH manifest parsing, audio/video MSE appends, playback controls, runtime ABR decisions, and custom subtitles.",
     reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd",
     blocks: [
       {
         type: "text",
         heading: "The Final Shape",
         body: [
-          "This page brings the main pieces together inside the tutorial app. The player fetches a DASH MPD, chooses a conservative startup video representation, resolves the audio/video initialization and media segment URLs, and appends them to separate SourceBuffers.",
+          "This page brings the main pieces together inside the tutorial app. The player fetches a DASH MPD, chooses a conservative startup video representation, then continues making runtime video representation decisions as segment downloads reveal real throughput.",
           "The subtitle layer uses the same timing idea as the IMSC lab. It watches the media playhead and renders the active cue into an overlay above the video."
         ],
         points: [
           "The audio and video bytes come from DASH and MSE, not from assigning a single MP4 URL to video.src.",
+          "Runtime ABR uses smoothed measured throughput and buffer depth to choose each future video segment.",
           "The subtitle renderer is custom HTML layered over the video.",
           "The player reports manifest, codec, CORS, and fetch errors in the page so failures are inspectable."
         ]
@@ -2678,20 +3193,23 @@ function createClearKeyLicense(keys) {
 1. Fetch the DASH MPD.
 2. Parse audio/video representations, codec strings, init segments, and media segment URLs.
 3. Create MediaSource plus audio and video SourceBuffers.
-4. Append init and media segments for both tracks in updateend order.
-5. Watch video.currentTime and render active subtitle cues.
-6. Surface unsupported codec, CORS, and network failures in the UI.`
+4. Seed ABR with an initial throughput estimate.
+5. Append audio on its selected Representation.
+6. Choose each future video segment with runtime ABR.
+7. Smooth measured throughput after each segment fetch.
+8. Watch video.currentTime and render active subtitle cues.
+9. Surface unsupported codec, CORS, and network failures in the UI.`
       },
       {
         type: "text",
         heading: "What To Build Next",
         body: [
-          "This final version is still intentionally small. A production player would add mid-stream audio/video adaptation coordination, gap handling, retry logic, live edge management, full subtitle styling, and real DRM license integration.",
+          "This final version is still intentionally small. It now performs runtime video ABR, but a production player would add deeper audio/video adaptation coordination, gap handling, retry logic, live edge management, full subtitle styling, and real DRM license integration.",
           "The important thing is that the architecture now has clear boundaries: manifest parsing, segment loading, append scheduling, timeline observation, subtitle rendering, and UI state are separate enough to improve one at a time."
         ],
         points: [
-          "Add mid-stream representation switching at aligned segment boundaries.",
-          "Use buffer depth and measured throughput to keep updating the ABR choice while playback continues.",
+          "Add stronger switching guards for codec changes, init segment compatibility, and aligned random access points.",
+          "Use separate fast and slow throughput estimates to reduce ABR oscillation.",
           "Expand the IMSC subset only for features your content actually uses."
         ]
       },
@@ -2699,13 +3217,13 @@ function createClearKeyLicense(keys) {
         type: "demo",
         title: "Complete Playback Loop",
         mode: "timeline",
-        text: "Manifest parsing feeds segment loading, segment loading feeds MSE, and the media timeline drives subtitles."
+        text: "Manifest parsing feeds runtime ABR, ABR selects segment requests, segment loading feeds MSE, and the media timeline drives subtitles."
       },
       {
         type: "showcase",
         showcase: "player"
       }
     ],
-    outcome: "A working browser player loads a Big Buck Bunny DASH stream with audio, video, and subtitle cues."
+    outcome: "A working browser player loads a Big Buck Bunny DASH stream with audio, runtime ABR video selection, MSE appends, and subtitle cues."
   }
 ];

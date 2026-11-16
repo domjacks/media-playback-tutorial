@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Captions, Loader2, Play, RotateCcw } from "lucide-react";
-import { estimateInitialThroughput, loadDashVod, measureFetch } from "../lib/dashVod.js";
+import { chooseRuntimeRepresentation, createEwma, estimateInitialThroughput, loadDashVod, measureFetch } from "../lib/dashVod.js";
 
 const bbbMpd = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd";
 
@@ -19,6 +19,7 @@ export function PlayerShowcase() {
   const [error, setError] = useState("");
   const [activeCue, setActiveCue] = useState("");
   const [manifestInfo, setManifestInfo] = useState(null);
+  const [currentVideo, setCurrentVideo] = useState(null);
   const [throughput, setThroughput] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -58,10 +59,11 @@ export function PlayerShowcase() {
         objectUrlRef.current = "";
       }
 
-      let throughputBps = estimateInitialThroughput();
-      setThroughput(throughputBps);
-      const manifest = await loadDashVod(bbbMpd, { throughputBps, bufferSeconds: 0 });
+      const throughputEstimate = createEwma(estimateInitialThroughput());
+      setThroughput(throughputEstimate.value());
+      const manifest = await loadDashVod(bbbMpd, { throughputBps: throughputEstimate.value(), bufferSeconds: 0 });
       setManifestInfo(manifest);
+      setCurrentVideo(manifest.video);
 
       if (!MediaSource.isTypeSupported(manifest.video.mime)) {
         throw new Error(`Browser does not support ${manifest.video.mime}`);
@@ -78,18 +80,19 @@ export function PlayerShowcase() {
       await once(mediaSource, "sourceopen");
       const videoBuffer = mediaSource.addSourceBuffer(manifest.video.mime);
       const audioBuffer = mediaSource.addSourceBuffer(manifest.audio.mime);
-      const videoUrls = [manifest.video.init, ...manifest.video.segments.map((segment) => segment.url)];
       const audioUrls = [manifest.audio.init, ...manifest.audio.segments.map((segment) => segment.url)];
 
       await Promise.all([
-        appendTrack({
+        appendVideoRuntimeAbr({
           sourceBuffer: videoBuffer,
-          urls: videoUrls,
+          manifest,
+          video,
+          throughputEstimate,
           cancelledRef,
-          onProgress: ({ appended, throughputBps: measured }) => {
-            throughputBps = (throughputBps * 0.7) + (measured * 0.3);
-            setThroughput(throughputBps);
-            setStatus(`Appending video segment ${Math.max(0, appended - 1)}...`);
+          onProgress: ({ representation, segment, throughputBps: measured }) => {
+            setCurrentVideo(representation);
+            setThroughput(measured);
+            setStatus(`Appending ${representation.id} segment ${segment.number}...`);
           }
         }),
         appendTrack({
@@ -112,31 +115,60 @@ export function PlayerShowcase() {
     }
   }
 
-  async function appendTrack({ sourceBuffer, urls, cancelledRef, onProgress }) {
-    let index = 0;
+  async function appendVideoRuntimeAbr({ sourceBuffer, manifest, video, throughputEstimate, cancelledRef, onProgress }) {
+    let current = manifest.video;
+    let appendedInitFor = "";
+    const segmentCount = current.segments.length;
 
-    return new Promise((resolve, reject) => {
-      async function appendNext() {
-        if (cancelledRef.current) {
-          resolve();
-          return;
-        }
-        if (index >= urls.length) {
-          resolve();
-          return;
-        }
+    for (let index = 0; index < segmentCount; index += 1) {
+      if (cancelledRef.current) return;
 
-        const result = await measureFetch(urls[index]);
-        index += 1;
-        onProgress({ appended: index, throughputBps: result.throughputBps });
-        sourceBuffer.appendBuffer(result.bytes);
+      current = chooseRuntimeRepresentation(manifest.representations.video, current, {
+        throughputBps: throughputEstimate.value(),
+        bufferSeconds: bufferAhead(video)
+      });
+
+      if (appendedInitFor !== current.id) {
+        const init = await measureFetch(current.init);
+        await appendBytes(sourceBuffer, init.bytes);
+        appendedInitFor = current.id;
       }
 
-      sourceBuffer.addEventListener("updateend", () => {
-        appendNext().catch(reject);
-      });
-      appendNext().catch(reject);
+      const segment = current.segments[index];
+      const result = await measureFetch(segment.url);
+      const smoothed = throughputEstimate.sample(result.throughputBps);
+      onProgress({ representation: current, segment, throughputBps: smoothed });
+      await appendBytes(sourceBuffer, result.bytes);
+    }
+  }
+
+  async function appendTrack({ sourceBuffer, urls, cancelledRef, onProgress }) {
+    for (let index = 0; index < urls.length; index += 1) {
+      if (cancelledRef.current) return;
+      const result = await measureFetch(urls[index]);
+      onProgress({ appended: index + 1, throughputBps: result.throughputBps });
+      await appendBytes(sourceBuffer, result.bytes);
+    }
+  }
+
+  function appendBytes(sourceBuffer, bytes) {
+    return new Promise((resolve, reject) => {
+      sourceBuffer.addEventListener("updateend", resolve, { once: true });
+      sourceBuffer.addEventListener("error", () => reject(new Error("SourceBuffer append failed.")), { once: true });
+      sourceBuffer.addEventListener("abort", () => reject(new Error("SourceBuffer append aborted.")), { once: true });
+      sourceBuffer.appendBuffer(bytes);
     });
+  }
+
+  function bufferAhead(video) {
+    for (let i = 0; i < video.buffered.length; i += 1) {
+      const start = video.buffered.start(i);
+      const end = video.buffered.end(i);
+      if (start <= video.currentTime && video.currentTime <= end) {
+        return end - video.currentTime;
+      }
+    }
+    return 0;
   }
 
   function resetPlayer() {
@@ -148,6 +180,7 @@ export function PlayerShowcase() {
     video.load();
     setActiveCue("");
     setManifestInfo(null);
+    setCurrentVideo(null);
     setThroughput(0);
     setError("");
     setLoading(false);
@@ -188,7 +221,8 @@ export function PlayerShowcase() {
         <div className="manifest-readout">
           <span>Video <strong>{manifestInfo.video.id}</strong></span>
           <span>Audio <strong>{manifestInfo.audio.id}</strong></span>
-          <span>Video bitrate <strong>{Math.round(manifestInfo.video.bandwidth / 1000)} kbps</strong></span>
+          <span>Runtime video <strong>{currentVideo?.id ?? manifestInfo.video.id}</strong></span>
+          <span>Video bitrate <strong>{Math.round((currentVideo?.bandwidth ?? manifestInfo.video.bandwidth) / 1000)} kbps</strong></span>
           <span>Measured <strong>{Math.round(throughput / 1000)} kbps</strong></span>
           <span>Available <strong>{manifestInfo.representations.video.length} video reps</strong></span>
           <span>Segments <strong>{manifestInfo.video.segments.length}</strong></span>
