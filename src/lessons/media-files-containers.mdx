@@ -99,6 +99,99 @@ console.log(MediaSource.isTypeSupported(audioBuffer));
 
 </Snippet>
 
+## Reading Codec Strings
+
+The codecs parameter follows RFC 6381. Each entry starts with a four-character code that matches the sample entry in the file (`avc1`, `hvc1`, `mp4a`), followed by dot-separated fields whose meaning depends on the codec. The fields are copied from the codec's configuration record, so you can check a string against the file.
+
+### H.264: avc1.PPCCLL
+
+After `avc1` come three bytes in hex: profile_idc, the constraint flags byte, and level_idc. These are the second to fourth bytes of the `avcC` box.
+
+- profile_idc: 0x42 Baseline, 0x4D Main, 0x58 Extended, 0x64 High, 0x6E High 10, 0x7A High 4:2:2, 0xF4 High 4:4:4 Predictive.
+- Constraint flags: the byte holds constraint_set0 to constraint_set5 in its top bits. Constrained Baseline is `avc1.42E01E` (set0, set1, set2).
+- level_idc is the level times ten: 0x1F is 31, level 3.1. 0x20 is 3.2 and 0x28 is 40, level 4.0.
+
+So the strings used in the Big Buck Bunny renditions read as follows.
+
+- `avc1.64001f`: High profile, no constraint flags, level 3.1.
+- `avc1.640020`: High profile, level 3.2.
+- `avc1.640028`: High profile, level 4.0.
+
+Level caps decoder workload (macroblocks per second, frame size and bitrate), so a player may reject a stream whose level the hardware does not support even when the profile is fine.
+
+<Snippet title="Decode An avc1 String" explain="Illustrative helper: split the three hex bytes and map them to names. A real player normally just calls MediaSource.isTypeSupported, but decoding the string helps when a rendition is rejected.">
+
+```js
+const PROFILES = {
+  0x42: "Baseline", 0x4d: "Main", 0x58: "Extended",
+  0x64: "High", 0x6e: "High 10", 0x7a: "High 4:2:2",
+};
+
+function decodeAvc1(codec) {
+  const match = /^avc[1-4]\.([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(codec);
+  if (!match) return null;
+  const [profileIdc, constraints, levelIdc] = match
+    .slice(1)
+    .map((hex) => parseInt(hex, 16));
+  return {
+    profile: PROFILES[profileIdc] ?? `profile_idc ${profileIdc}`,
+    constraints: constraints.toString(2).padStart(8, "0"),
+    level: (levelIdc / 10).toFixed(1),
+  };
+}
+
+console.log(decodeAvc1("avc1.640028"));
+// { profile: "High", constraints: "00000000", level: "4.0" }
+```
+
+</Snippet>
+
+### HEVC: hvc1 And hev1
+
+The format is `hvc1.<profile>.<compat>.<tier-level>.<constraints>`, for example `hvc1.2.4.L153.90`.
+
+- Profile: general_profile_idc, optionally prefixed with A, B or C for a non-zero profile space. 1 is Main and 2 is Main 10.
+- Compatibility: the 32 general_profile_compatibility_flags, written as hex with the bit order reversed. Main 10 sets only flag 2, which prints as 4.
+- Tier and level: L (Main tier) or H (High tier), then general_level_idc, which is the level times 30. L93 is level 3.1 and L153 is level 5.1.
+- Constraints: the constraint indicator bytes in hex, with trailing zero bytes dropped. 0x90 means progressive source and frame-only.
+
+`hvc1` and `hev1` differ in where parameter sets live. With `hvc1`, the VPS, SPS and PPS are in the sample entry (the `hvcC` box) and must not appear in the samples. With `hev1`, they may also appear in-band and can change mid-stream. `hvc1` is the safer choice for MSE and for Apple devices, while `hev1` suits streams whose parameters change.
+
+### VP9: vp09.PP.LL.DD
+
+The format is `vp09.<profile>.<level>.<bitDepth>`, each as two digits, optionally followed by `.<chroma>.<primaries>.<transfer>.<matrix>.<fullRange>`.
+
+- Profile: 00 is 8-bit 4:2:0, 01 is 8-bit 4:4:4 or 4:2:2, 02 is 10 or 12-bit 4:2:0, 03 is high bit depth 4:4:4 or 4:2:2.
+- Level: level times ten, so 10 is 1.0, 31 is 3.1 and 40 is 4.0.
+- Bit depth: 08, 10 or 12.
+- `vp09.00.40.08` is profile 0, level 4.0, 8-bit. `vp09.02.10.10.01.09.16.09.00` is 10-bit BT.2020 PQ with limited range.
+
+### AV1: av01.P.LLT.DD
+
+The format is `av01.<profile>.<level><tier>.<bitDepth>`, optionally followed by `.<mono>.<chroma>.<primaries>.<transfer>.<matrix>.<fullRange>`.
+
+- Profile: one digit, 0 Main, 1 High, 2 Professional.
+- Level: two digits holding seq_level_idx, so 04 is level 3.0, 05 is 3.1, 08 is 4.0 and 09 is 4.1. It is followed by the tier letter, M or H.
+- Bit depth: 08, 10 or 12.
+- `av01.0.08M.08` is Main profile, level 4.0, Main tier, 8-bit. `av01.0.04M.10.0.112.09.16.09.0` is 10-bit BT.2020 PQ, studio range.
+
+### Audio
+
+- `mp4a.40.2`: `mp4a` is the sample entry, 0x40 is the MPEG-4 Audio object type indication, and the final number is the audio object type. 2 is AAC-LC, 5 is HE-AAC (with SBR), 29 is HE-AACv2 (SBR and parametric stereo), and 42 is xHE-AAC.
+- `opus` and `flac` are plain names with no parameters.
+- `ac-3` is Dolby Digital and `ec-3` is Dolby Digital Plus (E-AC-3).
+
+### Getting The Real String From A File
+
+FFprobe does not print the codec string directly. It prints the pieces, which you assemble yourself.
+
+- For H.264, `profile=High` and `level=31` give profile_idc 0x64 and level_idc 0x1F. The constraint byte is not in the default output, so read it from the `avcC` box or assume 00 for High.
+- For HEVC, FFprobe prints profile and level (for example `profile=Main 10` and `level=63`), which give profile_idc 2 and level L63. The compatibility and constraint fields come from `hvcC`.
+- For AAC, `profile=LC` means mp4a.40.2.
+- Packagers such as Shaka Packager and GPAC read the configuration records and emit the string for you, and MPD generators copy it into the `codecs` attribute.
+
+When a string is hand-written it can drift from the stream. Ask `MediaSource.isTypeSupported` with the real value before relying on it.
+
 ## Containers, Formats, And Bitrate
 
 A container answers questions like: where is the audio track, where is the video track, what timestamps do samples use, and how should samples be grouped. A codec answers a different question: how do compressed samples become raw audio or video again.

@@ -9,10 +9,16 @@ if ! command -v mp4dump >/dev/null; then
   mp4dump() { echo "mp4dump not found; skipping box tree (install Bento4)"; }
 fi
 
+# MP4Box (GPAC) is an alternative box dumper. Same stub approach.
+if ! command -v MP4Box >/dev/null; then
+  MP4Box() { echo "MP4Box not found; skipping GPAC box dump (install GPAC)"; }
+fi
+
 # #region check-tools
 ffmpeg -version
 ffprobe -version
 mp4dump --version
+MP4Box -version 2>&1 | head -1
 # #endregion check-tools
 
 # #region create-faststart
@@ -61,5 +67,12 @@ echo "=== box tree ==="
 # #region box-tree
 mp4dump lab/container-faststart.mp4 | head -80
 # #endregion box-tree
+
+echo "=== box tree with GPAC (alternative) ==="
+# #region box-tree-gpac
+MP4Box -info lab/container-faststart.mp4 2>&1 | head -30
+# -diso prints every box as XML; -std sends it to stdout instead of a file.
+MP4Box -diso lab/container-faststart.mp4 -std 2>&1 | head -60
+# #endregion box-tree-gpac
 
 set -o pipefail

@@ -1,0 +1,102 @@
+---
+slug: "inspect-media-timing"
+title: "Inspect Media Timing"
+kind: "Practical"
+summary: "Measure timescales, PTS versus DTS, AAC priming, edit lists and per-fragment decode times in real files, with FFprobe and a small box walker."
+outcome: "You can read stream timescales, explain why DTS runs ahead of PTS with B-frames, find AAC priming and edit lists, and check that fragment decode times line up."
+reference: "https://ffmpeg.org/ffprobe.html"
+---
+
+## Why Look At Timing Directly
+
+Most playback bugs that survive a first test are timing bugs: a gap between fragments, audio that starts late, a video whose first frame sits at 0.08 seconds. The fields behind them are small integers in a few boxes, and you can read them yourself.
+
+This lab encodes one short file with B-frames, then inspects it with FFprobe and with `boxes.js`, a dependency-free Node script that walks the MP4 box tree and prints the timing fields. It needs only FFmpeg, FFprobe and Node, with no Bento4 or GPAC.
+
+- A timescale says how many ticks make one second for a track.
+- DTS orders samples for the decoder; PTS orders them for the viewer.
+- Edit lists and `tfdt` boxes map those integers onto the presentation timeline.
+
+<Snippet title="Create A B-Frame Source" explain="-bf 2 lets x264 reorder frames, so decode order differs from presentation order. The default MP4 muxer will also write an edit list." file="inspect-media-timing/lab.sh" region="create-source" />
+
+## Timescales
+
+Each track counts in its own units. FFprobe reports the unit as time_base, which is the inverse of the mdhd timescale.
+
+<Snippet title="Read Time Bases" explain="Video uses 1/12800 here (25 fps x 512), audio uses 1/48000, the sample rate. duration_ts is the length in those ticks." file="inspect-media-timing/lab.sh" region="timescales" />
+
+## PTS Versus DTS
+
+With B-frames a frame can be shown before a frame the decoder must read after it, so the decoder needs a different order from the viewer.
+
+<Snippet title="Packets In Decode Order" explain="Packets arrive in decode order. The first packet has dts_time=-0.08 and pts_time=0: the decoder must start two frames before the first displayed frame so that later B-frames have their references. pts is never earlier than dts." file="inspect-media-timing/lab.sh" region="pts-dts" />
+
+<Snippet title="Reorder By PTS" explain="Sorting by PTS gives presentation order. The second column (dts) is then out of order, which is exactly the reordering the decoder performs. The gap between pts and dts is the composition offset." file="inspect-media-timing/lab.sh" region="reorder" />
+
+In the MP4 file the gap is stored in the `ctts` box, which holds one offset per sample (run-length encoded). Presentation time is decode time plus that offset.
+
+## AAC Priming
+
+AAC encoders emit a block of priming samples before the real signal, because the filterbank needs history. FFmpeg's `aac` encoder in FFmpeg 8 uses 1024 samples. Players should not play them.
+
+<Snippet title="Find The Priming Packet" explain="The first audio packet has a negative pts (-1024 ticks, about -0.0213 s) and a Skip Samples side data entry with skip_samples=1024. The D flag marks it as discardable: decode it, but do not present it." file="inspect-media-timing/lab.sh" region="aac-priming" />
+
+## Edit Lists
+
+Negative timestamps cannot be stored directly in an MP4 sample table, where decode times start at 0. The muxer instead writes an edit list, `elst`, that says where in the media to begin.
+
+<Snippet title="Read The Edit Lists" explain="Both tracks carry one elst entry with media_time=1024: skip 1024 ticks of media. For video, that is two 512-tick frames (0.08 s at 12800) and exactly cancels the first ctts offset. For audio it skips the 1024 priming samples." file="inspect-media-timing/lab.sh" region="elst-default" />
+
+<Snippet title="Mux Without An Edit List" explain="-use_editlist 0 makes the muxer drop the elst. Without it the compensation has to live in the sample tables, and the timeline shifts." file="inspect-media-timing/lab.sh" region="elst-off" />
+
+Without the edit list the video start_pts becomes 1024 (0.08 s), so the video no longer starts at zero. The audio stts has a first entry of 3840 ticks (0.08 s) in place of 1024, because the muxer stretched the first audio sample to keep audio and video aligned. The file still plays, but the shift is now baked into the data instead of declared.
+
+## Fragmented Output
+
+In a fragmented file each `moof` carries a `tfdt` with the decode time of its first sample, and a `trun` with the sample list.
+
+<Snippet title="Create A Fragmented File" explain="frag_keyframe starts a new fragment at each keyframe (every 50 frames, two seconds). empty_moov and default_base_moof give the layout MSE expects." file="inspect-media-timing/lab.sh" region="make-fragmented" />
+
+<Snippet title="Check DTS Is Monotonic" explain="Fragmentation must not break decode order: decode times keep rising across fragment boundaries. This counts steps where dts did not increase." file="inspect-media-timing/lab.sh" region="frag-monotonic" />
+
+## A Box Walker
+
+`boxes.js` has three small parts. First, which boxes are containers, so it can recurse into them.
+
+<Snippet title="Container Boxes" explain="Boxes in this set contain child boxes rather than fields." file="inspect-media-timing/boxes.js" region="box-containers" />
+
+Second, a decoder for the timing fields, using the layouts in ISO/IEC 14496-12.
+
+<Snippet title="Decode Timing Fields" explain="mvhd and mdhd share a layout (version 1 widens the times to 64 bits). elst entries have a signed media_time. trun flags 0x100 to 0x800 say which per-sample fields are present, and version 1 makes composition offsets signed." file="inspect-media-timing/boxes.js" region="box-fields" />
+
+Third, the walk itself, which handles the 64-bit size and run-to-end cases.
+
+<Snippet title="Walk The Tree" explain="Read size and type, print, recurse into containers, move to the next sibling." file="inspect-media-timing/boxes.js" region="box-walk" />
+
+<Snippet title="Fragment Timing Fields" explain="Each moof has a tfdt per track. Video tfdt runs 0 then 25600 ticks (2.0 s at 12800); audio runs 0 then 96000 ticks (2.0 s at 48000). Each trun shows the sample count and the first composition offset." file="inspect-media-timing/lab.sh" region="frag-boxes" />
+
+<Snippet title="Signed Composition Offsets" explain="With negative_cts_offsets the muxer writes trun version 1 and the first offset becomes 0, so the video fragment is no longer shifted by the 0.08 s composition delay." file="inspect-media-timing/lab.sh" region="negative-cts" />
+
+<Checkpoint slug="inspect-media-timing" files={["lab.sh", "boxes.js"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It needs FFmpeg, FFprobe and Node, and runs boxes.js from beside the script. Output below is from FFmpeg 8.0.1.">
+
+- Time bases are 1/12800 for video and 1/48000 for audio, with duration_ts=51200 and 192000 (both 4 s).
+- The first video packet prints pts=0 and dts=-1024 (dts_time=-0.080000); the second prints pts=1024 and dts=-512, and the third pts=512, dts=0.
+- The first audio packet has pts=-1024, flags=KD_ and skip_samples=1024.
+- The default file shows elst entries=1 with media_time=1024 on both tracks and a ctts whose first offsets are 1x1024, 1x1536, 1x512.
+- The no-edit-list file reports video start_pts=1024 (start_time=0.080000) and an audio stts starting 1x3840.
+- The fragmented file prints "100 video packets, non-increasing dts steps: 0", and its two moof boxes have video tfdt baseMediaDecodeTime=0 and 25600, audio 0 and 96000.
+- With negative_cts_offsets the trun lines show version=1 and first_sample_composition_time_offset=0.
+
+</Checkpoint>
+
+<Exercise title="Predict The Timeline">
+
+Re-encode with -bf 0 and repeat the pts-dts and edit list steps. Before you run it, predict what the first video dts will be and whether an elst will still be needed for video.
+
+Then work out the presentation time of the first audio sample the viewer actually hears, given the priming packet and the edit list.
+
+<Hint>Without B-frames, pts equals dts, so there is no composition delay and the video elst should disappear or have media_time=0. The audio priming remains, so audio still needs media_time=1024 (1024 / 48000 = about 21.3 ms skipped), which makes the first audible sample land at presentation time 0.</Hint>
+
+</Exercise>
+
+<Demo title="Timing Evidence" mode="timeline">Timescales, composition offsets, edit lists and tfdt values are what decide where each sample lands on the media timeline.</Demo>

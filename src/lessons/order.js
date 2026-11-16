@@ -15,7 +15,8 @@ export const lessonSections = [
       "media-files-containers",
       "inspect-mp4-containers",
       "fragmented-mp4-cmaf",
-      "create-fragmented-mp4"
+      "create-fragmented-mp4",
+      "inspect-media-timing"
     ]
   },
   {

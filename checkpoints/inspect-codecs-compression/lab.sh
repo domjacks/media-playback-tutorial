@@ -78,4 +78,24 @@ ffprobe -v error \
   lab/h264-gop25-no-bframes.mp4 | head -40
 # #endregion gop-no-bframes
 
+echo "=== B-frame reordering: -bf 2 versus -bf 0 ==="
+# #region bframe-reorder
+for bf in 2 0; do
+  ffmpeg -v error -y -t 2 -i lab/source.mkv -an \
+    -c:v libx264 -pix_fmt yuv420p -crf 23 -g 50 -bf "$bf" \
+    "lab/bf$bf.mp4"
+
+  echo "--- -bf $bf: pts_time,dts_time,pict_type (presentation order) ---"
+  # Packets carry pts and dts; frames carry pict_type in presentation order.
+  # Sorting packets by pts lines the two lists up.
+  paste -d, \
+    <(ffprobe -v error -select_streams v:0 -show_packets \
+        -show_entries packet=pts_time,dts_time -of csv=p=0 "lab/bf$bf.mp4" |
+        sort -t, -k1,1n) \
+    <(ffprobe -v error -select_streams v:0 -show_frames \
+        -show_entries frame=pict_type -of csv=p=0 "lab/bf$bf.mp4" |
+        sed 's/,.*//') | head -8
+done
+# #endregion bframe-reorder
+
 set -o pipefail

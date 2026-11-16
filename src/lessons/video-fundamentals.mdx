@@ -4,7 +4,7 @@ title: "Video Fundamentals"
 kind: "Theory"
 summary: "Understand the properties that define what a viewer sees before you think about files or streaming."
 outcome: "You can explain pixels, raster frames, resolution, RGB versus YCbCr, bit depth, chroma subsampling, frame rate, scan type, colour gamut, and dynamic range in player terms."
-reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs"
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Capabilities_API"
 ---
 
 ## Pixels And Raster Images
@@ -84,12 +84,103 @@ Progressive video stores each frame as a complete picture. Interlaced video stor
 
 ## Colour And Brightness
 
-Colour gamut describes the range of colours a video can represent. SDR web video often uses Rec.709, while wider-gamut HDR content may use Rec.2020 signalling with colours that many older displays cannot fully show.
+Colour gamut describes the range of colours a video can represent. Dynamic range describes the span between the darkest and brightest picture detail. Both are properties of how numbers in the stream are interpreted, not of the numbers themselves, so a stream needs signalling that says how to read them.
 
-Dynamic range describes the difference between dark and bright image detail. SDR targets a narrower range. HDR formats carry extra signalling so compatible displays can render brighter highlights and more shadow detail.
+Three code points, defined in ITU-T H.273 (also published as ISO/IEC 23091-2, "CICP"), describe the interpretation. Players and containers pass them around as three small integers.
 
-- Colour metadata helps the browser and display map encoded values to visible colours.
-- HDR playback depends on the codec, container metadata, browser, OS, and display.
+- Colour primaries say which red, green and blue chromaticities, and which white point, the signal refers to. 1 is BT.709 (the HD standard, close to sRGB primaries), 9 is BT.2020 (the wide gamut used for UHD and HDR), 12 is Display P3 with a D65 white point.
+- Transfer characteristics say how stored values relate to light. 1 is BT.709, 13 is sRGB, 16 is PQ (SMPTE ST 2084), 18 is HLG (ARIB STD-B67).
+- Matrix coefficients say how to convert between YCbCr and RGB. 1 is BT.709, 5 and 6 are BT.601, 9 is BT.2020 non-constant luminance, and 0 is identity (the data is already RGB).
+- The value 2 means unspecified in all three tables.
+
+## Transfer Functions And HDR
+
+A transfer function is a curve applied to light before quantising, so that limited code values are spent where the eye notices steps. SDR curves such as BT.709 and sRGB are gamma-like and are defined relative to a display of roughly 100 nits.
+
+PQ is absolute. Each code value maps to a fixed luminance, up to 10,000 nits, so a display must tone-map anything brighter than it can show. HLG is relative and scene-referred: the lower part of the curve resembles a conventional gamma and the top compresses highlights, so an HLG signal degrades tolerably on an SDR display. That backwards compatibility is the main reason broadcasters use it.
+
+- HDR10 is 10-bit, BT.2020 primaries, PQ, plus static metadata.
+- HLG normally pairs BT.2020 primaries with the ARIB STD-B67 curve and needs no metadata.
+- HDR needs at least 10 bits per component to avoid visible banding across the wider luminance range.
+
+Static HDR metadata helps the display tone-map. SMPTE ST 2086 describes the mastering display: its primaries, white point, and maximum and minimum luminance. MaxCLL (maximum content light level) and MaxFALL (maximum frame-average light level), from CTA-861.3, give the brightest pixel and brightest frame average in the content, in nits.
+
+## Matrix Coefficients And YCbCr
+
+YCbCr is derived from non-linear R'G'B' using two constants, Kr and Kb. Luma is Y' = Kr R' + (1 - Kr - Kb) G' + Kb B', and Cb and Cr are scaled differences B' - Y' and R' - Y'.
+
+- BT.601 uses Kr = 0.299 and Kb = 0.114.
+- BT.709 uses Kr = 0.2126 and Kb = 0.0722.
+- BT.2020 non-constant luminance uses Kr = 0.2627 and Kb = 0.0593.
+
+Decoding with the wrong matrix does not break playback. It shifts hue and saturation slightly, mostly in reds and greens, which makes it easy to ship unnoticed.
+
+## Limited And Full Range
+
+Broadcast-style video uses limited range, also called TV or studio range. For 8-bit it places luma black at 16 and white at 235, and chroma between 16 and 240, leaving headroom and footroom for filtering overshoot. At 10 bits the equivalent values are 64 to 940 for luma and 64 to 960 for chroma. Full range, also called PC or JPEG range, uses the whole 0 to 255 (or 0 to 1023).
+
+Web video is almost always limited range. The flag that says which is in use is video_full_range_flag, and a stream with the flag missing is normally treated as limited.
+
+## Where It Is Signalled
+
+The same four values can appear in several places, and a robust player or packager makes them agree.
+
+- H.264 and HEVC carry them in the VUI inside the SPS: video_signal_type_present_flag, video_full_range_flag, colour_primaries, transfer_characteristics and matrix_coeffs. HDR metadata travels as SEI messages for mastering display colour volume and content light level.
+- MP4 carries them in the `colr` box inside the sample entry. A `colr` with colour type `nclx` holds colour_primaries, transfer_characteristics, matrix_coefficients and full_range_flag. HDR metadata uses the `mdcv` and `clli` boxes.
+- Codec strings for VP9 and AV1 embed them. VP9 ends with chroma, colour primaries, transfer, matrix and full-range fields, and AV1 does the same. HEVC and H.264 strings do not, so the codec string alone cannot tell you whether an HEVC stream is SDR or HDR10.
+- DASH can add SupplementalProperty or EssentialProperty descriptors with the same code points, so that a player can filter Representations before downloading anything.
+
+<Snippet title="VP9 And AV1 Strings Carry Colour" explain="Both strings end with colour primaries, transfer and matrix, then the full-range flag. 16 is PQ and 09 is BT.2020. The profile, level, bit depth and chroma fields before them are explained in Media Files And Containers.">
+
+```text
+vp09.02.10.10.01.09.16.09.00
+av01.0.04M.10.0.112.09.16.09.0
+```
+
+</Snippet>
+
+## What Breaks When It Is Wrong
+
+Colour metadata errors rarely stop playback. They change the picture, which makes them harder to diagnose than a decode failure.
+
+- Limited-range video treated as full range looks washed out: black at code 16 is displayed as dark grey and white at 235 never reaches full brightness.
+- Full-range video treated as limited range crushes shadows and clips highlights, because values outside 16 to 235 are cut off.
+- A BT.709 stream decoded with a BT.601 matrix, or the reverse, gives subtle hue shifts in skin tones and foliage.
+- BT.2020 content shown as if it were BT.709 looks desaturated.
+- PQ content shown as if it were SDR looks dim and flat, and HDR10 without correct tone mapping loses highlight detail.
+
+When two renditions look different on the same screen, compare their colr and VUI values before you blame the encoder.
+
+## Checking HDR Support In The Browser
+
+A page can ask whether the display is HDR capable with a media query, and whether the decoder path supports a specific stream with Media Capabilities. The media query describes the display, and Media Capabilities describes decode and, with `powerEfficient` and `smooth`, how well it will run.
+
+<Snippet title="Ask The Browser About HDR" explain="matchMedia reports display capability. decodingInfo accepts colorGamut (srgb, p3, rec2020), transferFunction (srgb, pq, hlg) and hdrMetadataType (smpteSt2086, smpteSt2094-10, smpteSt2094-40). Support is uneven across browsers, so treat a missing or false answer as 'not known to work'.">
+
+```js
+const hdrDisplay = matchMedia("(dynamic-range: high)").matches;
+const wideGamut = matchMedia("(color-gamut: p3)").matches;
+
+const info = await navigator.mediaCapabilities.decodingInfo({
+  type: "media-source",
+  video: {
+    contentType: 'video/mp4; codecs="hvc1.2.4.L153.90"',
+    width: 3840,
+    height: 2160,
+    bitrate: 15_000_000,
+    framerate: 24,
+    colorGamut: "rec2020",
+    transferFunction: "pq",
+    hdrMetadataType: "smpteSt2086",
+  },
+});
+
+console.log({ hdrDisplay, wideGamut }, info.supported, info.smooth, info.powerEfficient);
+```
+
+</Snippet>
+
 - A player should surface compatibility failures clearly instead of pretending every rendition is equivalent.
+- Offer an SDR fallback Representation, because an HDR-capable decoder on an SDR display still needs tone mapping that not every platform does well.
 
 <Demo title="Picture Properties" mode="timeline">Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens.</Demo>

@@ -29,6 +29,12 @@ The commands deliberately use H.264 because that is the main codec model in this
 
 <Snippet title="Change GOP And B-Frames" explain="This encode uses a shorter GOP and disables B-frames. It is easier to decode and reason about, but usually less efficient." file="inspect-codecs-compression/lab.sh" region="gop-no-bframes" />
 
+## Seeing B-Frame Reordering
+
+B-frames are predicted from frames on both sides, so the encoder sends the later reference first. That is why a packet's decode time (DTS) can be earlier than its presentation time (PTS). This step encodes two seconds with `-bf 2` and `-bf 0`, then lines up each frame's timestamps with its type.
+
+<Snippet title="Compare -bf 2 With -bf 0" explain="Rows are in presentation order. With -bf 2 the first dts is negative (-0.08 s) and the dts column is out of order against pts. With -bf 0 every row has dts equal to pts, and only I and P frames appear." file="inspect-codecs-compression/lab.sh" region="bframe-reorder" />
+
 ## Quality Metrics In Practice
 
 PSNR, SSIM, and VMAF are normally used by comparing an encoded file against a reference source. FFmpeg can calculate PSNR and SSIM with built-in filters. VMAF support depends on whether your FFmpeg build includes libvmaf.
@@ -45,6 +51,7 @@ Treat these metrics as engineering signals, not truth. They are useful for compa
 - bit_rate for the CRF 18 encode is around 4.1 Mbps (4100631 here) against around 0.8 Mbps (788351) for CRF 32. Both report codec_name=h264 and profile=High.
 - Frame types for the default encode start I, B, P, P: B-frames are present, so pts_time order differs from decode order.
 - The GOP 25 / -bf 0 encode prints only I and P frames, with a key frame (key_frame=1) every 25 frames.
+- The -bf 2 table starts 0.000000,-0.080000,I then 0.040000,0.000000,B and 0.080000,-0.040000,P: dts is out of order against pts. The -bf 0 table has dts equal to pts on every row.
 
 </Checkpoint>
 
