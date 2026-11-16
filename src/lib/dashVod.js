@@ -1,5 +1,5 @@
 export async function loadDashVod(mpdUrl, options = {}) {
-  const { xml, finalUrl } = await fetchMpd(mpdUrl);
+  const { xml, finalUrl } = await fetchMpd(mpdUrl, options.signal);
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   const parseError = doc.querySelector("parsererror");
   if (parseError) throw new Error("The MPD could not be parsed as XML.");
@@ -16,6 +16,8 @@ export async function loadDashVod(mpdUrl, options = {}) {
 
   return {
     mpdUrl: finalUrl,
+    duration: parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration")),
+    segmentSeconds: video.segmentSeconds,
     video,
     audio,
     tracks: { video, audio },
@@ -38,14 +40,13 @@ export function chooseRepresentation(representations, { throughputBps = estimate
 }
 
 export function chooseRuntimeRepresentation(representations, current, { throughputBps, bufferSeconds }) {
-  const playable = representations
-    .filter((representation) => canPlay(representation.mime) && (!current || representation.mime === current.mime))
+  const switchable = representations.filter((representation) => !current || canSwitchTo(current, representation));
+  const playable = switchable
+    .filter((representation) => canPlay(representation.mime))
     .sort((a, b) => a.bandwidth - b.bandwidth);
   const sorted = playable.length
     ? playable
-    : [...representations]
-      .filter((representation) => !current || representation.mime === current.mime)
-      .sort((a, b) => a.bandwidth - b.bandwidth);
+    : [...switchable].sort((a, b) => a.bandwidth - b.bandwidth);
   const safety = bufferSeconds < 6 ? 0.55 : bufferSeconds < 14 ? 0.7 : 0.85;
   const budget = throughputBps * safety;
   const candidate = sorted.filter((representation) => representation.bandwidth <= budget).at(-1) ?? sorted[0];
@@ -61,6 +62,17 @@ export function chooseRuntimeRepresentation(representations, current, { throughp
   }
 
   return sorted[Math.min(currentIndex + 1, sorted.length - 1)];
+}
+
+export function canSwitchTo(current, next) {
+  if (current.mimeType !== next.mimeType) return false;
+  if (current.codecs === next.codecs) return true;
+  return typeof SourceBuffer !== "undefined" && typeof SourceBuffer.prototype?.changeType === "function";
+}
+
+export function getMediaSourceImpl() {
+  if (typeof window === "undefined") return null;
+  return window.ManagedMediaSource ?? window.MediaSource ?? null;
 }
 
 export function chooseAudioRepresentation(representations) {
@@ -89,9 +101,9 @@ export function createEwma(initialEstimate, weight = 0.35) {
   };
 }
 
-export async function measureFetch(url) {
+export async function measureFetch(url, { signal } = {}) {
   const startedAt = performance.now();
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Failed to fetch ${url}`);
   const bytes = await response.arrayBuffer();
   const seconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
@@ -102,8 +114,8 @@ export async function measureFetch(url) {
   };
 }
 
-async function fetchMpd(url) {
-  const response = await fetch(url);
+async function fetchMpd(url, signal) {
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Failed to fetch ${url}`);
   return {
     xml: await response.text(),
@@ -118,29 +130,36 @@ function findAdaptation(doc, mimeType, contentType) {
 
 function parseAdaptation(adaptation, doc, mpdUrl) {
   const representationNodes = [...adaptation.querySelectorAll("Representation")];
-  const template = representationNodes[0]?.querySelector("SegmentTemplate") ?? adaptation.querySelector("SegmentTemplate");
-  if (!representationNodes.length || !template) {
+  const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
+  if (!representationNodes.length) {
     throw new Error("This tutorial parser needs Representation and SegmentTemplate.");
   }
 
   const base = resolveBaseUrl(doc, adaptation, mpdUrl);
-  const timescale = Number(template.getAttribute("timescale") ?? 1);
-  const duration = Number(template.getAttribute("duration"));
-  const startNumber = Number(template.getAttribute("startNumber") ?? 1);
   const presentationSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
-  const segmentSeconds = duration / timescale;
-  const segmentCount = Math.min(36, Math.ceil(presentationSeconds / segmentSeconds));
-  const mimeType = adaptation.getAttribute("mimeType");
 
   return representationNodes.map((representation) => {
-    const codecs = [adaptation.getAttribute("codecs"), representation.getAttribute("codecs")]
-      .filter(Boolean)
-      .join(", ");
+    const template = representation.querySelector(":scope > SegmentTemplate") ?? adaptationTemplate;
+    if (!template) {
+      throw new Error("This tutorial parser needs Representation and SegmentTemplate.");
+    }
+
+    const timescale = Number(template.getAttribute("timescale") ?? 1);
+    const duration = Number(template.getAttribute("duration"));
+    const startNumber = Number(template.getAttribute("startNumber") ?? 1);
+    const segmentSeconds = duration / timescale;
+    const segmentCount = Math.ceil(presentationSeconds / segmentSeconds);
+    const mimeType = representation.getAttribute("mimeType") ?? adaptation.getAttribute("mimeType");
+    const codecs = representation.getAttribute("codecs") ?? adaptation.getAttribute("codecs");
 
     return {
       id: representation.id,
-      mime: `${mimeType}; codecs="${codecs}"`,
+      mimeType,
+      codecs,
+      mime: codecs ? `${mimeType}; codecs="${codecs}"` : mimeType,
       bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
+      duration: presentationSeconds,
+      segmentSeconds,
       init: resolveUrl(formatTemplate(template.getAttribute("initialization"), representation.id), base),
       segments: Array.from({ length: segmentCount }, (_, index) => {
         const number = startNumber + index;
@@ -173,7 +192,8 @@ function resolveUrl(path, base) {
 }
 
 function canPlay(mime) {
-  return typeof MediaSource === "undefined" || MediaSource.isTypeSupported(mime);
+  const impl = getMediaSourceImpl();
+  return !impl || impl.isTypeSupported(mime);
 }
 
 function parseIsoDuration(value) {

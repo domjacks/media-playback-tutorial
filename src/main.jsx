@@ -181,9 +181,13 @@ function CodeSnippet({ snippet }) {
   const code = useMemo(() => snippet.code.trim(), [snippet.code]);
 
   async function copyCode() {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1400);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
   }
 
   return (

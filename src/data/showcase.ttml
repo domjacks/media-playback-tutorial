@@ -1,0 +1,15 @@
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <head>
+    <layout>
+      <region xml:id="bottom"/>
+    </layout>
+  </head>
+  <body>
+    <div>
+      <p begin="00:00:01.000" end="00:00:04.000" region="bottom">Big Buck Bunny arrives through a DASH manifest.</p>
+      <p begin="00:00:05.500" end="00:00:08.500" region="bottom">JavaScript appends fMP4 segments with Media Source Extensions.</p>
+      <p begin="00:00:10.000" end="00:00:13.500" region="bottom">These subtitles are rendered by the app, not a native WebVTT track.</p>
+      <p begin="00:00:15.000" end="00:00:19.000" region="bottom">This final player combines the tutorial pieces into one working surface.</p>
+    </div>
+  </body>
+</tt>
