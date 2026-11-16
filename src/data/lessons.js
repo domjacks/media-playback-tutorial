@@ -380,8 +380,8 @@ ffprobe -v error \\
         type: "text",
         heading: "Raw Video Is Huge",
         body: [
-          "A camera does not start with H.264 or AV1. It starts with samples that describe light. In this example, each frame has a Y plane at 1920 by 1080, a Cb plane at 960 by 1080, and a Cr plane at 960 by 1080.",
-          "Y is luma, the brightness detail. Cb and Cr are chroma difference samples. They are 960 pixels wide here because each chroma sample is shared across a pair of horizontal luma samples, so the colour information is sampled at half the horizontal resolution."
+          "A camera does not start with H.264 or AV1. It starts with samples that describe light. This example is a 10-bit 4:2:2 production or camera-style signal at 1920 by 1080 and 25 fps: each frame has a Y plane at 1920 by 1080, a Cb plane at 960 by 1080, and a Cr plane at 960 by 1080.",
+          "Y is luma, the brightness detail. Cb and Cr are chroma difference samples. They are 960 pixels wide here because each chroma sample is shared across a pair of horizontal luma samples, so the colour information is sampled at half the horizontal resolution. This is the 4:2:2 pattern from the chroma subsampling section of the video fundamentals lesson."
         ],
         points: [
           "Y samples per frame: 1920 x 1080 = 2,073,600.",
@@ -423,6 +423,18 @@ console.log(bytesPerSecond);  // 129600000`
           "That is about 129.6 MB/s, or about 123.6 MiB/s.",
           "It is also about 1.04 Gbit/s.",
           "This is why web video is compressed before it is stored, streamed, or played."
+        ]
+      },
+      {
+        type: "text",
+        heading: "Contrast: 8-Bit 4:2:0 Web Delivery",
+        body: [
+          "Typical web delivery is 8-bit 4:2:0, as covered under chroma subsampling in the video fundamentals lesson. Chroma is halved vertically as well as horizontally, so each chroma plane is 960 by 540 instead of 960 by 1080.",
+          "That gives 1920 x 1080 luma plus two 960 x 540 chroma planes: 2,073,600 + 518,400 + 518,400 = 3,110,400 samples per frame. At 8 bits per sample and 25 fps, that is 622,080,000 bit/s, about 622 Mbit/s or 77.8 MB/s."
+        ],
+        points: [
+          "Dropping from 10-bit 4:2:2 to 8-bit 4:2:0 cuts the raw rate to 60%, before any codec has done anything.",
+          "Even 622 Mbit/s is far beyond what a viewer's connection can carry, so compression is still essential."
         ]
       },
       {
@@ -623,12 +635,12 @@ ffmpeg -y -i lab/source.mkv \\
       {
         type: "code",
         title: "Inspect Frame Types",
-        explain: "The pict_type values show I, P, and B frames. Key frames are the random access points used for startup and seeking.",
+        explain: "The pict_type values show I, P, and B frames. Key frames are the random access points used for startup and seeking. pkt_pts_time was removed in FFmpeg 5 and prints nothing, so use pts_time. ffprobe prints fields in its own order, not the order you list in -show_entries, so the compact format is used here to label every value. Note that B-frames mean decode order differs from presentation order.",
         code: `
 ffprobe -v error \\
   -select_streams v:0 \\
-  -show_entries frame=pict_type,key_frame,pkt_pts_time,best_effort_timestamp_time \\
-  -of csv=p=0 \\
+  -show_entries frame=pts_time,pict_type,key_frame \\
+  -of compact=p=0 \\
   lab/h264-crf18.mp4 | head -40`
       },
       {
@@ -645,7 +657,7 @@ ffmpeg -y -i lab/source.mkv \\
 ffprobe -v error \\
   -select_streams v:0 \\
   -show_entries frame=pict_type,key_frame \\
-  -of csv=p=0 \\
+  -of compact=p=0 \\
   lab/h264-gop25-no-bframes.mp4 | head -40`
       },
       {
@@ -864,25 +876,25 @@ ffprobe -hide_banner \\
       {
         type: "code",
         title: "Inspect Packets",
-        explain: "Packets expose encoded payload timing. Look for stream_index, pts_time, dts_time, duration_time, size, and flags.",
+        explain: "Packets expose encoded payload timing. Look for stream_index, pts_time, dts_time, duration_time, size, and flags. The compact format labels each field, because ffprobe prints fields in its own order rather than the -show_entries order.",
         code: `
 ffprobe -v error \\
   -select_streams v:0 \\
   -show_packets \\
   -show_entries packet=stream_index,pts_time,dts_time,duration_time,size,flags \\
-  -of csv=p=0 \\
+  -of compact=p=0 \\
   lab/container-faststart.mp4 | head -30`
       },
       {
         type: "code",
         title: "Inspect Frames And Keyframes",
-        explain: "Frame inspection helps connect MP4 timing with codec structure. Keyframes are the safe random access points.",
+        explain: "Frame inspection helps connect MP4 timing with codec structure. Keyframes are the safe random access points. Fields are labelled because ffprobe ignores the -show_entries order; the first frame may also print extra encoder side data such as an x264 SEI message.",
         code: `
 ffprobe -v error \\
   -select_streams v:0 \\
   -show_frames \\
   -show_entries frame=key_frame,pict_type,best_effort_timestamp_time,pkt_size \\
-  -of csv=p=0 \\
+  -of compact=p=0 \\
   lab/container-faststart.mp4 | head -40`
       },
       {
@@ -1097,7 +1109,7 @@ mp4dump lab/fragmented.mp4 | head -120`
       {
         type: "code",
         title: "Optional: Segment With FFmpeg",
-        explain: "This creates a DASH-style init segment and numbered media segments. The later DASH lessons use manifests to discover files like these.",
+        explain: "This creates a DASH-style init segment and numbered media segments. The later DASH lessons use manifests to discover files like these. By default FFmpeg's dash muxer writes a SegmentTimeline, which the parser built later in this course does not read; it only understands SegmentTemplate with a fixed duration and $Number$. -use_template 1 -use_timeline 0 makes FFmpeg write exactly that form, with duration and startNumber.",
         code: `
 mkdir -p lab/dash
 
@@ -1105,10 +1117,24 @@ ffmpeg -y -i lab/progressive.mp4 \\
   -map 0:v:0 -map 0:a:0 \\
   -c copy \\
   -f dash \\
+  -use_template 1 \\
+  -use_timeline 0 \\
   -seg_duration 2 \\
   -init_seg_name 'init-$RepresentationID$.mp4' \\
   -media_seg_name 'chunk-$RepresentationID$-$Number%05d$.m4s' \\
   lab/dash/manifest.mpd`
+      },
+      {
+        type: "text",
+        heading: "Check The Manifest And Audio Segment Durations",
+        body: [
+          "Open lab/dash/manifest.mpd. Each Representation should carry a SegmentTemplate with timescale, duration, and startNumber, and the file should contain no SegmentTimeline element. With the generated 2 second setting the template reads timescale=\"1000000\" duration=\"2000000\", which is 2 seconds.",
+          "Audio segment durations will not exactly match video. AAC frames are 1024 samples, so at 48 kHz each frame lasts 21.33 ms and audio segments can only start on multiples of that. In this lab the second audio segment starts at 1.920 s (90 frames), the third at 3.925 s, and the audio track can finish with a very short extra segment, so audio may report one more segment than video for the same period."
+        ],
+        points: [
+          "The template duration is nominal; real audio segments land within a frame of it.",
+          "Players should position audio by the timestamps inside the segment, not by index x duration."
+        ]
       },
       {
         type: "demo",
@@ -1351,17 +1377,37 @@ video.src = url
       {
         type: "code",
         title: "Segment Request Loop",
-        explain: "Before ABR, the core streaming loop is simply request a segment, append it, then move to the next segment.",
+        explain: "Before ABR, the core streaming loop is simply request a segment, append it, then move to the next segment. Each append is wrapped in a promise that settles on updateend, so the loop runs one segment at a time and the caller can await it.",
         code: `
-async function appendSegments(sourceBuffer, segments) {
-  const queue = [...segments];
+async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(\`HTTP \${response.status} for \${url}\`);
+  return response.arrayBuffer();
+}
 
-  sourceBuffer.addEventListener("updateend", async () => {
-    if (!queue.length) return;
-    const segment = queue.shift();
-    sourceBuffer.appendBuffer(await fetchBytes(segment.url));
+function appendBuffer(sourceBuffer, bytes) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onEnd = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error("appendBuffer failed")); };
+    sourceBuffer.addEventListener("updateend", onEnd);
+    sourceBuffer.addEventListener("error", onError);
+    sourceBuffer.appendBuffer(bytes);
   });
-}`
+}
+
+async function appendSegments(sourceBuffer, segments) {
+  for (const segment of segments) {
+    const bytes = await fetchBytes(segment.url);
+    await appendBuffer(sourceBuffer, bytes);
+  }
+}
+
+// The caller can await the whole loop:
+// await appendSegments(videoBuffer, representation.segments);`
       },
       {
         type: "text",
@@ -1469,7 +1515,7 @@ mediaSource.addEventListener("sourceopen", async () => {
       {
         type: "code",
         title: "Describe The Tracks",
-        explain: "This lab uses one video track and one audio track from the BBC Big Buck Bunny DASH stream. The first file for each track is the initialization segment.",
+        explain: "This lab uses one video track and one audio track from the BBC Big Buck Bunny DASH stream. The first file for each track is the initialization segment, and it must come from the same Representation as the media segments that follow it, so the audio init and media segments all use 128kbps.",
         code: `
 const base = "https://vod-dash-ww-rd-live.akamaized.net/bbb/2";
 const tracks = [
@@ -1485,7 +1531,7 @@ const tracks = [
   {
     mime: 'audio/mp4; codecs="mp4a.40.2"',
     files: [
-      \`\${base}/audio/160kbps/IS.mp4\`,
+      \`\${base}/audio/128kbps/IS.mp4\`,
       \`\${base}/audio/128kbps/000001.m4s\`,
       \`\${base}/audio/128kbps/000002.m4s\`,
       \`\${base}/audio/128kbps/000003.m4s\`
@@ -1509,7 +1555,7 @@ const tracks = [
       {
         type: "code",
         title: "Add SourceBuffers",
-        explain: "Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append.",
+        explain: "Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append. This step belongs inside the sourceopen handler. The Fetch And Append Bytes snippet below already includes it, so treat this as the same code shown on its own: do not keep both copies, or you will add each SourceBuffer twice.",
         code: `
 const sourceBuffers = tracks.map((track) => ({
   ...track,
@@ -1519,14 +1565,28 @@ const sourceBuffers = tracks.map((track) => ({
       {
         type: "code",
         title: "Append A Queue",
-        explain: "appendBuffer is asynchronous. This helper waits for updateend before feeding the next chunk to the same SourceBuffer.",
+        explain: "appendBuffer is asynchronous. This helper waits for updateend before feeding the next chunk to the same SourceBuffer, and rejects if the SourceBuffer fires an error so a bad segment fails loudly instead of hanging.",
         code: `
 function appendAll(sourceBuffer, queue) {
-  return new Promise((resolve) => {
-    sourceBuffer.addEventListener("updateend", () => {
-      if (!queue.length) return resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onUpdateEnd = () => {
+      if (!queue.length) {
+        cleanup();
+        return resolve();
+      }
       sourceBuffer.appendBuffer(queue.shift());
-    });
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("SourceBuffer append failed"));
+    };
+
+    sourceBuffer.addEventListener("updateend", onUpdateEnd);
+    sourceBuffer.addEventListener("error", onError);
     sourceBuffer.appendBuffer(queue.shift());
   });
 }`
@@ -1547,11 +1607,11 @@ function appendAll(sourceBuffer, queue) {
       {
         type: "code",
         title: "Fetch And Append Bytes",
-        explain: "Once the MediaSource is open, create the SourceBuffers, fetch each init/media segment, append each track queue, then close the stream.",
+        explain: "This replaces the placeholder sourceopen handler from earlier. Once the MediaSource is open, it creates the SourceBuffers (the previous step, now in its final home), fetches each init/media segment, appends each track queue, then closes the stream.",
         code: `
 mediaSource.addEventListener("sourceopen", async () => {
   await Promise.all(tracks.map(async (track) => {
-    const sourceBuffer = mediaSource.addSourceBuffer(track.mime);
+    const sourceBuffer = mediaSource.addSourceBuffer(track.mime); // the only addSourceBuffer call
     const queue = await Promise.all(track.files.map(fetchBytes));
     await appendAll(sourceBuffer, queue);
   }));
@@ -1586,7 +1646,7 @@ const tracks = [
   {
     mime: 'audio/mp4; codecs="mp4a.40.2"',
     files: [
-      \`\${base}/audio/160kbps/IS.mp4\`,
+      \`\${base}/audio/128kbps/IS.mp4\`,
       \`\${base}/audio/128kbps/000001.m4s\`,
       \`\${base}/audio/128kbps/000002.m4s\`,
       \`\${base}/audio/128kbps/000003.m4s\`
@@ -1608,11 +1668,25 @@ mediaSource.addEventListener("sourceopen", async () => {
 });
 
 function appendAll(sourceBuffer, queue) {
-  return new Promise((resolve) => {
-    sourceBuffer.addEventListener("updateend", () => {
-      if (!queue.length) return resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onUpdateEnd = () => {
+      if (!queue.length) {
+        cleanup();
+        return resolve();
+      }
       sourceBuffer.appendBuffer(queue.shift());
-    });
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("SourceBuffer append failed"));
+    };
+
+    sourceBuffer.addEventListener("updateend", onUpdateEnd);
+    sourceBuffer.addEventListener("error", onError);
     sourceBuffer.appendBuffer(queue.shift());
   });
 }
@@ -1700,7 +1774,7 @@ function logRanges(label, ranges) {
       {
         type: "code",
         title: "Guard Append Operations",
-        explain: "This wrapper makes append failures visible and logs useful SourceBuffer state.",
+        explain: "This wrapper makes append failures visible. It resolves on updateend, rejects on error, abort, or a synchronous throw such as QuotaExceededError, and removes its listeners once settled so repeated appends do not pile them up.",
         code: `
 function appendBufferChecked(sourceBuffer, bytes, label) {
   if (sourceBuffer.updating) {
@@ -1708,14 +1782,26 @@ function appendBufferChecked(sourceBuffer, bytes, label) {
   }
 
   return new Promise((resolve, reject) => {
-    sourceBuffer.addEventListener("updateend", resolve, { once: true });
-    sourceBuffer.addEventListener("error", () => reject(new Error(\`\${label}: SourceBuffer error\`)), { once: true });
-    sourceBuffer.addEventListener("abort", () => reject(new Error(\`\${label}: SourceBuffer abort\`)), { once: true });
+    const events = {
+      updateend: () => settle(resolve),
+      error: () => settle(reject, new Error(\`\${label}: SourceBuffer error\`)),
+      abort: () => settle(reject, new Error(\`\${label}: SourceBuffer abort\`))
+    };
+    const settle = (callback, value) => {
+      for (const [name, listener] of Object.entries(events)) {
+        sourceBuffer.removeEventListener(name, listener);
+      }
+      callback(value);
+    };
+
+    for (const [name, listener] of Object.entries(events)) {
+      sourceBuffer.addEventListener(name, listener);
+    }
 
     try {
       sourceBuffer.appendBuffer(bytes);
     } catch (error) {
-      reject(error);
+      settle(reject, error);
     }
   });
 }`
@@ -1942,11 +2028,14 @@ SegmentBase
         heading: "Parser Boundaries",
         body: [
           "A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, BaseURL, and SegmentTemplate URLs using $Number$ replacement.",
-          "The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments."
+          "The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments. BaseURL can appear at the MPD level, the AdaptationSet level, or not at all, so resolve each optionally.",
+          "The parser also stops after TUTORIAL_SEGMENT_LIMIT segments. Big Buck Bunny is about 9.5 minutes long and this player appends everything up front with no buffer management, so the limit (36 segments of 3.84 seconds, about 2.3 minutes) keeps memory bounded. Later lessons add buffer goals and removal; until then, raise the limit with care."
         ],
         points: [
           "Use DOMParser instead of string splitting XML.",
           "Resolve segment URLs with new URL(relative, manifestUrl).",
+          "Codecs and mimeType can sit on the AdaptationSet or the Representation; a Representation value overrides the AdaptationSet value, they are never concatenated.",
+          "TUTORIAL_SEGMENT_LIMIT caps the segment list for this tutorial only; it is not part of DASH.",
           "Keep append sequencing isolated from manifest parsing."
         ]
       },
@@ -1961,15 +2050,18 @@ SegmentBase
       {
         type: "code",
         title: "dash.js",
-        explain: "This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, BaseURL, and SegmentTemplate.",
+        explain: "This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, optional BaseURL, and SegmentTemplate. A Representation's mimeType and codecs override the AdaptationSet's, and each Representation keeps mimeType, codecs, and the combined mime string so later lessons can compare them.",
         code: `
+// ~2.3 minutes of BBB (36 x 3.84 s); keeps memory bounded until buffer management is added.
+const TUTORIAL_SEGMENT_LIMIT = 36;
+
 export async function loadDashVod(mpdUrl) {
   const response = await fetch(mpdUrl);
   if (!response.ok) throw new Error(\`Failed to fetch \${mpdUrl}\`);
   const xml = await response.text();
   const doc = new DOMParser().parseFromString(xml, "application/xml");
-  const videoSet = findAdaptation(doc, "video/mp4");
-  const audioSet = findAdaptation(doc, "audio/mp4");
+  const videoSet = findAdaptation(doc, "video/mp4", "video");
+  const audioSet = findAdaptation(doc, "audio/mp4", "audio");
   const video = parseAdaptation(videoSet, doc, response.url);
   const audio = parseAdaptation(audioSet, doc, response.url);
 
@@ -1980,30 +2072,34 @@ export async function loadDashVod(mpdUrl) {
   };
 }
 
-function findAdaptation(doc, mimeType) {
+function findAdaptation(doc, mimeType, contentType) {
   return [...doc.querySelectorAll("AdaptationSet")]
-    .find((set) => set.getAttribute("mimeType") === mimeType);
+    .find((set) => set.getAttribute("mimeType") === mimeType || set.getAttribute("contentType") === contentType);
 }
 
 function parseAdaptation(adaptation, doc, mpdUrl) {
-  const template = adaptation.querySelector("SegmentTemplate");
-  const baseUrl = new URL(adaptation.querySelector("BaseURL").textContent.trim(), mpdUrl).href;
-  const timescale = Number(template.getAttribute("timescale") ?? 1);
-  const duration = Number(template.getAttribute("duration"));
-  const startNumber = Number(template.getAttribute("startNumber") ?? 1);
-  const segmentSeconds = duration / timescale;
+  const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
+  const baseUrl = resolveBaseUrl(doc, adaptation, mpdUrl);
   const totalSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
-  const segmentCount = Math.min(36, Math.ceil(totalSeconds / segmentSeconds));
 
-  return [...adaptation.querySelectorAll("Representation")].map((representation) => {
-    const codecs = [adaptation.getAttribute("codecs"), representation.getAttribute("codecs")]
-      .filter(Boolean)
-      .join(", ");
+  return [...adaptation.querySelectorAll(":scope > Representation")].map((representation) => {
+    const template = representation.querySelector(":scope > SegmentTemplate") ?? adaptationTemplate;
+    const timescale = Number(template.getAttribute("timescale") ?? 1);
+    const duration = Number(template.getAttribute("duration"));
+    const startNumber = Number(template.getAttribute("startNumber") ?? 1);
+    const segmentSeconds = duration / timescale;
+    const segmentCount = Math.min(TUTORIAL_SEGMENT_LIMIT, Math.ceil(totalSeconds / segmentSeconds));
+
+    // A Representation attribute overrides the AdaptationSet attribute; never join them.
+    const mimeType = representation.getAttribute("mimeType") ?? adaptation.getAttribute("mimeType");
+    const codecs = representation.getAttribute("codecs") ?? adaptation.getAttribute("codecs");
 
     return {
       id: representation.id,
       bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
-      mime: \`\${adaptation.getAttribute("mimeType")}; codecs="\${codecs}"\`,
+      mimeType,
+      codecs,
+      mime: codecs ? \`\${mimeType}; codecs="\${codecs}"\` : mimeType,
       init: new URL(format(template.getAttribute("initialization"), representation.id), baseUrl).href,
       segments: Array.from({ length: segmentCount }, (_, index) => {
         const number = startNumber + index;
@@ -2014,6 +2110,13 @@ function parseAdaptation(adaptation, doc, mpdUrl) {
       })
     };
   });
+}
+
+// BaseURL is optional at both the MPD and AdaptationSet level.
+function resolveBaseUrl(doc, adaptation, mpdUrl) {
+  const mpdBase = doc.documentElement.querySelector(":scope > BaseURL")?.textContent.trim() ?? "";
+  const adaptationBase = adaptation.querySelector(":scope > BaseURL")?.textContent.trim() ?? "";
+  return new URL(adaptationBase, new URL(mpdBase, mpdUrl)).href;
 }
 
 function format(pattern, id, number = "") {
@@ -2040,7 +2143,7 @@ function parseIsoDuration(value) {
       {
         type: "code",
         title: "player.js With DASH",
-        explain: "The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations.",
+        explain: "The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations, then appends each track with an await loop so a failed fetch or append rejects instead of hanging.",
         code: `
 import { loadDashVod } from "./dash.js";
 
@@ -2068,21 +2171,29 @@ mediaSource.addEventListener("sourceopen", async () => {
   ]);
 
   mediaSource.endOfStream();
-});
+}, { once: true });
 
-function appendTrack(sourceBuffer, urls) {
-  const queue = [...urls];
-  return new Promise((resolve) => {
-    sourceBuffer.addEventListener("updateend", () => {
-      if (!queue.length) return resolve();
-      appendUrl(sourceBuffer, queue.shift());
-    });
-    appendUrl(sourceBuffer, queue.shift());
-  });
+async function appendTrack(sourceBuffer, urls) {
+  for (const url of urls) {
+    await appendBuffer(sourceBuffer, await fetchBytes(url));
+  }
 }
 
-async function appendUrl(sourceBuffer, url) {
-  sourceBuffer.appendBuffer(await fetchBytes(url));
+// Resolves on updateend, rejects on error, and removes both listeners once settled.
+function appendBuffer(sourceBuffer, bytes) {
+  return new Promise((resolve, reject) => {
+    const onUpdateEnd = () => settle(resolve);
+    const onError = () => settle(reject, new Error("SourceBuffer append failed"));
+    const settle = (callback, value) => {
+      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
+      sourceBuffer.removeEventListener("error", onError);
+      callback(value);
+    };
+
+    sourceBuffer.addEventListener("updateend", onUpdateEnd);
+    sourceBuffer.addEventListener("error", onError);
+    sourceBuffer.appendBuffer(bytes);
+  });
 }
 
 async function fetchBytes(url) {
@@ -2253,24 +2364,56 @@ decoder.decode(new EncodedVideoChunk({
       {
         type: "code",
         title: "Expose Representations From The Parser",
-        explain: "Instead of returning one Representation, return a list the ABR selector can choose from.",
+        explain: "Replace parseAdaptation and loadDashVod from the previous lesson with these versions. Each Representation now carries id, bandwidth, mimeType, codecs, the combined mime string, its init URL, and segments with start and end times. loadDashVod accepts options for the startup choice and returns { video, audio, representations }. The rest of dash.js (findAdaptation, resolveBaseUrl, format, chooseHighest, parseIsoDuration, and TUTORIAL_SEGMENT_LIMIT) stays as it was.",
         code: `
-function parseRepresentations(adaptation, template, mpdUrl, base, segmentCount, segmentSeconds, startNumber) {
-  return [...adaptation.querySelectorAll("Representation")].map((representation) => ({
-    id: representation.id,
-    bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
-    mime: \`\${adaptation.getAttribute("mimeType")}; codecs="\${representation.getAttribute("codecs")}"\`,
-    init: resolve(template.getAttribute("initialization"), mpdUrl, base, representation.id),
-    segments: Array.from({ length: segmentCount }, (_, index) => {
-      const number = startNumber + index;
-      return {
-        number,
-        start: index * segmentSeconds,
-        end: (index + 1) * segmentSeconds,
-        url: resolve(template.getAttribute("media"), mpdUrl, base, representation.id, number)
-      };
-    })
-  }));
+function parseAdaptation(adaptation, doc, mpdUrl) {
+  const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
+  const baseUrl = resolveBaseUrl(doc, adaptation, mpdUrl);
+  const totalSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
+
+  return [...adaptation.querySelectorAll(":scope > Representation")].map((representation) => {
+    const template = representation.querySelector(":scope > SegmentTemplate") ?? adaptationTemplate;
+    const timescale = Number(template.getAttribute("timescale") ?? 1);
+    const duration = Number(template.getAttribute("duration"));
+    const startNumber = Number(template.getAttribute("startNumber") ?? 1);
+    const segmentSeconds = duration / timescale;
+    const segmentCount = Math.min(TUTORIAL_SEGMENT_LIMIT, Math.ceil(totalSeconds / segmentSeconds));
+
+    const mimeType = representation.getAttribute("mimeType") ?? adaptation.getAttribute("mimeType");
+    const codecs = representation.getAttribute("codecs") ?? adaptation.getAttribute("codecs");
+
+    return {
+      id: representation.id,
+      bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
+      mimeType,
+      codecs,
+      mime: codecs ? \`\${mimeType}; codecs="\${codecs}"\` : mimeType,
+      init: new URL(format(template.getAttribute("initialization"), representation.id), baseUrl).href,
+      segments: Array.from({ length: segmentCount }, (_, index) => {
+        const number = startNumber + index;
+        return {
+          number,
+          start: index * segmentSeconds,
+          end: (index + 1) * segmentSeconds,
+          url: new URL(format(template.getAttribute("media"), representation.id, number), baseUrl).href
+        };
+      })
+    };
+  });
+}
+
+export async function loadDashVod(mpdUrl, options = {}) {
+  const response = await fetch(mpdUrl);
+  if (!response.ok) throw new Error(\`Failed to fetch \${mpdUrl}\`);
+  const doc = new DOMParser().parseFromString(await response.text(), "application/xml");
+  const video = parseAdaptation(findAdaptation(doc, "video/mp4", "video"), doc, response.url);
+  const audio = parseAdaptation(findAdaptation(doc, "audio/mp4", "audio"), doc, response.url);
+
+  return {
+    video: chooseRepresentation(video, options), // startup choice, defined in the next snippet
+    audio: chooseHighest(audio),
+    representations: { video, audio }
+  };
 }`
       },
       {
@@ -2289,14 +2432,14 @@ function parseRepresentations(adaptation, template, mpdUrl, base, segmentCount, 
       {
         type: "code",
         title: "ABR Helpers In dash.js",
-        explain: "The parser module also exports the small startup ABR helper used by the player.",
+        explain: "The parser module also exports the small startup ABR helpers used by the player. chooseRepresentation replaces chooseLowest for the video startup choice, and its defaults let loadDashVod(mpdUrl) work with no options.",
         code: `
 export function estimateInitialThroughput() {
   const downlinkMbps = navigator.connection?.downlink;
   return downlinkMbps ? downlinkMbps * 1_000_000 : 2_500_000;
 }
 
-export function chooseRepresentation(representations, { throughputBps, bufferSeconds }) {
+export function chooseRepresentation(representations, { throughputBps = estimateInitialThroughput(), bufferSeconds = 0 } = {}) {
   const sorted = [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
   const safety = bufferSeconds > 12 ? 0.85 : bufferSeconds > 6 ? 0.75 : 0.6;
   const budget = throughputBps * safety;
@@ -2333,9 +2476,9 @@ export async function measureFetch(url) {
       {
         type: "code",
         title: "Update The Player",
-        explain: "Choose the startup video representation before creating SourceBuffers, then append that selected video plus the selected audio representation.",
+        explain: "loadDashVod now takes the options object and returns the startup video choice, so choose it before creating SourceBuffers, then append that selected video plus the selected audio representation. This replaces the loadDashVod call and SourceBuffer setup from the previous lesson; appendTrack is unchanged.",
         code: `
-import { estimateInitialThroughput, loadDashVod, measureFetch } from "./dash.js";
+import { estimateInitialThroughput, loadDashVod } from "./dash.js";
 
 const throughputBps = estimateInitialThroughput();
 const dash = await loadDashVod(mpdUrl, { throughputBps, bufferSeconds: 0 });
@@ -2404,10 +2547,19 @@ function bufferAhead(video) {
       {
         type: "code",
         title: "Runtime Representation Choice",
-        explain: "This keeps the startup selector but adds switch-down urgency and switch-up caution.",
+        explain: "This keeps the startup selector but adds switch-down urgency, switch-up caution, and a compatibility filter. canSwitchTo only allows candidates with the same mimeType and either identical codecs or a browser that supports SourceBuffer.changeType().",
         code: `
+function canSwitchTo(current, next) {
+  return current.mimeType === next.mimeType && (
+    current.codecs === next.codecs ||
+    (typeof SourceBuffer !== "undefined" && "changeType" in SourceBuffer.prototype)
+  );
+}
+
 function chooseRuntimeRepresentation(representations, current, state) {
-  const sorted = [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
+  const sorted = representations
+    .filter((rep) => rep.id === current.id || canSwitchTo(current, rep))
+    .sort((a, b) => a.bandwidth - b.bandwidth);
   const bufferSeconds = state.bufferSeconds;
   const budget = state.throughputBps * (bufferSeconds < 6 ? 0.55 : bufferSeconds < 14 ? 0.7 : 0.85);
   const affordable = sorted.filter((rep) => rep.bandwidth <= budget);
@@ -2427,36 +2579,64 @@ function chooseRuntimeRepresentation(representations, current, state) {
       {
         type: "code",
         title: "Segment-By-Segment ABR Loop",
-        explain: "The player chooses the video representation before each segment request, then measures the result for the next decision.",
+        explain: "The player waits until the buffer is below its goal, chooses the video representation, appends the new representation's init segment whenever the representation changes (calling changeType first if the codec string differs), then fetches and appends the media segment and measures the result. appendBufferChecked comes from the Guard Append Operations snippet in the MSE debugging lesson, and createEwma and bufferAhead come from the snippets above.",
         code: `
-const throughput = createEwma(estimateInitialThroughput());
-let currentVideo = chooseRepresentation(dash.representations.video, {
-  throughputBps: throughput.value(),
-  bufferSeconds: 0
-});
+const BUFFER_GOAL_SECONDS = 30;
 
-for (let index = 0; index < currentVideo.segments.length; index += 1) {
-  currentVideo = chooseRuntimeRepresentation(dash.representations.video, currentVideo, {
-    throughputBps: throughput.value(),
-    bufferSeconds: bufferAhead(video)
-  });
+async function appendVideoAbr(video, videoBuffer, dash) {
+  const throughput = createEwma(estimateInitialThroughput());
+  let current = dash.video;
+  let initInBuffer = null; // the Representation whose init segment the SourceBuffer last received
 
-  const segment = currentVideo.segments[index];
-  const result = await measureFetch(segment.url);
-  throughput.sample(result.throughputBps);
-  await appendBufferChecked(videoBuffer, result.bytes, \`video segment \${segment.number}\`);
+  for (let index = 0; index < dash.video.segments.length; index += 1) {
+    await waitForBufferGoal(video);
+
+    current = chooseRuntimeRepresentation(dash.representations.video, current, {
+      throughputBps: throughput.value(),
+      bufferSeconds: bufferAhead(video)
+    });
+
+    if (initInBuffer?.id !== current.id) {
+      if (initInBuffer && initInBuffer.codecs !== current.codecs) {
+        videoBuffer.changeType(current.mime);
+      }
+      await appendBufferChecked(videoBuffer, await fetchBytes(current.init), \`video init \${current.id}\`);
+      initInBuffer = current;
+    }
+
+    const segment = current.segments[index];
+    const result = await measureFetch(segment.url);
+    throughput.sample(result.throughputBps);
+    await appendBufferChecked(videoBuffer, result.bytes, \`video segment \${segment.number}\`);
+  }
+}
+
+async function waitForBufferGoal(video) {
+  while (bufferAhead(video) >= BUFFER_GOAL_SECONDS) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
+  return response.arrayBuffer();
 }`
       },
       {
         type: "text",
         heading: "Runtime Switching Constraints",
         body: [
-          "The simplified loop assumes every Representation has aligned segment timing and compatible codec configuration. A real player checks that the target Representation can be appended into the existing SourceBuffer without changing codec, track configuration, or timestamp continuity in a way the browser rejects.",
+          "The loop assumes every Representation has aligned segment timing. It also has to handle codec configuration. The BBB ladder's video Representations have different codec strings (avc1.640028 for 1080p, avc1.640020 for 720p, and avc1.64001f for 504p), even though they are all H.264 in MP4. A player must either restrict switching to identical codecs or call SourceBuffer.changeType() with the new MIME type before appending the new init segment. That is exactly what canSwitchTo and the loop do.",
+          "Switching also means appending the new Representation's init segment before its first media segment, because the SourceBuffer's parser needs that Representation's codec setup. The loop tracks which init segment is currently in the buffer.",
+          "The loop also has a buffer goal: before each request it waits while bufferAhead(video) is at or above BUFFER_GOAL_SECONDS (30). Without a goal a fast network just downloads the whole presentation, the buffer is always full, and the buffer signal that drives ABR becomes meaningless. A goal keeps buffer depth responsive to real conditions and bounds memory.",
           "Runtime ABR also coordinates audio and video. Audio often stays on one Representation because it is much cheaper than video, but the player still has to keep audio and video append queues synchronized around the same media time."
         ],
         points: [
           "Switch only at aligned segment boundaries.",
-          "Avoid switching across incompatible codec strings or profiles.",
+          "Avoid switching across incompatible codec strings or profiles unless changeType() is available.",
+          "Append the new init segment on every switch, before the next media segment.",
+          "Stop fetching once the buffer goal is met.",
           "Do not abandon audio buffering while chasing video quality.",
           "Keep enough buffer to survive the next request before switching up."
         ]
@@ -2530,7 +2710,8 @@ const nowSeconds = Date.now() / 1000;
 const astSeconds = availabilityStartTimeMs / 1000;
 
 const livePresentationTime = nowSeconds - astSeconds;
-const targetLatency = suggestedPresentationDelay || segmentDuration * 3;
+// Never less than one segment: a segment is only available once its END time has passed.
+const targetLatency = Math.max(suggestedPresentationDelay || segmentDuration * 3, segmentDuration);
 const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
 
 console.log("live edge", livePresentationTime);
@@ -2555,10 +2736,13 @@ console.log("target playback time", targetPlaybackTime);`
         heading: "Segment Availability",
         body: [
           "For simple SegmentTemplate streams with fixed duration, the player can estimate segment numbers from media time. Divide presentation time by segment duration and add startNumber. The first available segment is bounded by the time-shift buffer. The newest safe segment is behind the live edge by the target latency or by a service-specific availability delay.",
+          "The accurate rule is that a segment becomes available at availabilityStartTime + Period start + the segment's end time, plus availabilityTimeOffset if the service sets one (it makes segments available earlier, for chunked low-latency delivery). The end time is what counts because a segment cannot be published until its last sample has been produced. This is why target latency must be at least one segment duration: the segment that covers the target playback time can end up to a whole segment later than that time.",
           "This tutorial keeps the formula deliberately simple because live DASH can become more complex. SegmentTimeline, multiple Periods, clock synchronization, and low-latency chunked transfer all refine the same basic idea: determine which media times are currently requestable."
         ],
         points: [
           "segmentDurationSeconds = duration / timescale.",
+          "availableAt = availabilityStartTime + Period@start + segment end time (- availabilityTimeOffset, if present).",
+          "targetLatency >= segmentDurationSeconds, or the newest chosen segment may not exist yet.",
           "newest = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).",
           "first = newest - floor(timeShiftBufferDepth / segmentDurationSeconds).",
           "SegmentTimeline streams should use explicit S elements instead of assuming fixed duration."
@@ -2634,6 +2818,8 @@ console.log("target playback time", targetPlaybackTime);`
         points: [
           "livePresentationTime = now - availabilityStartTime.",
           "targetPlaybackTime = livePresentationTime - suggestedPresentationDelay.",
+          "A segment is available at availabilityStartTime + Period start + the segment's end time (plus availabilityTimeOffset if present), so target latency must be at least one segment duration.",
+          "DASH-IF services publish a UTCTiming element in the MPD. Players should sync their clock with it (for example by fetching the time source it names and storing an offset) instead of trusting Date.now(), because device clocks are often seconds out. Pass the corrected time as nowMs to the range calculation.",
           "For real services, clock synchronization and CDN propagation can make this estimate imperfect."
         ]
       },
@@ -2669,7 +2855,8 @@ const targetPlaybackTime = Math.max(0, livePresentationTime - suggestedDelay);`
         code: `
 function getLiveSegmentRange(timing, nowMs = Date.now()) {
   const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
-  const targetLatency = timing.suggestedPresentationDelay || timing.segmentDuration * 3;
+  // A segment only becomes available at its END time, so latency must be at least one segment.
+  const targetLatency = Math.max(timing.suggestedPresentationDelay || timing.segmentDuration * 3, timing.segmentDuration);
   const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
   const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
 
@@ -2734,7 +2921,9 @@ function getLiveSegmentRange(timing, nowMs = Date.now()) {
         points: [
           "Parse live DASH timing fields instead of assuming first and last segment numbers exist.",
           "Start behind the live edge using suggestedPresentationDelay or a segment-count fallback.",
-          "Handle near-edge 404s as retryable and remove old buffered ranges after playback moves past them."
+          "Start at the live edge with a segment cursor instead of downloading the whole time-shift window.",
+          "Handle near-edge 404s as retryable and remove old buffered ranges after playback moves past them.",
+          "After the first append, seek the video to the start of the buffered range and set mediaSource.duration to Infinity so the player treats the stream as live."
         ]
       },
       {
@@ -2770,7 +2959,8 @@ export function parseLiveTiming(doc, template) {
         code: `
 export function getLiveSegmentRange(timing, nowMs = Date.now()) {
   const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
-  const targetLatency = timing.suggestedPresentationDelay || timing.segmentDuration * 3;
+  // A segment only becomes available at its END time, so latency must be at least one segment.
+  const targetLatency = Math.max(timing.suggestedPresentationDelay || timing.segmentDuration * 3, timing.segmentDuration);
   const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
   const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
 
@@ -2786,54 +2976,100 @@ export function getLiveSegmentRange(timing, nowMs = Date.now()) {
       {
         type: "code",
         title: "Live Refresh Controller",
-        explain: "The controller refreshes the MPD, calculates the current window, appends missing segments, and schedules the next refresh.",
+        explain: "The controller refreshes the MPD, calculates the current window, and appends segments from a nextNumber cursor. It starts at the live edge rather than the start of the time-shift window, jumps back to the edge if the cursor falls out of the window, and on a near-edge 404 stops for this tick without advancing so the same segment is retried. fetchBytes attaches the HTTP status to the error it throws, which is what isNearLiveEdge404 inspects. Initialisation segments are appended once by the caller before start().",
         code: `
-export function createLiveController({ refreshManifest, appendSegment, segmentUrl, retryDelayMs = 750 }) {
-  const appended = new Set();
+export async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const error = new Error(\`HTTP \${response.status} for \${url}\`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.arrayBuffer();
+}
+
+export function createLiveController({ refreshManifest, appendSegment, segmentUrl, onStarted, onError = console.error, retryDelayMs = 750 }) {
+  let nextNumber = null; // the next segment number to append
+  let started = false;
+  let stopped = false;
   let timer = 0;
 
   return {
     async start() {
       await tick();
     },
-    stop: () => clearTimeout(timer)
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+    }
   };
 
   async function tick() {
+    if (stopped) return;
     const { timing } = await refreshManifest();
     const range = getLiveSegmentRange(timing);
+    let nextDelayMs = Math.max(timing.minimumUpdatePeriodMs || 1000, 500);
 
-    for (let number = range.first; number <= range.newest; number += 1) {
-      if (appended.has(number)) continue;
+    // First tick: start at the live edge. Later: if we fell out of the window, jump back to the edge.
+    if (nextNumber === null || nextNumber < range.first) nextNumber = range.newest;
 
+    while (nextNumber <= range.newest) {
       try {
-        await appendSegment(segmentUrl(number));
-        appended.add(number);
+        await appendSegment(segmentUrl(nextNumber));
       } catch (error) {
-        if (isNearLiveEdge404(error, number, range.newest)) {
-          await delay(retryDelayMs);
+        if (isNearLiveEdge404(error, nextNumber, range.newest)) {
+          nextDelayMs = retryDelayMs; // do not advance; try this segment again next tick
           break;
         }
         throw error;
       }
+
+      nextNumber += 1;
+      if (!started) {
+        started = true;
+        await onStarted?.();
+      }
     }
 
-    timer = setTimeout(tick, Math.max(timing.minimumUpdatePeriodMs || 1000, 500));
+    if (!stopped) timer = setTimeout(() => tick().catch(onError), nextDelayMs);
   }
 }`
       },
       {
         type: "code",
         title: "Near-Edge Retry",
-        explain: "A segment close to live edge can briefly 404 while it propagates through packaging and CDN layers.",
+        explain: "A segment close to live edge can briefly 404 while it propagates through packaging and CDN layers. The check relies on error.status, which fetchBytes sets; fetch itself does not throw on a 404, so without that helper nothing would ever carry a status.",
         code: `
 function isNearLiveEdge404(error, number, newest) {
   return error.status === 404 && number >= newest - 1;
+}`
+      },
+      {
+        type: "code",
+        title: "Start At The Live Media",
+        explain: "Appending media does not move the playhead. The first segment appended near the live edge starts at a large presentation time, so currentTime 0 is empty and the video waits forever. onStarted runs after the first append and moves currentTime to the start of the buffered range. Setting mediaSource.duration to Infinity marks the stream as live, and setLiveSeekableRange exposes the live window to the seek bar. Call it again as the window moves, and when audio and video are in separate SourceBuffers, call it once both have data.",
+        code: `
+// Call once the first media is appended: expose the live window and move the playhead onto it.
+export function seekToLiveStart(video, mediaSource) {
+  if (!video.buffered.length) return;
+  const start = video.buffered.start(0);
+  const end = video.buffered.end(video.buffered.length - 1);
+
+  if (mediaSource.readyState === "open") {
+    mediaSource.duration = Infinity; // live: there is no known end
+    mediaSource.setLiveSeekableRange?.(start, end);
+  }
+  video.currentTime = start;
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}`
+// Wiring (init segments are appended before start()):
+const controller = createLiveController({
+  refreshManifest,
+  segmentUrl,
+  appendSegment: async (url) => appendBufferChecked(videoBuffer, await fetchBytes(url), url),
+  onStarted: () => seekToLiveStart(video, mediaSource)
+});
+await controller.start();`
       },
       {
         type: "code",
@@ -3233,12 +3469,14 @@ await installImscRenderer(video, "./sample.ttml");`
         heading: "Keep DRM Optional",
         body: [
           "DRM support varies by browser, OS, and security context. Treat the DRM lesson as an optional branch of the player, not as a requirement for the rest of playback.",
-          "ClearKey uses JSON Web Key Set data, which makes it suitable for a tutorial. The structure is not how production services should expose keys."
+          "ClearKey uses JSON Web Key Set data, which makes it suitable for a tutorial. The structure is not how production services should expose keys.",
+          "Both kid and k in a ClearKey JWK must be base64url (no padding) of the raw 16-byte key ID and key. If you hold them as 32-character hex strings, as most packaging tools print them, convert with the hexToBase64Url helper. Plain base64 or hex in those fields makes the CDM reject the licence."
         ],
         points: [
-          "Request key system access before attaching encrypted media.",
+          "Request key system access, with both video and audio capabilities, before attaching encrypted media.",
           "Attach MediaKeys to the video element.",
-          "Listen for encrypted, create a session, generate a request, and update it with the license response."
+          "Audio and video each fire encrypted, often with identical initData, so create one session per distinct initData (keyed by its base64) rather than per event.",
+          "In the session's message handler, parse the request JSON ({ kids, type }) and update the session with a JWK set containing only the requested keys: { keys: [{ kty: \"oct\", kid, k }], type: \"temporary\" }."
         ]
       },
       {
@@ -3248,8 +3486,9 @@ await installImscRenderer(video, "./sample.ttml");`
       {
         type: "code",
         title: "drm.js",
-        explain: "This is the smallest useful EME shape. Production DRM replaces createClearKeyLicense with a license server fetch.",
+        explain: "This is the smallest useful EME shape. It creates one session per distinct initData, answers the license request with only the keys the CDM asked for, and requests both video and audio capabilities. Production DRM replaces createClearKeyLicense with a license server fetch.",
         code: `
+// keys: [{ kid: "<32 hex chars>", key: "<32 hex chars>" }, ...] (16-byte key IDs and keys)
 export async function installClearKey(video, keys) {
   if (!window.isSecureContext) {
     throw new Error("EME requires a secure context or localhost.");
@@ -3257,24 +3496,59 @@ export async function installClearKey(video, keys) {
 
   const config = [{
     initDataTypes: ["cenc"],
-    videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.64001f"' }]
+    videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.64001f"' }],
+    audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }]
   }];
 
   const access = await navigator.requestMediaKeySystemAccess("org.w3.clearkey", config);
   const mediaKeys = await access.createMediaKeys();
   await video.setMediaKeys(mediaKeys);
 
+  const keyTable = new Map(keys.map(({ kid, key }) => [hexToBase64Url(kid), hexToBase64Url(key)]));
+  const seenInitData = new Set();
+
   video.addEventListener("encrypted", async (event) => {
-    const session = mediaKeys.createSession();
-    session.addEventListener("message", async () => {
-      await session.update(createClearKeyLicense(keys));
-    });
-    await session.generateRequest(event.initDataType, event.initData);
+    // Audio and video each fire "encrypted", often with identical initData: one session per distinct value.
+    const id = bytesToBase64(new Uint8Array(event.initData));
+    if (seenInitData.has(id)) return;
+    seenInitData.add(id);
+
+    try {
+      const session = mediaKeys.createSession();
+      session.addEventListener("message", async (messageEvent) => {
+        await session.update(createClearKeyLicense(messageEvent.message, keyTable));
+      });
+      await session.generateRequest(event.initDataType, event.initData);
+    } catch (error) {
+      seenInitData.delete(id);
+      console.error("ClearKey session failed", error);
+    }
   });
 }
 
-function createClearKeyLicense(keys) {
+// The request message is JSON: { "kids": ["<base64url key id>", ...], "type": "temporary" }.
+export function createClearKeyLicense(message, keyTable) {
+  const request = JSON.parse(new TextDecoder().decode(message));
+  const keys = request.kids
+    .filter((kid) => keyTable.has(kid))
+    .map((kid) => ({ kty: "oct", kid, k: keyTable.get(kid) }));
+
+  if (!keys.length) throw new Error(\`No ClearKey key for requested kids: \${request.kids.join(", ")}\`);
   return new TextEncoder().encode(JSON.stringify({ keys, type: "temporary" }));
+}
+
+// ClearKey wants kid and k as base64url (no padding) of the raw 16 bytes.
+export function hexToBase64Url(hex) {
+  if (!/^(?:[0-9a-f]{2}){16}$/i.test(hex)) throw new Error("Expected 32 hex characters (16 bytes)");
+  const bytes = hex.match(/../g).map((pair) => parseInt(pair, 16));
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
+function bytesToBase64(bytes) {
+  return btoa(String.fromCharCode(...bytes));
 }`
       },
       {

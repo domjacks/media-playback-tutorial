@@ -17,7 +17,8 @@ export function parseLiveTiming(doc, template) {
 
 export function getLiveSegmentRange(timing, nowMs = Date.now()) {
   const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
-  const targetLatency = timing.suggestedPresentationDelay || timing.segmentDuration * 3;
+  // A segment only becomes available at its END time, so latency must be at least one segment.
+  const targetLatency = Math.max(timing.suggestedPresentationDelay || timing.segmentDuration * 3, timing.segmentDuration);
   const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
   const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
 
@@ -30,38 +31,74 @@ export function getLiveSegmentRange(timing, nowMs = Date.now()) {
   return { first, newest, targetPlaybackTime, livePresentationTime };
 }
 
-export function createLiveController({ refreshManifest, appendSegment, segmentUrl, retryDelayMs = 750 }) {
-  const appended = new Set();
+export async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status} for ${url}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.arrayBuffer();
+}
+
+export function createLiveController({ refreshManifest, appendSegment, segmentUrl, onStarted, onError = console.error, retryDelayMs = 750 }) {
+  let nextNumber = null; // the next segment number to append
+  let started = false;
+  let stopped = false;
   let timer = 0;
 
   return {
     async start() {
       await tick();
     },
-    stop: () => clearTimeout(timer)
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+    }
   };
 
   async function tick() {
+    if (stopped) return;
     const { timing } = await refreshManifest();
     const range = getLiveSegmentRange(timing);
+    let nextDelayMs = Math.max(timing.minimumUpdatePeriodMs || 1000, 500);
 
-    for (let number = range.first; number <= range.newest; number += 1) {
-      if (appended.has(number)) continue;
+    // First tick: start at the live edge. Later: if we fell out of the window, jump back to the edge.
+    if (nextNumber === null || nextNumber < range.first) nextNumber = range.newest;
 
+    while (nextNumber <= range.newest) {
       try {
-        await appendSegment(segmentUrl(number));
-        appended.add(number);
+        await appendSegment(segmentUrl(nextNumber));
       } catch (error) {
-        if (isNearLiveEdge404(error, number, range.newest)) {
-          await delay(retryDelayMs);
+        if (isNearLiveEdge404(error, nextNumber, range.newest)) {
+          nextDelayMs = retryDelayMs; // do not advance; try this segment again next tick
           break;
         }
         throw error;
       }
+
+      nextNumber += 1;
+      if (!started) {
+        started = true;
+        await onStarted?.();
+      }
     }
 
-    timer = setTimeout(tick, Math.max(timing.minimumUpdatePeriodMs || 1000, 500));
+    if (!stopped) timer = setTimeout(() => tick().catch(onError), nextDelayMs);
   }
+}
+
+// Call once the first media is appended: expose the live window and move the playhead onto it.
+export function seekToLiveStart(video, mediaSource) {
+  if (!video.buffered.length) return;
+  const start = video.buffered.start(0);
+  const end = video.buffered.end(video.buffered.length - 1);
+
+  if (mediaSource.readyState === "open") {
+    mediaSource.duration = Infinity; // live: there is no known end
+    mediaSource.setLiveSeekableRange?.(start, end);
+  }
+  video.currentTime = start;
 }
 
 export function updateLiveCatchup(video, { livePresentationTime, targetLatency }) {
@@ -88,10 +125,6 @@ export async function removeOldBuffer(sourceBuffer, currentTime, keepBehind = 30
 
 function isNearLiveEdge404(error, number, newest) {
   return error.status === 404 && number >= newest - 1;
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseDuration(value) {
