@@ -1,0 +1,172 @@
+---
+slug: "hls-theory"
+title: "HLS"
+kind: "Theory"
+summary: "Read an HLS multivariant playlist and media playlists, and map every important tag onto its DASH equivalent."
+outcome: "You can explain multivariant and media playlists, segment formats (TS versus fMP4), live reload rules, discontinuities, encryption signalling, and how an MSE player differs from native HLS."
+reference: "https://www.rfc-editor.org/rfc/rfc8216"
+---
+
+## Two Levels Of Text Playlist
+
+HTTP Live Streaming (HLS) was designed by Apple and is specified in RFC 8216, with the current work tracked in the IETF draft draft-pantos-hls-rfc8216bis. Where DASH has one XML document, HLS has a small tree of UTF-8 text playlists with the extension `.m3u8`.
+
+- A multivariant playlist (called a Master Playlist in RFC 8216) lists the choices: variants, alternate audio, subtitles.
+- A media playlist lists the segments of exactly one rendition, in order, with their durations.
+- Every playlist starts with `#EXTM3U`. Lines starting with `#EXT` are tags; other lines starting with `#` are comments; everything else is a URI, relative to the playlist that contains it.
+
+The player downloads the multivariant playlist, chooses a variant, then downloads the media playlist (or playlists) for that choice. Segment URLs are only discovered at that second step.
+
+## The Multivariant Playlist
+
+Each `#EXT-X-STREAM-INF` tag describes one variant and is followed by the URI of its media playlist on the next line. This is a real playlist, Apple's fMP4 advanced example:
+
+<Snippet title="Multivariant Playlist" explain="Two lines per variant: attributes, then the media playlist URI. The audio is not in the variant's own playlist: AUDIO refers to a GROUP-ID declared by an EXT-X-MEDIA tag.">
+
+```text
+#EXTM3U
+#EXT-X-VERSION:6
+#EXT-X-INDEPENDENT-SEGMENTS
+
+#EXT-X-STREAM-INF:AVERAGE-BANDWIDTH=895755,BANDWIDTH=902298,CODECS="avc1.64001e,mp4a.40.2",RESOLUTION=640x360,FRAME-RATE=30.000,CLOSED-CAPTIONS="cc1",AUDIO="aud1",SUBTITLES="sub1"
+v3/prog_index.m3u8
+
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud1",LANGUAGE="en",NAME="English",AUTOSELECT=YES,DEFAULT=YES,CHANNELS="2",URI="a1/prog_index.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub1",LANGUAGE="en",NAME="English",AUTOSELECT=YES,DEFAULT=YES,FORCED=NO,URI="s1/en/prog_index.m3u8"
+```
+
+</Snippet>
+
+Attributes of `#EXT-X-STREAM-INF`:
+
+- `BANDWIDTH` (required): the peak segment bit rate of the variant, in bits per second, including any referenced audio rendition. Players use it for variant selection, so it must not understate reality.
+- `AVERAGE-BANDWIDTH`: the average segment bit rate. Useful for choosing a rendition you can sustain, whereas the peak decides what might cause a stall.
+- `CODECS`: comma-separated RFC 6381 strings for every format the variant uses, such as `avc1.64001e,mp4a.40.2`. A player calls `MediaSource.isTypeSupported()` with these before choosing. The attribute is optional in the RFC, but you should treat it as essential.
+- `RESOLUTION` and `FRAME-RATE`: the video dimensions and maximum frame rate, so a player can skip variants larger than the display or faster than the decoder.
+- `AUDIO`, `SUBTITLES`, `CLOSED-CAPTIONS`: a `GROUP-ID` naming the alternate renditions that go with this variant.
+
+`#EXT-X-MEDIA` declares one alternate rendition:
+
+- `TYPE`: `AUDIO`, `VIDEO`, `SUBTITLES` or `CLOSED-CAPTIONS`.
+- `GROUP-ID`: which group the rendition belongs to; several variants can share a group, which is how one audio track serves every video bit rate.
+- `NAME` and `LANGUAGE`: what the user sees, and the language tag.
+- `DEFAULT=YES`: play this when the user has expressed no preference. `AUTOSELECT=YES`: the player may pick it automatically, for example because it matches the system language.
+- `URI`: the rendition's media playlist. If it is absent, the rendition is muxed into the variant's own segments (this is how `CLOSED-CAPTIONS` works, via `INSTREAM-ID`).
+
+`#EXT-X-INDEPENDENT-SEGMENTS` promises that every segment can be decoded without data from other segments, which lets a player start or switch at any segment boundary.
+
+## The Media Playlist
+
+A media playlist is a header followed by one block per segment. This is the start and end of the 360p video playlist from the same stream:
+
+<Snippet title="Media Playlist (VOD, fMP4)" explain="The EXT-X-MAP tag points at the initialization section; each EXTINF/BYTERANGE/URI trio is one segment cut from the same file. EXT-X-ENDLIST means no more segments will ever be added.">
+
+```text
+#EXTM3U
+#EXT-X-TARGETDURATION:6
+#EXT-X-VERSION:7
+#EXT-X-MEDIA-SEQUENCE:1
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXT-X-INDEPENDENT-SEGMENTS
+#EXT-X-MAP:URI="main.mp4",BYTERANGE="720@0"
+#EXTINF:6.00000,
+#EXT-X-BYTERANGE:540482@720
+main.mp4
+#EXTINF:6.00000,
+#EXT-X-BYTERANGE:551488@541202
+main.mp4
+...
+#EXT-X-ENDLIST
+```
+
+</Snippet>
+
+- `#EXT-X-VERSION`: the compatibility version. Using `#EXT-X-MAP` in a playlist with full segments requires version 6 or higher.
+- `#EXT-X-TARGETDURATION`: an integer upper bound on every `EXTINF` duration once rounded. It also drives reload timing, below.
+- `#EXT-X-MEDIA-SEQUENCE`: the sequence number of the first segment in the playlist (0 if absent). Each following segment is one higher. This is the number that identifies a segment across live reloads; it is not in the URL.
+- `#EXTINF:<seconds>,[title]`: the segment's duration. A segment's start time within the playlist is the sum of the durations before it; there is no absolute timing in the playlist itself.
+- `#EXT-X-MAP:URI=...[,BYTERANGE=...]`: the Media Initialization Section for the segments that follow, required for fMP4. It applies until the next `#EXT-X-MAP`.
+- `#EXT-X-BYTERANGE:<length>[@<offset>]`: the segment is a sub-range of the URI. With no offset it starts after the previous range of the same resource. Single-file packaging like this keeps the CDN object count low, but each request needs a `Range` header.
+- `#EXT-X-PLAYLIST-TYPE`: `VOD` (the playlist never changes) or `EVENT` (segments are only ever appended). If it is absent the playlist is a plain live playlist that may also drop old segments from the front.
+- `#EXT-X-ENDLIST`: the presentation is complete. Without it the player must treat the playlist as live and reload it.
+
+## Discontinuities And Wall Clock
+
+`#EXT-X-DISCONTINUITY` marks that the segment after it differs from the one before in some respect: encoding parameters, timestamps, or the media initialization section. Ad insertion is the classic cause. When the leading edge of a live playlist rolls past discontinuities, `#EXT-X-DISCONTINUITY-SEQUENCE` keeps their numbering stable so the player can still tell which discontinuity it is on.
+
+- A discontinuity usually means a new `#EXT-X-MAP` and a reset of the timestamp baseline. In MSE you handle it by appending the new init segment and adjusting `timestampOffset`.
+- `#EXT-X-PROGRAM-DATE-TIME:2010-02-19T14:54:23.031+08:00` ties the first sample of the next segment to a wall-clock date. It is the HLS counterpart of DASH's `availabilityStartTime` plus segment time, and it is how a player maps media time to real time for live latency, synchronising renditions, and ad or event markers (`#EXT-X-DATERANGE`).
+
+## Live Playlists
+
+A live media playlist has no `#EXT-X-ENDLIST`. The server appends segments at the end and, for a sliding window, removes them from the front while increasing `#EXT-X-MEDIA-SEQUENCE` by the number removed.
+
+- Reload interval: after loading a playlist, wait at least one target duration, measured from when the previous load began, before reloading. If the reload shows no change, wait half a target duration before trying again (RFC 8216 section 6.3.4).
+- Start position: unless `#EXT-X-ENDLIST` is present, a client should not begin with a segment that starts less than three target durations from the end of the playlist (section 6.3.3). With six-second segments that puts you at least 18 seconds behind live.
+- Consistency: after a reload, the segment with a given media sequence number must have the same URI as before. If it does not, the server is broken and the player should stop.
+- Identity: the media sequence number, not the URL, identifies a segment. A player tracks the last sequence number it appended and fetches those with a higher number.
+- `EVENT` playlists never remove segments, so they grow like a recording in progress and the full event can be replayed when it ends.
+
+## Segment Formats: TS, fMP4 And CMAF
+
+The original HLS segment format is MPEG-2 Transport Stream (`.ts`): 188-byte packets carrying multiplexed, packetised elementary streams. Since protocol version 6, HLS also supports fragmented MP4 segments, introduced so one set of CMAF-compatible files could serve both HLS and DASH.
+
+- A TS segment is self-initialising: the PAT and PMT tables repeat in the stream, so there is no `#EXT-X-MAP`.
+- An fMP4 segment needs a Media Initialization Section (`ftyp` plus `moov`) announced by `#EXT-X-MAP`, and every track fragment must carry a `tfdt` box with its decode time.
+- MSE does not accept MPEG-2 TS in browsers. Players that need TS, such as hls.js, transmux it to fMP4 in JavaScript or a worker before calling `appendBuffer()`.
+- Raw packed audio (AAC with ADTS, MP3, AC-3) is also valid HLS, which also needs transmuxing.
+- CMAF (ISO/IEC 23000-19) standardises the fMP4 profile. With CMAF segments the same media objects can be addressed by both an HLS playlist and a DASH MPD, so you package and cache once and publish two manifests.
+
+## Encryption
+
+Segments can be encrypted, and the playlist says how with `#EXT-X-KEY` (and `#EXT-X-SESSION-KEY` in the multivariant playlist, which lets a player preload keys).
+
+- `METHOD=NONE`: not encrypted.
+- `METHOD=AES-128`: the whole segment is encrypted with AES-128 CBC, with the key fetched from `URI` over HTTPS; the IV is an attribute or the media sequence number.
+- `METHOD=SAMPLE-AES`: only the media samples are encrypted, leaving container structure readable. This is the base for fMP4 with CENC (`cbcs`) and for Apple FairPlay (`KEYFORMAT="com.apple.streamingkeydelivery"`).
+- Other `KEYFORMAT` values signal other DRM systems, so one playlist can carry Widevine and PlayReady alongside FairPlay.
+
+AES-128 with a key URL is content protection through obfuscation; the key is available to anyone allowed to fetch it. Real DRM is covered in the Encrypted Media lessons.
+
+## Low-Latency HLS
+
+Low-Latency HLS extends the same playlists with partial segments (`#EXT-X-PART`), `#EXT-X-PRELOAD-HINT` for the next part, and blocking playlist reload through the `_HLS_msn` and `_HLS_part` query parameters, advertised by `#EXT-X-SERVER-CONTROL`. The Low Latency lessons cover the mechanism and compare it with DASH chunked transfer.
+
+## Native HLS And MSE-Based Players
+
+Safari (macOS and iOS) plays HLS natively, so you hand the playlist URL to the media element and the platform does everything: parsing, ABR, buffering, DRM. Other browsers do not understand HLS, so a JavaScript player such as hls.js, Shaka Player, or dash.js with an HLS module parses the playlists and feeds MSE.
+
+<Snippet title="Choosing A Playback Path" explain="Prefer MSE where it exists; fall back to native HLS where the browser only supports that. iPhone Safari historically had no MediaSource, so native HLS was the only path there.">
+
+```js
+const video = document.querySelector("video");
+
+if (window.MediaSource || window.ManagedMediaSource) {
+  // Use an MSE-based player: parse the playlists, append fMP4 segments yourself.
+} else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+  video.src = "https://example.com/master.m3u8"; // the platform does everything
+}
+```
+
+</Snippet>
+
+- Native playback gives you the platform's ABR, DRM and power efficiency, but little control over variant choice, buffer size or error handling.
+- An MSE player gives full control, and one code path can play HLS and DASH. It costs more JavaScript and, for TS, transmuxing work.
+- Some browsers can do both. If you want control over buffering and ABR, test for MSE first and use `canPlayType()` only as the fallback.
+
+## HLS Versus DASH Vocabulary
+
+- Multivariant playlist = MPD.
+- `#EXT-X-STREAM-INF` variant = Representation (video, or muxed audio and video).
+- `#EXT-X-MEDIA` group of renditions = AdaptationSet for audio, subtitles or alternate video.
+- `BANDWIDTH` = `Representation@bandwidth`; `CODECS` = `@codecs`; `RESOLUTION` = `@width` and `@height`.
+- Media playlist = a SegmentList or SegmentTemplate resolved into explicit entries; `#EXTINF` = segment duration (`S@d` in a SegmentTimeline).
+- `#EXT-X-MAP` = `SegmentTemplate@initialization` or `Initialization`.
+- `#EXT-X-BYTERANGE` = `mediaRange` and `indexRange` addressing in `SegmentBase` and `SegmentList`.
+- `#EXT-X-DISCONTINUITY` = a new Period (or a timestamp discontinuity within one).
+- `#EXT-X-PROGRAM-DATE-TIME` = `availabilityStartTime` plus period and segment time.
+- `#EXT-X-TARGETDURATION` and reload rules = `minimumUpdatePeriod`, `maxSegmentDuration`.
+- `#EXT-X-ENDLIST` = `type="static"` or an MPD that stops being updated.
+- `#EXT-X-KEY` = `ContentProtection`.
+
+<Demo title="Playlists Are Manifests" mode="timeline">HLS expresses the same ideas as DASH, but as a tree of text playlists whose segments are listed explicitly and ordered by sequence number.</Demo>

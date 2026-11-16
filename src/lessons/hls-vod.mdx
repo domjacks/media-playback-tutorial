@@ -1,0 +1,87 @@
+---
+slug: "hls-vod"
+title: "Play HLS With MSE"
+kind: "Practical"
+summary: "Parse an fMP4 HLS multivariant playlist and media playlists, then append the init segments and byte-range media segments through MSE."
+outcome: "A browser ESM player fetches Apple's fMP4 HLS example, picks a variant by BANDWIDTH and CODECS, and plays demuxed audio and video from byte ranges."
+reference: "https://www.rfc-editor.org/rfc/rfc8216"
+---
+
+## The Stream
+
+The test content is Apple's public fMP4 HLS example, `img_bipbop_adv_example_fmp4`. It is a good teaching stream because it uses most of what makes real HLS interesting while staying small: eight AAC variants (plus AC-3 and E-AC-3 duplicates of the same video), demuxed audio renditions, and each rendition packed into a single `main.mp4` file addressed with `#EXT-X-BYTERANGE`.
+
+The server sends `Access-Control-Allow-Origin: *` and allows the `Range` request header in its preflight, so a page on any origin can fetch it. Playback is 10 minutes long, so the player uses a buffer goal rather than loading everything at once.
+
+- Each video variant's media playlist and the audio playlist describe 6-second segments inside one file.
+- Both tracks start near 10 seconds on the media timeline, not at 0. HLS does not require timestamps to begin at zero.
+- The audio playlist is a separate rendition selected through the variant's `AUDIO` group, so the player needs two SourceBuffers.
+
+## Parsing Playlists
+
+Attribute lists look like `BANDWIDTH=902298,CODECS="avc1.64001e,mp4a.40.2"`. The comma inside the quoted `CODECS` value breaks a simple `split(",")`, so the parser matches a key followed by either a quoted string or an unquoted run.
+
+<Snippet title="Attribute Lists And Byte Ranges" explain="One regular expression handles quoted and unquoted values. Byte ranges are length@offset, and the offset is optional." file="hls-vod/m3u8.js" region="parse-attributes" />
+
+The multivariant parser walks the lines in order. A `#EXT-X-STREAM-INF` tag consumes the next line as the variant's URI; `#EXT-X-MEDIA` tags become renditions. Every URI is resolved against the playlist's own URL.
+
+<Snippet title="Multivariant Parser" explain="Variants carry bandwidth, split codecs, resolution and the AUDIO group name. Renditions carry the group id, NAME, DEFAULT flag and an optional URI; no URI would mean the audio is muxed into the video segments." file="hls-vod/m3u8.js" region="parse-multivariant" />
+
+The media parser keeps a little state while it reads: the current `#EXT-X-MAP`, the tags waiting for their URI line, a running presentation time built from `#EXTINF`, and an implicit byte offset for ranges without `@`. The result is a list of segments with `start`, `end`, `url`, `byteRange` and the `map` that applies to them.
+
+<Snippet title="Media Playlist Parser" explain="Segment start times are cumulative EXTINF durations. A BYTERANGE without an offset continues from the end of the previous range. Each segment keeps a reference to the EXT-X-MAP in force when it was read, so a mid-playlist init change would work." file="hls-vod/m3u8.js" region="parse-media" />
+
+- The playlist contains no absolute times, so `start` and `end` are relative to the first segment.
+- `#EXT-X-MEDIA-SEQUENCE` becomes the first segment's `sequence`; a live player would use it to know which segments are new after a reload.
+- The parser has no dependencies and no DOM use, so you can test it in Node by feeding it real playlist text.
+
+## Choosing A Variant
+
+A variant is playable only if the browser supports every codec in its `CODECS` list. The player builds a MIME type for each codec and asks `MediaSource.isTypeSupported()`. Among playable variants it picks the highest `BANDWIDTH` that fits an assumed 1 Mbps budget, falling back to the lowest.
+
+<Snippet title="Variant Selection" explain="CODECS filtering stops the player choosing something the device cannot decode. BANDWIDTH is a peak rate, so using it against a throughput estimate is conservative. This tutorial also restricts audio to stereo AAC; the stream offers AC-3 and E-AC-3 copies of every video rung." file="hls-vod/player.js" region="choose-variant" />
+
+With a 1 Mbps budget this selects the 640x360 variant (`BANDWIDTH=902298`). Replacing the constant with a measured throughput is the first step towards the adaptive player from the DASH lessons.
+
+## One Buffer Or Two
+
+Whether you need one SourceBuffer or two depends on how the chosen variant is packaged.
+
+- If the variant has an `AUDIO` attribute and the matching `#EXT-X-MEDIA` rendition has a `URI`, audio and video are in separate media playlists with separate fMP4 files. Each needs its own SourceBuffer with its own MIME type: `video/mp4; codecs="avc1..."` and `audio/mp4; codecs="mp4a.40.2"`.
+- If there is no `AUDIO` attribute, the variant's segments carry both tracks in one fMP4. A single SourceBuffer with both codecs in the MIME type is correct, as in `video/mp4; codecs="avc1.64001e,mp4a.40.2"`.
+- Never put a muxed codec list on a demuxed video buffer: the audio codec would be declared but never delivered.
+
+<Snippet title="Planning The Tracks" explain="One plan per SourceBuffer: demuxed streams get a video and an audio plan, muxed streams get a single plan with every codec. The demuxed audio rendition comes from the variant's AUDIO group, taking the DEFAULT entry." file="hls-vod/player.js" region="plan-tracks" />
+
+## Appending Init And Media Segments
+
+The fMP4 init segment comes from `#EXT-X-MAP`, appended before any media segment. Here the init data and the segments are byte ranges of the same file, so fetching them uses a `Range` header. HTTP ranges are inclusive, so a range of `length` bytes at `offset` ends at `offset + length - 1`. A server that ignores `Range` would return the whole 55 MB file with status 200, so the player checks for 206.
+
+<Snippet title="Fetching A Byte-Range Resource" explain="Whole-file resources and byte ranges share one code path. The Range header makes this a CORS preflighted request, which this server allows." file="hls-vod/player.js" region="fetch-segment" />
+
+The append loop is in two phases. First, each track appends its init segment and first media segment. Then the player moves the playhead to where media actually starts. After that, each track appends one segment at a time, pausing whenever it is more than 30 seconds ahead of `currentTime`, and calls `endOfStream()` when every segment is in.
+
+<Snippet title="Append Loop With A Buffer Goal" explain="Phase 1 appends init plus first segment per track and reads where the buffered range really starts (about 10 s here). Phase 2 appends the remaining segments, waiting whenever the track is further than BUFFER_GOAL_SECONDS ahead of the playhead." file="hls-vod/player.js" region="append-loop" />
+
+- `timelineOffset` is the gap between where a segment should be on the playlist timeline and where its samples really are on the media timeline.
+- Setting `video.currentTime` to the start of the buffered range avoids waiting forever at time 0, an issue the live lessons cover as well.
+- This loop never removes media. The 360p rendition is about 55 MB for the full ten minutes, while 540p at 60 fps is about 150 MB, which is close to what some browsers allow a video SourceBuffer to hold. That is why the budget is low. The buffer management lessons show eviction.
+
+<Checkpoint slug="hls-vod" run files={["index.html","m3u8.js","player.js"]} note="No browser was available when this was written, so the playback observations come from the verified playlist data and the code, not a recorded run.">
+
+- DevTools Network shows master.m3u8, then v3/prog_index.m3u8 and a1/prog_index.m3u8, then range requests (status 206) to v3/main.mp4 and a1/main.mp4.
+- The page log prints the chosen variant (640x360, bandwidth=902298), 100 video segments, 101 audio segments, and about 600 seconds.
+- The first sample is logged near 10 seconds and playback starts there; video.buffered grows to about 30 seconds ahead of the playhead, not the whole file.
+- When playback reaches the end, endOfStream is logged and the video ends at about 610 seconds on the media timeline.
+
+</Checkpoint>
+
+<Exercise title="Add A Variant Picker">
+
+Add a select element listing the playable variants by resolution and bandwidth, and make the player use the chosen one at startup. Then go further: on a change, keep the same audio, fetch the new variant's media playlist, and start appending its segments from the one that covers `video.currentTime`.
+
+<Hint>For a start-up picker, render `byBandwidth` into a select, then wait for its change event before running the plan-tracks code. For a mid-stream switch, find the first segment whose `end` is above `currentTime` minus the track's `timelineOffset`, append the new variant's `#EXT-X-MAP` init segment first, then continue from that segment; stale video from the old rendition can be removed with `sourceBuffer.remove()` ahead of the playhead.</Hint>
+
+</Exercise>
+
+<Demo title="Playlists To Appends" mode="packets">An HLS player turns playlist entries into byte-range requests, then feeds each response into the same MSE append queue as any other segment.</Demo>

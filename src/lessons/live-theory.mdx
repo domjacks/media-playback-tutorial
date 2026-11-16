@@ -72,12 +72,18 @@ minimumUpdatePeriod is a refresh hint, not a guarantee that every refresh contai
 
 For simple SegmentTemplate streams with fixed duration, the player can estimate segment numbers from media time. Divide presentation time by segment duration and add startNumber. The first available segment is bounded by the time-shift buffer. The newest safe segment is behind the live edge by the target latency or by a service-specific availability delay.
 
-The accurate rule is that a segment becomes available at availabilityStartTime + Period start + the segment's end time, plus availabilityTimeOffset if the service sets one (it makes segments available earlier, for chunked low-latency delivery). The end time is what counts because a segment cannot be published until its last sample has been produced. This is why target latency must be at least one segment duration: the segment that covers the target playback time can end up to a whole segment later than that time.
+The accurate rule is that a segment becomes available at availabilityStartTime + Period start + the segment's end time, minus availabilityTimeOffset if the service sets one (it makes segments available earlier, for chunked low-latency delivery). With a presentationTimeOffset, the end time is measured as (end ticks minus presentationTimeOffset) divided by the timescale. The end time is what counts because a segment cannot be published until its last sample has been produced. This is why target latency must be at least one segment duration: the segment that covers the target playback time can end up to a whole segment later than that time.
+
+Every one of these formulas needs the current time, which makes the player's clock part of the protocol. DASH-IF requires dynamic MPDs to carry a UTCTiming element naming a time source (`urn:mpeg:dash:utc:http-xsdate:2014`, `http-iso`, `http-head`, or `direct`), and requires clients to synchronise to it rather than trust the device. The player measures the server time, assumes it was read halfway through the round trip, and uses the difference as an offset. The DASH Live Timing lesson shows the maths.
+
+- A client clock ahead of the service asks for segments that are not published yet, and gets 404s.
+- A client clock behind the service plays further from live than intended, or falls off the back of the time-shift window.
+- HLS reads availability from the playlist, so it is immune to this; its wall-clock link is `#EXT-X-PROGRAM-DATE-TIME`.
 
 This tutorial keeps the formula deliberately simple because live DASH can become more complex. SegmentTimeline, multiple Periods, clock synchronization, and low-latency chunked transfer all refine the same basic idea: determine which media times are currently requestable.
 
 - segmentDurationSeconds = duration / timescale.
-- availableAt = availabilityStartTime + Period@start + segment end time (- availabilityTimeOffset, if present).
+- availableAt = availabilityStartTime + Period@start + segment end time - availabilityTimeOffset.
 - targetLatency >= segmentDurationSeconds, or the newest chosen segment may not exist yet.
 - newest = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).
 - first = newest - floor(timeShiftBufferDepth / segmentDurationSeconds).

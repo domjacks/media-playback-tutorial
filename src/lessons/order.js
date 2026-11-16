@@ -27,6 +27,10 @@ export const lessonSections = [
     slugs: ["protocols", "dash-theory", "dash-vod", "adaptive-bitrate", "buffer-management", "seeking-and-eviction"]
   },
   {
+    title: "HLS",
+    slugs: ["hls-theory", "hls-vod"]
+  },
+  {
     title: "Decoding With WebCodecs",
     slugs: ["demuxing-samples", "webcodecs-playback"]
   },

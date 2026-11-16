@@ -2,8 +2,8 @@
 slug: "protocols"
 title: "Streaming Protocols"
 kind: "Theory"
-summary: "Replace hardcoded segment lists with protocol manifests that describe time, quality, codecs, and URLs."
-outcome: "You understand why streaming protocols exist and how DASH and HLS describe media choices."
+summary: "Replace hardcoded segment lists with manifests, and compare how DASH and HLS describe the same streaming problem."
+outcome: "You can explain why streaming protocols exist and compare DASH and HLS on manifests, containers, addressing, live updates, DRM signalling, and device support."
 reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
 ---
 
@@ -11,11 +11,11 @@ reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
 
 The previous demo hardcoded every segment. That works for a lab, but not for real media. A streaming protocol gives the player a manifest so it can discover available qualities, languages, timing, and segment URLs.
 
-DASH and HLS use different manifest formats, but the player questions are similar: what tracks exist, which encodes are available, where are the segments, how long do they last, and what codecs are required?
+Both protocols run over plain HTTP, so any CDN can cache their output. The player questions are the same: what tracks exist, which encodes are available, where are the segments, how long do they last, and what codecs are required?
 
-- DASH uses an XML Media Presentation Description, usually called an MPD.
-- HLS uses text playlists: a multivariant playlist points at media playlists.
-- Both protocols let the player react to bandwidth, latency, and device capability.
+- DASH (MPEG-DASH, ISO/IEC 23009-1) uses an XML Media Presentation Description, an MPD.
+- HLS (HTTP Live Streaming, RFC 8216) uses text playlists: a multivariant playlist points at media playlists.
+- Both let the player react to bandwidth, latency, and device capability.
 
 <Diagram visual="timeline" />
 
@@ -36,4 +36,62 @@ Media
 
 </Snippet>
 
-<Demo title="Manifest To Timeline" mode="timeline">A manifest maps segment numbers to timeline ranges so the player can request just enough future media.</Demo>
+## Manifest Format
+
+DASH has one XML document with a hierarchy: MPD, Period, AdaptationSet, Representation. An AdaptationSet groups interchangeable encodes of one kind of content (a video set, an audio language); a Representation is one encode at one bit rate.
+
+HLS splits the description over several text files. The multivariant playlist lists variants with `#EXT-X-STREAM-INF` and alternate renditions with `#EXT-X-MEDIA`. Each of those points at a media playlist, which lists segments.
+
+- DASH needs one fetch to know everything; HLS needs the multivariant playlist plus one media playlist per rendition you use.
+- DASH describes streams with attributes you can validate against a schema. HLS tags are line-based and easy to produce with a template, which helped adoption.
+- A DASH `Representation` is single-track. An HLS variant can be muxed or point at separate audio and subtitle groups.
+
+## Segment Containers
+
+DASH segments are fragmented MP4 (ISO BMFF), or in older profiles MPEG-2 TS. HLS began with MPEG-2 TS and added fragmented MP4 in protocol version 6.
+
+- MSE in browsers consumes fMP4 (and WebM or packed audio in some browsers), not TS. A browser player playing TS-based HLS has to transmux to fMP4 first.
+- fMP4 and TS are not interchangeable bytes, so a service that needs both has to store and cache both.
+- The DASH-IF and HLS fMP4 profiles differ in small ways, which is where CMAF comes in below.
+
+## Segment Addressing
+
+- DASH: `SegmentTemplate` with `$Number$` or `$Time$` generates URLs from rules; `SegmentTimeline` lists exact durations; `SegmentBase` and `SegmentList` address byte ranges and explicit lists. A VOD MPD for hours of content can stay tiny.
+- HLS: every segment is listed explicitly in the media playlist, with `#EXTINF` for duration and optional `#EXT-X-BYTERANGE` for single-file packaging. Playlists grow with the content, so long VOD playlists are larger.
+- Segment identity: DASH segments are identified by number or time in the URL template; HLS segments are identified by their position in the playlist (media sequence number), not by anything in the URL.
+- Init segments: DASH `initialization` attribute or `Initialization` element; HLS `#EXT-X-MAP`.
+
+## Live Update Model
+
+- DASH live is clock driven. A dynamic MPD has `availabilityStartTime`; the player computes which segments should exist from the current time and refreshes the MPD every `minimumUpdatePeriod`, or never for template-based streams. This puts the burden on clock accuracy, hence the `UTCTiming` element.
+- HLS live is list driven. The player reloads the media playlist about every target duration and fetches segments it has not seen, keyed by media sequence number. It needs no synchronised clock to play, though `#EXT-X-PROGRAM-DATE-TIME` gives it one when it wants wall-clock mapping.
+- Because of that, a wrong client clock hurts a DASH player directly (see the live timing lessons), while an HLS player only needs a good playlist reload loop.
+- Low-latency forms: LL-DASH uses chunked transfer and `availabilityTimeOffset`; LL-HLS uses partial segments and blocking playlist reload. The Low Latency lessons compare them.
+
+## DRM Signalling
+
+- DASH puts `ContentProtection` elements in the MPD, one per DRM system by `schemeIdUri`, commonly with the Widevine, PlayReady, and Clear Key UUIDs, plus the `cenc` default KID for the common scheme.
+- HLS puts `#EXT-X-KEY` in the media playlist, with `METHOD=SAMPLE-AES` and `KEYFORMAT` selecting FairPlay, Widevine, or PlayReady.
+- Common Encryption (CENC) makes the encrypted media identical for every DRM system; only the signalling and licence acquisition differ. FairPlay needs `cbcs`, so a single `cbcs`-encrypted CMAF set can cover all three systems on modern devices.
+
+## Ecosystem And Device Support
+
+- HLS is the one format every Apple device plays natively, and iPhone Safari historically had no MSE, so almost every consumer service publishes HLS. Smart TVs and set-top boxes mostly support HLS too.
+- DASH is widespread on Android, Chrome, smart TVs, and in tools such as dash.js, Shaka Player, and ExoPlayer. Apple platforms do not play it natively.
+- Open-source JavaScript players support both: Shaka Player and dash.js (DASH), hls.js (HLS), Video.js and others.
+- DASH is an open ISO standard. HLS is an IETF informational RFC defined by Apple, and its current tag set lives in the evolving draft draft-pantos-hls-rfc8216bis.
+
+## CMAF Makes Segments Shareable
+
+Common Media Application Format (ISO/IEC 23000-19) defines a constrained fMP4 profile. Before it, a service that needed HLS and DASH usually packaged two sets of segments, TS for HLS and fMP4 for DASH. CMAF lets one set of fMP4 segments serve both.
+
+- Encode and package once, store once, and cache once; the CDN sees the same objects regardless of protocol.
+- Publish two manifests over the same segments: an MPD and an HLS playlist set. The manifests are small; the media is the expensive part.
+- Encryption must also match: use `cbcs`, which every major DRM supports on current devices.
+- Some details still differ per protocol (timing signalling, subtitles, low-latency parts), so shared segments do not mean shared manifests.
+
+## Choosing
+
+Support both. Use DASH where you want its flexibility (SegmentTemplate, multiple Periods, rich live timing) and HLS wherever Apple devices matter. If you package CMAF, the two cost little more than one.
+
+<Demo title="Manifest To Timeline" mode="timeline">A manifest maps segment numbers to timeline ranges so the player can request just enough future media, whichever protocol describes it.</Demo>

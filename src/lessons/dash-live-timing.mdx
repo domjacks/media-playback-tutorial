@@ -3,7 +3,7 @@ slug: "dash-live-timing"
 title: "DASH Live Timing"
 kind: "Theory"
 summary: "Turn a dynamic MPD into live segment availability calculations using wall-clock time, presentation time, and SegmentTemplate timing."
-outcome: "You can derive a simple DASH live segment range from availabilityStartTime, suggestedPresentationDelay, timeShiftBufferDepth, startNumber, duration, and timescale."
+outcome: "You can derive a simple DASH live segment range from availabilityStartTime, suggestedPresentationDelay, timeShiftBufferDepth, startNumber, duration, and timescale, and keep the client clock honest with UTCTiming."
 reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
 ---
 
@@ -28,7 +28,7 @@ Players then subtract a target latency to avoid requesting media too close to th
 
 - livePresentationTime = now - availabilityStartTime.
 - targetPlaybackTime = livePresentationTime - suggestedPresentationDelay.
-- A segment is available at availabilityStartTime + Period start + the segment's end time (plus availabilityTimeOffset if present), so target latency must be at least one segment duration.
+- A segment is available at availabilityStartTime + Period start + the segment's end time (minus availabilityTimeOffset if present), so target latency must be at least one segment duration.
 - DASH-IF services publish a UTCTiming element in the MPD. Players should sync their clock with it (for example by fetching the time source it names and storing an offset) instead of trusting Date.now(), because device clocks are often seconds out. Pass the corrected time as nowMs to the range calculation.
 - For real services, clock synchronization and CDN propagation can make this estimate imperfect.
 
@@ -76,6 +76,65 @@ function getLiveSegmentRange(timing, nowMs = Date.now()) {
 ```
 
 </Snippet>
+
+## Segment Availability Time
+
+The DASH-IF timing model defines availability by the segment's end point: a media segment is available when its end lies inside the availability window, which runs from now minus timeShiftBufferDepth up to now plus the total availabilityTimeOffset that applies to the AdaptationSet. Written per segment, that is:
+
+- availabilityStart = availabilityStartTime + Period@start + (segmentEndTicks - presentationTimeOffset) / timescale - availabilityTimeOffset.
+- segmentEndTicks is the segment's start time plus its duration, in timescale ticks (for a fixed-duration template, the number minus startNumber, plus one, times duration).
+- availabilityTimeOffset (ATO) is seconds. It is a sum of attributes on SegmentBase, SegmentTemplate, or BaseURL. A value of 5 means the segment may be requested five seconds before it is finished.
+- availabilityTimeComplete="false" says the segment may be requested while still being produced, so a response can be delivered with chunked transfer as it grows. It is part of the DASH spec and DASH-IF low-latency work, but the interoperable timing model for ordinary live forbids it.
+
+The DASH-IF reference service livesim2 can show ATO: its `ato_5` URL option produces `availabilityTimeOffset="5"` on the SegmentTemplate, so a segment becomes requestable five seconds earlier than an ordinary one would. The Low Latency lessons build on this.
+
+## Clock Synchronisation
+
+Every number above depends on now. DASH-IF requires the MPD of a dynamic presentation to include at least one UTCTiming element, and requires clients to synchronise to it. A client must not use a time source the MPD does not list, and there is no default time source, because hidden defaults hide interoperability bugs.
+
+Each UTCTiming has a schemeIdUri and a value. The DASH-IF timing model allows four schemes:
+
+- `urn:mpeg:dash:utc:http-xsdate:2014`: GET the URL in value; the body is an XML Schema dateTime, such as `2026-11-16T21:46:21.877Z`.
+- `urn:mpeg:dash:utc:http-iso:2014`: GET the URL; the body is an ISO 8601 date and time.
+- `urn:mpeg:dash:utc:http-head:2014`: send HEAD to the URL and read the HTTP Date response header. It is accurate to a whole second at best, and a cross-origin page needs `Access-Control-Expose-Headers: Date` to see it.
+- `urn:mpeg:dash:utc:direct:2014`: the value attribute is the time itself, as written when the MPD was generated. It costs no request, but is only as good as the MPD is fresh.
+
+If several UTCTiming elements are listed, order means preference. The default livesim2 MPD, for example, lists `urn:mpeg:dash:utc:http-xsdate:2014` with the value `https://time.akamai.com/?iso&ms`, while its `utc_head` variant lists `http-head` with `https://livesim2.dashif.org/static/time.txt`.
+
+A player cannot just parse the answer and call it now, because the answer is already old when it arrives. The usual estimate is the midpoint of the request.
+
+<Snippet title="Clock Offset From The Round Trip" explain="Assume the server read its clock halfway through the request. The offset is added to Date.now() wherever the live range is computed. cache no-store stops a cache from replaying an old time.">
+
+```js
+async function measureClockOffsetMs(url) {
+  const sentAt = Date.now();
+  const response = await fetch(url, { cache: "no-store" });
+  const receivedAt = Date.now();
+  const serverMs = Date.parse((await response.text()).trim());
+
+  // Server time corresponds to the middle of the round trip, not to when it arrived.
+  return serverMs - (sentAt + receivedAt) / 2;
+}
+
+const nowMs = () => Date.now() + clockOffsetMs;
+```
+
+</Snippet>
+
+- Use a fast request: a long round trip widens the error, which is plus or minus half of it at worst.
+- An offset measured once drifts as the device clock drifts, so players repeat the measurement every few minutes and when MPD refreshes arrive.
+- Keep the offset separate from `Date.now()`; never change the system clock.
+
+### What A Wrong Clock Does
+
+- A client clock ahead of the service computes a live edge that is too new. It asks for segments the packager has not yet published, and gets 404 on every segment near the edge.
+- A client clock behind the service is safe at the front but plays further behind live than the service intended. A few seconds of skew on a 6-second-segment stream is a large share of the latency budget.
+- Skew behind by more than timeShiftBufferDepth minus the presentation delay places the request at the back of the window, where segments are already removed (404 or 410).
+- Players that cannot sync (no UTCTiming, or a failed request) should emit a warning, per the timing model, rather than silently trusting the device clock.
+
+### HLS Equivalent
+
+HLS does not compute segment availability from the clock, so it has no UTCTiming. The list of segments in the playlist is the truth. A wall-clock mapping, when needed, comes from `#EXT-X-PROGRAM-DATE-TIME` on a segment: the player knows what real time that segment's first sample represents, and from the offset to the live edge can compute latency, synchronise renditions, and align events. The date in that tag is authored on the server, so it is only as good as the encoder or packager clock, and the player's own clock still matters if it displays latency.
 
 ## Time Shift Buffer
 
