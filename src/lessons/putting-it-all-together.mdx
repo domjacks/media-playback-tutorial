@@ -1,0 +1,51 @@
+---
+slug: "putting-it-all-together"
+title: "Putting It All Together"
+kind: "Practical"
+summary: "Run the finished in-app player: DASH manifest parsing, audio/video MSE appends, playback controls, runtime ABR decisions, and custom subtitles."
+outcome: "A working browser player loads a Big Buck Bunny DASH stream with audio, runtime ABR video selection, MSE appends, and subtitle cues."
+reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd"
+---
+
+## The Final Shape
+
+This page brings the main pieces together inside the tutorial app. The player fetches a DASH MPD, chooses a conservative startup video representation, then continues making runtime video representation decisions as segment downloads reveal real throughput.
+
+The subtitle layer uses the same timing idea as the IMSC lab. It watches the media playhead and renders the active cue into an overlay above the video.
+
+- The audio and video bytes come from DASH and MSE, not from assigning a single MP4 URL to video.src.
+- Runtime ABR uses smoothed measured throughput and buffer depth to choose each future video segment.
+- The subtitle renderer is custom HTML layered over the video.
+- The player reports manifest, codec, CORS, and fetch errors in the page so failures are inspectable.
+
+<Diagram visual="timeline" />
+
+<Snippet title="Final Player Responsibilities" explain="The in-app demo below is the same architecture the tutorial has built up in small pieces.">
+
+```text
+1. Fetch the DASH MPD.
+2. Parse audio/video representations, codec strings, init segments, and media segment URLs.
+3. Create MediaSource plus audio and video SourceBuffers.
+4. Seed ABR with an initial throughput estimate.
+5. Append audio on its selected Representation.
+6. Choose each future video segment with runtime ABR.
+7. Smooth measured throughput after each segment fetch.
+8. Watch video.currentTime and render active subtitle cues.
+9. Surface unsupported codec, CORS, and network failures in the UI.
+```
+
+</Snippet>
+
+## What To Build Next
+
+This final version is still intentionally small. It now performs runtime video ABR, but a production player would add deeper audio/video adaptation coordination, gap handling, retry logic, live edge management, full subtitle styling, and real DRM license integration.
+
+The important thing is that the architecture now has clear boundaries: manifest parsing, segment loading, append scheduling, timeline observation, subtitle rendering, and UI state are separate enough to improve one at a time.
+
+- Add stronger switching guards for codec changes, init segment compatibility, and aligned random access points.
+- Use separate fast and slow throughput estimates to reduce ABR oscillation.
+- Expand the IMSC subset only for features your content actually uses.
+
+<Demo title="Complete Playback Loop" mode="timeline">Manifest parsing feeds runtime ABR, ABR selects segment requests, segment loading feeds MSE, and the media timeline drives subtitles.</Demo>
+
+<PlayerShowcase />

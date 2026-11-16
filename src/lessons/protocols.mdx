@@ -1,0 +1,39 @@
+---
+slug: "protocols"
+title: "Streaming Protocols"
+kind: "Theory"
+summary: "Replace hardcoded segment lists with protocol manifests that describe time, quality, codecs, and URLs."
+outcome: "You understand why streaming protocols exist and how DASH and HLS describe media choices."
+reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
+---
+
+## Why Protocols Exist
+
+The previous demo hardcoded every segment. That works for a lab, but not for real media. A streaming protocol gives the player a manifest so it can discover available qualities, languages, timing, and segment URLs.
+
+DASH and HLS use different manifest formats, but the player questions are similar: what tracks exist, which encodes are available, where are the segments, how long do they last, and what codecs are required?
+
+- DASH uses an XML Media Presentation Description, usually called an MPD.
+- HLS uses text playlists: a multivariant playlist points at media playlists.
+- Both protocols let the player react to bandwidth, latency, and device capability.
+
+<Diagram visual="timeline" />
+
+<Snippet title="Protocol Mental Model" explain="Most HTTP streaming protocols separate discovery from media bytes. The manifest tells the player what timed resources can be requested.">
+
+```text
+Manifest
+  available audio/video/text tracks
+  available qualities or renditions
+  codec and container requirements
+  segment addressing rules
+  timing information
+
+Media
+  initialization data
+  timed media segments
+```
+
+</Snippet>
+
+<Demo title="Manifest To Timeline" mode="timeline">A manifest maps segment numbers to timeline ranges so the player can request just enough future media.</Demo>

@@ -1,0 +1,51 @@
+---
+slug: "dash-vod"
+title: "Parse DASH VOD"
+kind: "Practical"
+summary: "Update the MSE player so it fetches an MPD and appends the audio/video segments described by the manifest."
+outcome: "A browser ESM player fetches the BBC Big Buck Bunny MPD and plays audio plus video from manifest-derived segments."
+reference: "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd"
+---
+
+## Parser Boundaries
+
+A learning player should parse the subset it needs. For this tutorial, support one Period, one video AdaptationSet, one audio AdaptationSet, Representations, BaseURL, and SegmentTemplate URLs using $Number$ replacement.
+
+The MPD tells you the base URL, codec string, initialization URL, media URL pattern, start number, duration, and total presentation duration. That is enough to request sequential VOD audio and video segments. BaseURL can appear at the MPD level, the AdaptationSet level, or not at all, so resolve each optionally.
+
+The parser also stops after TUTORIAL_SEGMENT_LIMIT segments. Big Buck Bunny is about 9.5 minutes long and this player appends everything up front with no buffer management, so the limit (36 segments of 3.84 seconds, about 2.3 minutes) keeps memory bounded. Later lessons add buffer goals and removal; until then, raise the limit with care.
+
+- Use DOMParser instead of string splitting XML.
+- Resolve segment URLs with new URL(relative, manifestUrl).
+- Codecs and mimeType can sit on the AdaptationSet or the Representation; a Representation value overrides the AdaptationSet value, they are never concatenated.
+- TUTORIAL_SEGMENT_LIMIT caps the segment list for this tutorial only; it is not part of DASH.
+- Keep append sequencing isolated from manifest parsing.
+
+<Diagram visual="timeline" />
+
+<Diagram visual="av-sync" />
+
+<Snippet title="dash.js" explain="This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, optional BaseURL, and SegmentTemplate. A Representation's mimeType and codecs override the AdaptationSet's, and each Representation keeps mimeType, codecs, and the combined mime string so later lessons can compare them." file="dash-vod/dash.js" />
+
+<Snippet title="player.js With DASH" explain="The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations, then appends each track with an await loop so a failed fetch or append rejects instead of hanging." file="dash-vod/player.js" />
+
+<Checkpoint slug="dash-vod" run files={["index.html","dash.js","player.js"]}>
+
+- DevTools Network shows the MPD first (redirected to vod-dash-ww-rd-live.akamaized.net), then IS.mp4 for avc1/896x504p25 and for audio/160kbps, then numbered .m4s segments.
+- 36 media segments are requested per track (TUTORIAL_SEGMENT_LIMIT), so video.buffered.end(0) ends near 138.24 (36 x 3.84 s).
+- The chosen video Representation is the lowest bandwidth (896x504p25, 1416688 bps) and the audio is the highest (160kbps).
+- Playback runs for about 2.3 minutes and ends; no segment URL is hardcoded in player.js.
+
+</Checkpoint>
+
+<Exercise title="Pick The 720p Representation">
+
+Change the video choice so the player requests the 1280x720p25 Representation rather than the lowest one.
+
+Confirm in the Network panel that the requests are now 1280x720p25/IS.mp4 and 1280x720p25/00000N.m4s, and compare segment sizes with the 504p ones.
+
+<Hint>Replace chooseLowest(video) with video.find((rep) => rep.id === "1280x720p25") ?? chooseLowest(video). Representation ids come straight from the MPD, and they are also available through dash.representations.video.</Hint>
+
+</Exercise>
+
+<Demo title="MPD Loader" mode="timeline">Manifest fields become concrete segment requests, then each response feeds the same MSE append queue.</Demo>

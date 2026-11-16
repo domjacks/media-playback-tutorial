@@ -1,0 +1,89 @@
+---
+slug: "mse-basics"
+title: "Build A Tiny MSE Player"
+kind: "Practical"
+summary: "Use Media Source Extensions to append initialization and media segments into a video element."
+outcome: "A plain HTML page and ESM module append remote Big Buck Bunny audio/video bytes to SourceBuffers."
+reference: "https://rdmedia.bbc.co.uk/bbb/"
+---
+
+## Start With The Same Video Element
+
+A progressive player gives the video element a src that points directly at a media file. An MSE player still uses the video element for playback, decoding, controls, timing, and A/V sync, but JavaScript supplies the media bytes.
+
+That means this lab keeps the HTML small. The interesting work moves into player.js, where you create a MediaSource and feed it initialization plus media segments.
+
+- There is no src URL in the HTML.
+- The video element still owns the playhead and controls.
+- Your JavaScript owns the network requests.
+
+<Diagram visual="buffer" />
+
+<Diagram visual="av-sync" />
+
+<Snippet title="index.html" explain="This file keeps the user app deliberately small: one video element and one browser ESM entrypoint." file="mse-basics/index.html" region="index" />
+
+<Snippet title="Create MediaSource" explain="MediaSource is the browser object that will receive media bytes from your JavaScript." file="mse-basics/player.js" region="create-media-source" />
+
+## Create And Attach A MediaSource
+
+MediaSource is the object that represents a JavaScript-fed media stream. You attach it to the video element by creating an object URL and assigning that URL to video.src.
+
+When the MediaSource opens, the browser is ready for you to add SourceBuffers. A SourceBuffer accepts bytes for one kind of track, such as video/mp4 or audio/mp4.
+
+- Create MediaSource in JavaScript.
+- Attach it with URL.createObjectURL(mediaSource).
+- Wait for sourceopen before adding SourceBuffers.
+
+<Snippet title="Attach It To The Video Element" explain="The object URL lets the video element treat your MediaSource as its media resource. Nothing can be appended yet: wait for the sourceopen event, which the final handler below listens for, before adding SourceBuffers." file="mse-basics/player.js" region="attach" />
+
+<Snippet title="Describe The Tracks" explain="This lab uses one video track and one audio track from the BBC Big Buck Bunny DASH stream. The first file for each track is the initialization segment, and it must come from the same Representation as the media segments that follow it, so the audio init and media segments all use 128kbps." file="mse-basics/player.js" region="describe-tracks" />
+
+## Append Init Before Media
+
+Fragmented MP4 separates track setup from timed media data. The initialization segment describes codec setup, timescale, and track metadata. The media segments then carry timed samples.
+
+The browser needs the initialization segment first. After that, each media segment extends the buffered time range for its track.
+
+- Init segments usually have names such as IS.mp4 or init.mp4.
+- Media segments often have names such as 000001.m4s.
+- Audio and video segments must describe the same media timeline.
+
+<Snippet title="Add SourceBuffers" explain="Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append. This single line sits inside the sourceopen handler, once per track, and is shown on its own here. It appears exactly once in the finished player.js, so do not add it a second time." file="mse-basics/player.js" region="add-source-buffer" />
+
+<Snippet title="Append A Queue" explain="appendBuffer is asynchronous. This helper waits for updateend before feeding the next chunk to the same SourceBuffer, and rejects if the SourceBuffer fires an error so a bad segment fails loudly instead of hanging." file="mse-basics/player.js" region="append-queue" />
+
+## Respect The Append Queue
+
+A SourceBuffer can process only one append at a time. While sourceBuffer.updating is true, another appendBuffer call will fail. The simplest beginner-safe pattern is to append one chunk, wait for updateend, then append the next chunk.
+
+In this first MSE player, the segment list is hardcoded. The DASH lesson replaces those hardcoded URLs with a manifest parser.
+
+- Only append while the SourceBuffer is not updating.
+- Use precise MIME types and codec strings supported by the browser.
+- Call endOfStream when all audio and video bytes have been appended.
+
+<Snippet title="Fetch And Append Bytes" explain="This is the sourceopen handler. Once the MediaSource is open, it creates the SourceBuffers (the previous step, in its final home), fetches each init and media segment, appends each track queue, then closes the stream. The console.log is a placeholder you can remove." file="mse-basics/player.js" region="fetch-and-append" />
+
+<Snippet title="Complete player.js" explain="This complete file is runnable as-is beside the index.html from the first snippet. The steps above are excerpts of it." file="mse-basics/player.js" />
+
+<Checkpoint slug="mse-basics" run files={["index.html","player.js"]}>
+
+- DevTools Network shows IS.mp4 then 000001.m4s, 000002.m4s, 000003.m4s for avc1/896x504p25, and the same four files for audio/128kbps.
+- Console prints MediaSource is open once.
+- After a moment, video.buffered.end(0) in the console is about 11.52 (3 segments x 3.84 s) and video.duration matches.
+- The video plays for about 11.5 seconds and then ends; there is no src attribute on the video element, only a blob: URL set by script.
+
+</Checkpoint>
+
+<Exercise title="Append Three More Segments">
+
+Add 000004.m4s, 000005.m4s and 000006.m4s to both tracks' file lists.
+
+Reload and confirm video.buffered.end(0) grows by 3 x 3.84 s, from about 11.52 to about 23.04, and that the video now plays for about 23 seconds.
+
+<Hint>Only the files arrays in the tracks description change. Segment numbers are zero-padded to six digits. Check the Network panel for six media requests per track.</Hint>
+
+</Exercise>
+
+<Demo title="SourceBuffer Queue" mode="buffer">Append operations are serialized. The browser parses each fragment and expands the playable timeline.</Demo>

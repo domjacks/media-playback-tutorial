@@ -1,0 +1,58 @@
+---
+slug: "inspect-av-with-ffmpeg"
+title: "Inspect Video And Audio With FFmpeg"
+kind: "Practical"
+summary: "Use FFmpeg and FFprobe to generate a small test asset and inspect the video and audio fundamentals you just learned."
+outcome: "You can generate a controlled MP4 and use FFprobe to inspect core video and audio properties."
+reference: "https://ffmpeg.org/ffprobe.html"
+---
+
+## What This Lab Uses
+
+This lab uses FFmpeg to generate a short synthetic media file and FFprobe to inspect it. The point is not to create beautiful content; it is to produce a controlled file where you know the expected resolution, frame rate, sample rate, channel count, codecs, and duration.
+
+Run these commands from a working directory where you are happy to create a lab folder. The generated file is small and can be deleted afterwards.
+
+- ffmpeg creates or transforms media.
+- ffprobe reads media metadata, streams, packets, and frames.
+- Synthetic sources avoid depending on external downloads.
+
+<Snippet title="Check The Tools" explain="Confirm both tools are installed before starting the lab." file="inspect-av-with-ffmpeg/lab.sh" region="check-tools" />
+
+<Snippet title="Generate A Test MP4" explain="Create a five-second MP4 with a 1280x720, 25 fps video test pattern and a 48 kHz sine-wave audio track." file="inspect-av-with-ffmpeg/lab.sh" region="generate-mp4" />
+
+<Snippet title="Inspect Streams" explain="The stream output connects directly to resolution, frame rate, pixel format, sample rate, channels, codec names, and duration." file="inspect-av-with-ffmpeg/lab.sh" region="inspect-streams" />
+
+## What To Look For
+
+On the video stream, look for width, height, r_frame_rate, avg_frame_rate, pix_fmt, codec_name, profile, and duration. The pix_fmt value yuv420p means YCbCr-style planar video with 4:2:0 chroma subsampling.
+
+On the audio stream, look for codec_name, sample_rate, channels, channel_layout, and duration. The encoded audio is AAC, but it represents a 48 kHz stereo signal when decoded for playback.
+
+- width and height confirm resolution.
+- r_frame_rate and avg_frame_rate expose frame-rate information.
+- sample_rate and channels expose the audio fundamentals.
+- codec_name confirms the encoded format carried by the file.
+
+<Snippet title="Compact Field View" explain="This version prints only the fields that matter for the early fundamentals lessons." file="inspect-av-with-ffmpeg/lab.sh" region="compact-fields" />
+
+<Checkpoint slug="inspect-av-with-ffmpeg" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe.">
+
+- lab/fundamentals.mp4 exists and is a few hundred KB.
+- Video stream: codec_name=h264, profile=High, width=1280, height=720, pix_fmt=yuv420p, r_frame_rate=25/1, avg_frame_rate=25/1, duration=5.000000.
+- Audio stream: codec_name=aac, sample_rate=48000, channels=2, channel_layout=stereo, duration=5.000000.
+- The audio stream reports r_frame_rate=0/0 in the full dump: frame rate is a video-only concept.
+
+</Checkpoint>
+
+<Exercise title="Change The Source, Predict The Fields">
+
+Edit the generate step to produce a 640x360, 30 fps video with a 44.1 kHz audio track, saving it as lab/variant.mp4.
+
+Before you run ffprobe, write down the width, height, r_frame_rate and sample_rate you expect. Then run the compact field view and compare.
+
+<Hint>Change size=, rate= and sample_rate= in the lavfi inputs, and the output filename. Remember -g 50 is a frame count, so at 30 fps it is no longer exactly 2 seconds.</Hint>
+
+</Exercise>
+
+<Demo title="Metadata As Evidence" mode="timeline">FFprobe turns theory terms such as resolution, frame rate, sample rate, channels, codec, and duration into observable fields.</Demo>

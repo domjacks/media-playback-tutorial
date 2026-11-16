@@ -1,0 +1,90 @@
+---
+slug: "subtitle-theory"
+title: "Subtitles In Streaming"
+kind: "Theory"
+summary: "Learn where timed text comes from and how browsers display cues alongside media."
+outcome: "You understand sidecar subtitles, embedded text tracks, WebVTT, TTML, IMSC, languages, and cue timing."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebVTT_API"
+---
+
+## Timed Text
+
+Subtitles are media too: they have language, timing, payload, and rendering rules. Some streams carry text in separate files, while others mux subtitles into fragmented media.
+
+A subtitle renderer does the same high-level job as an audio/video renderer: it watches media time, finds active cues, and paints the right output for that moment.
+
+- Sidecar text is stored outside the audio/video container.
+- Embedded or segmented subtitles can be carried through the same manifest and segment model as media.
+- Accessibility depends on correct language, labels, timing, and caption kind.
+
+<Diagram visual="timeline" />
+
+<Snippet title="sample.vtt" explain="WebVTT is plain text: each cue has a time range and cue text.">
+
+```text
+WEBVTT
+
+00:00:01.000 --> 00:00:04.000
+Big Buck Bunny starts in a quiet field.
+
+00:00:05.500 --> 00:00:08.000
+Captions are synchronized to media time.
+```
+
+</Snippet>
+
+## WebVTT
+
+WebVTT is the most browser-friendly subtitle format for simple web players. It is plain text, starts with a WEBVTT header, and then lists cues with start time, end time, and cue text.
+
+The browser can fetch, parse, synchronize, and render WebVTT for you through a track element or the TextTrack API. That makes it the right first practical subtitle step.
+
+- WebVTT is easy to hand-author and inspect.
+- It supports cue settings for placement and alignment, but browser styling is intentionally constrained.
+- It works well for sidecar subtitles and captions when you do not need complex layout.
+
+## TTML
+
+TTML, the Timed Text Markup Language, is XML-based and more expressive than WebVTT. It can describe regions, styles, timing, layout, nested spans, and richer broadcast-style subtitle behavior.
+
+That expressiveness comes with cost. A simple browser player cannot hand TTML to a native track element and expect the browser to render it. You either convert it to WebVTT, use a library, or implement the subset your content needs.
+
+- TTML separates timing, styling, layout, and text content in XML.
+- It is useful when subtitles need precise placement, styling, or broadcast workflow compatibility.
+- A learning player should parse a small subset rather than trying to implement the whole specification.
+
+## IMSC
+
+IMSC is a constrained profile of TTML designed for interoperable subtitles and captions. It narrows the large TTML feature space into profiles that streaming, broadcast, and online services can implement more predictably.
+
+For this tutorial, treat IMSC as TTML with rules. The practical lab will parse a small text-profile subset: timed paragraphs, basic regions, simple styling, and text content. That is enough to understand the renderer loop without pulling in IMSC.js.
+
+- IMSC documents are XML and commonly use TTML namespaces.
+- IMSC text profile focuses on subtitle text; image profile can carry pre-rendered subtitle images.
+- A custom renderer maps active timed elements onto absolutely positioned HTML over the video.
+
+<Snippet title="A Small IMSC Shape" explain="IMSC is XML. This subset has one region and two timed paragraphs that a small renderer can understand.">
+
+```xml
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <head>
+    <layout>
+      <region xml:id="bottom" />
+    </layout>
+  </head>
+  <body>
+    <div>
+      <p begin="00:00:01.000" end="00:00:04.000" region="bottom">
+        Big Buck Bunny starts in a quiet field.
+      </p>
+      <p begin="00:00:05.500" end="00:00:08.000" region="bottom">
+        IMSC cues can carry richer layout information than WebVTT.
+      </p>
+    </div>
+  </body>
+</tt>
+```
+
+</Snippet>
+
+<Demo title="Subtitle Cues" mode="timeline">Text cues occupy timed ranges just like media segments, but render as captions instead of decoded frames.</Demo>

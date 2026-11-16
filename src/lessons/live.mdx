@@ -1,0 +1,65 @@
+---
+slug: "live"
+title: "Add Live Playback"
+kind: "Practical"
+summary: "Adapt the DASH player for dynamic manifests, live edge, latency, and buffer cleanup."
+outcome: "The player parses live MPD timing, estimates segment availability, refreshes the manifest, retries near-edge segments, catches up to target latency, and prunes old buffer."
+reference: "https://reference.dashif.org/dash.js/latest/samples/live-streaming/live-delay-comparison.html"
+---
+
+## Live Is Moving VOD
+
+A live manifest changes over time. Segments expire from the back of the availability window and new segments appear near the live edge. The practical player needs to parse live MPD timing, turn wall-clock time into segment numbers, append missing segments, and prune old buffers.
+
+The player should not chase the newest byte exactly. It should target a small latency behind live edge so downloads, CDN propagation, MSE append, and decode have room to recover.
+
+- Parse live DASH timing fields instead of assuming first and last segment numbers exist.
+- Start behind the live edge using suggestedPresentationDelay or a segment-count fallback.
+- Start at the live edge with a segment cursor instead of downloading the whole time-shift window.
+- Handle near-edge 404s as retryable and remove old buffered ranges after playback moves past them.
+- After the first append, seek the video to the start of the buffered range and set mediaSource.duration to Infinity so the player treats the stream as live.
+
+<Diagram visual="buffer" />
+
+<Snippet title="Parse Live MPD Timing" explain="Start by extracting the fields that connect wall-clock time, media time, refresh cadence, and the live window." file="live/live.js" region="parse-live-timing" />
+
+<Snippet title="Read The Live MPD" explain="A deliberately small live MPD reader: one Period, one audio and one video AdaptationSet, the first Representation of each, and a SegmentTemplate with $Number$. It builds the init URL and a segmentUrl(number) function per track, reuses parseLiveTiming, and picks up the UTCTiming URL when it is an http-xsdate or http-iso source. The target stream is the public DASH-IF livesim2 test stream, which loops a short clip and has availabilityStartTime 1970, 2 second segments, startNumber 0 and no timescale (so 1)." file="live/dash-live.js" />
+
+<Snippet title="Calculate The Available Segment Range" explain="For fixed-duration SegmentTemplate streams, convert wall-clock time into the segment numbers that are likely requestable." file="live/live.js" region="segment-range" />
+
+<Snippet title="Sync To The Server Clock" explain="The MPD's UTCTiming element points at a server clock. Segment numbers depend on wall-clock time, so a local clock that is wrong by a few seconds requests segments that do not exist yet or have already gone. Measure the offset once, assuming the reply took half the round trip, and add it to Date.now() wherever the live range is computed." file="live/player.js" region="clock-sync" />
+
+<Snippet title="Live Refresh Controller" explain="The controller refreshes the MPD, calculates the current window, and calls appendSegment(number) from a nextNumber cursor; that callback must fetch and append every track for that number. It starts at the live edge rather than the start of the time-shift window, jumps back to the edge if the cursor falls out of the window, and on a near-edge 404 stops for this tick without advancing so the same segment is retried. getNow lets the caller supply a server-corrected clock. fetchBytes attaches the HTTP status to the error it throws, which is what isNearLiveEdge404 inspects. Initialisation segments are appended once by the caller before start()." file="live/live.js" region="live-controller" />
+
+<Snippet title="Near-Edge Retry" explain="A segment close to live edge can briefly 404 while it propagates through packaging and CDN layers. The check relies on error.status, which fetchBytes sets; fetch itself does not throw on a 404, so without that helper nothing would ever carry a status." file="live/live.js" region="near-edge-retry" />
+
+<Snippet title="Start At The Live Media" explain="Appending media does not move the playhead. The first segment appended near the live edge starts at a large presentation time (here, seconds since 1970), so currentTime 0 is empty and the video waits forever. onStarted runs after the first append and moves currentTime to the start of the buffered range. Setting mediaSource.duration to Infinity marks the stream as live, and setLiveSeekableRange exposes the live window to the seek bar. Call it again as the window moves, and when audio and video are in separate SourceBuffers, call it once both have data." file="live/live.js" region="seek-to-live-start" />
+
+<Snippet title="Wire The Live Player" explain="The real wiring: both SourceBuffers already exist and both init segments are appended. appendSegment fetches both tracks for a segment number before appending either, so a 404 on one track never leaves the other half-appended, and onStarted seeks to the live start. Appends and removals go through a small exclusive() queue so they never overlap on a SourceBuffer." file="live/player.js" region="live-wiring" />
+
+<Snippet title="Catch Up To Target Latency" explain="A small playbackRate increase can gently reduce excess live latency without a visible seek." file="live/live.js" region="live-catchup" />
+
+<Snippet title="Prune Old Buffers" explain="Live players must remove old media, but not too close to the playhead." file="live/live.js" region="prune-buffer" />
+
+<Snippet title="Run The Live Maintenance Tick" explain="A one-second tick keeps the live player healthy: it applies catch-up, prunes both SourceBuffers behind the playhead, refreshes the seekable range, and reports latency, which is livePresentationTime minus currentTime." file="live/player.js" region="live-maintenance" />
+
+<Checkpoint slug="live" run files={["index.html","live.js","dash-live.js","player.js"]} note="Plays the public DASH-IF livesim2 stream, so it needs network access to livesim2.dashif.org and time.akamai.com (both allow CORS).">
+
+- Network shows Manifest.mpd re-requested about every 2 s, A48/init.mp4 and V300/init.mp4 once each, then A48/\<n>.m4s and V300/\<n>.m4s pairs with n increasing by 1 every 2 s (numbers around 897 million, because availabilityStartTime is 1970).
+- The status line shows segment \<n> increasing every 2 s and latency settling around 6 to 8 s (target 6.0 s, three 2 s segments), with rate 1 and a small clock offset.
+- video.buffered.start(0) in the console is about 1.79 billion (seconds since 1970), and after a minute it trails currentTime by about 30 s as old media is pruned.
+- The video starts muted and plays continuously; the seek bar shows a live window rather than a fixed duration (mediaSource.duration is Infinity).
+
+</Checkpoint>
+
+<Exercise title="Chase The Edge">
+
+Reduce the target latency in getLiveSegmentRange from three segments to one, and add 1000 ms to the getNow passed to createLiveController, as if the local clock ran fast.
+
+Watch the Network panel: segments are now requested slightly before they exist, so you should see 404s followed by a 200 about 750 ms later for the same segment number. Explain why the controller retries instead of skipping.
+
+<Hint>Change timing.segmentDuration \* 3 to timing.segmentDuration \* 1 in live.js. Latency of 2 segments is safe on this stream; one segment sits exactly on the availability boundary, which is why clock error shows up as 404s.</Hint>
+
+</Exercise>
+
+<Demo title="Live Window" mode="buffer">The live window slides forward while playback follows a few segments behind the edge.</Demo>

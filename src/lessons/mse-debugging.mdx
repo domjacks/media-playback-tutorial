@@ -1,0 +1,133 @@
+---
+slug: "mse-debugging"
+title: "MSE Debugging And Failure Modes"
+kind: "Theory"
+summary: "Learn how to inspect MSE state, browser media errors, append failures, and timestamp problems when playback does not work."
+outcome: "You can inspect MSE playback failures using media element state, MediaSource state, SourceBuffer events, buffered ranges, DevTools, and media-file inspection."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API"
+---
+
+## Debug State, Not Just Code
+
+MSE failures often look opaque because the browser owns parsing, decode, buffering, and A/V synchronization. A player engineer needs to inspect state at several layers: the media element, the MediaSource, each SourceBuffer, network requests, and the encoded media itself.
+
+The fastest debugging path is to ask where the pipeline stopped. Did fetch fail? Did addSourceBuffer reject the MIME string? Did appendBuffer throw? Did updateend never fire? Did bytes append but produce no buffered time? Did buffered time exist but decode fail?
+
+- HTMLMediaElement exposes playback state and final media errors.
+- MediaSource exposes whether the append pipeline is open, ended, or closed.
+- SourceBuffer exposes whether an append or remove operation is still updating.
+
+<Diagram visual="buffer" />
+
+<Snippet title="Log The Browser Media State" explain="Start with the media element because it tells you whether the browser thinks it has data, can play, is waiting, or has hit a fatal error.">
+
+```js
+const video = document.querySelector("video");
+
+for (const eventName of ["loadedmetadata", "canplay", "waiting", "stalled", "error"]) {
+  video.addEventListener(eventName, () => {
+    console.log(eventName, {
+      currentTime: video.currentTime,
+      readyState: video.readyState,
+      networkState: video.networkState,
+      error: video.error?.message ?? video.error?.code
+    });
+    logRanges("buffered", video.buffered);
+    logRanges("seekable", video.seekable);
+  });
+}
+
+function logRanges(label, ranges) {
+  console.log(label, Array.from({ length: ranges.length }, (_, i) => [
+    ranges.start(i),
+    ranges.end(i)
+  ]));
+}
+```
+
+</Snippet>
+
+## SourceBuffer Rules
+
+A SourceBuffer is strict. You cannot append while it is updating. You cannot append bytes with a MIME type or codec the browser does not support. You cannot rely on downloaded bytes becoming playable time if the timestamps are missing, discontinuous, overlapping in the wrong way, or incompatible with previous appends.
+
+Most MSE bugs fall into a small set: wrong codec string, missing init segment, append called while updating, media segments appended out of order, timestamp gaps, quota pressure, or a decode error in the media bytes.
+
+- Check MediaSource.isTypeSupported before addSourceBuffer.
+- Append initialization data before media fragments.
+- Wait for updateend before appending the next chunk.
+- Inspect buffered ranges after append; do not assume bytes equal playable time.
+
+<Snippet title="Guard Append Operations" explain="This wrapper makes append failures visible. It resolves on updateend, rejects on error, abort, or a synchronous throw such as QuotaExceededError, and removes its listeners once settled so repeated appends do not pile them up.">
+
+```js
+function appendBufferChecked(sourceBuffer, bytes, label) {
+  if (sourceBuffer.updating) {
+    throw new Error(`${label}: SourceBuffer is still updating`);
+  }
+
+  return new Promise((resolve, reject) => {
+    const events = {
+      updateend: () => settle(resolve),
+      error: () => settle(reject, new Error(`${label}: SourceBuffer error`)),
+      abort: () => settle(reject, new Error(`${label}: SourceBuffer abort`))
+    };
+    const settle = (callback, value) => {
+      for (const [name, listener] of Object.entries(events)) {
+        sourceBuffer.removeEventListener(name, listener);
+      }
+      callback(value);
+    };
+
+    for (const [name, listener] of Object.entries(events)) {
+      sourceBuffer.addEventListener(name, listener);
+    }
+
+    try {
+      sourceBuffer.appendBuffer(bytes);
+    } catch (error) {
+      settle(reject, error);
+    }
+  });
+}
+```
+
+</Snippet>
+
+## Common Failure Modes
+
+Unsupported codec strings usually fail at addSourceBuffer or decode. CORS and HTTP errors fail before append. QuotaExceededError means the browser refused more buffered data, usually because the player appended too much without removing old ranges. Timestamp gaps can append successfully but create disjoint buffered ranges that stall at the gap.
+
+DevTools is part of the workflow. Use the Network panel to inspect status codes, CORS headers, Content-Type, range requests, and segment sizes. Use the Media panel to inspect ready state, buffered ranges, errors, and selected tracks.
+
+- If addSourceBuffer throws, check MIME and codec strings first.
+- If fetch throws, check URL resolution, CORS, status code, and content type.
+- If append throws QuotaExceededError, remove old buffered media or reduce buffer target.
+- If playback stalls with buffered data, inspect gaps and A/V alignment.
+
+<Snippet title="Check Support Before Appending" explain="Make unsupported codec problems explicit instead of letting them fail later in the pipeline.">
+
+```js
+function requireSupported(mime) {
+  if (!MediaSource.isTypeSupported(mime)) {
+    throw new Error(`Unsupported SourceBuffer type: ${mime}`);
+  }
+}
+
+requireSupported('video/mp4; codecs="avc1.64001f"');
+requireSupported('audio/mp4; codecs="mp4a.40.2"');
+```
+
+</Snippet>
+
+## When Bytes Append But Playback Fails
+
+The hardest class of bugs happens after appendBuffer succeeds. That only proves the browser accepted bytes for parsing. It does not prove the decoded samples form a continuous, synchronized timeline.
+
+At that point, inspect media structure. Use ffprobe, mp4dump, or browser DevTools to check whether init segments match media segments, whether decode and presentation timestamps are continuous, whether the segment starts with a usable random access point, and whether audio and video describe the same timeline.
+
+- Successful append is not the same as successful decode.
+- Continuous video without matching audio can still stall.
+- A gap in TimeRanges is usually a timestamp or missing-segment problem.
+
+<Demo title="Failure Pipeline" mode="buffer">Debug MSE by locating the failed stage: network, MIME support, append sequencing, timestamp continuity, decode, or playback state.</Demo>

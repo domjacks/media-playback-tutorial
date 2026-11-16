@@ -1,0 +1,85 @@
+---
+slug: "fragmented-mp4-cmaf"
+title: "Fragmented MP4 And CMAF"
+kind: "Theory"
+summary: "Bridge the gap between encoded samples and the small appendable media pieces used by MSE, DASH, HLS, and CMAF."
+outcome: "You understand init segments, media segments, MP4 boxes, timestamps, and why CMAF exists."
+reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Guides/Formats/Containers"
+---
+
+## Why Fragment MP4
+
+A normal MP4 file is usually designed as one complete object. That is fine when the browser can fetch the file directly, but streaming players need smaller timed pieces that can be requested, appended, cached, and switched between.
+
+Fragmented MP4, usually written as fMP4, keeps MP4 container structure but splits media into an initialization segment followed by media fragments. This is the shape that MSE commonly expects for DASH and modern HLS.
+
+- The initialization segment describes tracks, timescales, codec configuration, dimensions, and other setup data.
+- Media segments carry timed encoded samples for a short range of playback.
+- The browser needs the init segment first so it can interpret later media fragments.
+
+<Diagram visual="fmp4" />
+
+<Snippet title="fMP4 Mental Model" explain="You will append this order repeatedly when using MSE: setup first, then timed fragments.">
+
+```text
+Initialization segment
+  ftyp
+  moov
+    tracks
+    timescales
+    codec configuration
+
+Media segment
+  moof
+    fragment decode time
+    sample timing and sizes
+  mdat
+    encoded audio or video samples
+```
+
+</Snippet>
+
+## Boxes You Will See
+
+MP4 is made of boxes. Each box has a type and a payload. You do not need to hand-parse every box for this tutorial, but knowing the common names makes MSE errors easier to reason about.
+
+An init segment normally includes ftyp and moov. A media segment normally includes moof and mdat. The moof box describes the fragment timing and sample layout. The mdat box carries the encoded sample bytes.
+
+- ftyp identifies the MP4 brand and compatibility.
+- moov contains movie and track metadata, including codec setup.
+- moof contains fragment metadata such as decode time and sample runs.
+- mdat contains the encoded audio or video samples.
+
+## Timestamps And Timeline Mapping
+
+A media fragment is not just bytes; it is bytes for a time range. The container tells the browser how sample decode times and presentation times map onto the media element timeline.
+
+This is why append order and timestamp continuity matter. If two fragments have a timing gap or overlap, the video element can expose disjoint buffered ranges or stall when the playhead reaches the gap.
+
+- Track timescales convert integer timestamps into seconds.
+- Decode time is when the decoder needs a sample; presentation time is when the viewer should see or hear it.
+- B-frames can make decode order differ from presentation order.
+
+## Where CMAF Fits
+
+CMAF, the Common Media Application Format, standardizes a constrained fMP4 style for streaming. Its goal is to let DASH and HLS reuse the same encoded media segments instead of requiring completely separate packaging.
+
+CMAF also defines chunks, which are smaller pieces inside a fragment. Low-latency streaming can send chunks before the whole segment is complete, reducing the time between capture and playback.
+
+- CMAF is not a player API; it is a media packaging format.
+- DASH and HLS can both reference CMAF media.
+- For this tutorial, CMAF explains why the same fMP4 fragments can appear in multiple streaming protocols.
+
+<Snippet title="Buffered Ranges Depend On Timestamps" explain="After appending bytes, inspect buffered time rather than assuming downloaded bytes equal playable media.">
+
+```js
+function logBuffered(video) {
+  for (let i = 0; i < video.buffered.length; i += 1) {
+    console.log(video.buffered.start(i), video.buffered.end(i));
+  }
+}
+```
+
+</Snippet>
+
+<Demo title="Appendable Fragments" mode="timeline">fMP4 turns encoded samples into timed fragments that MSE can append and expose as buffered media ranges.</Demo>

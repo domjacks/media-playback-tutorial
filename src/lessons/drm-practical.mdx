@@ -1,0 +1,46 @@
+---
+slug: "drm-practical"
+title: "Add Optional ClearKey DRM"
+kind: "Practical"
+summary: "Wire a minimal ClearKey EME flow so users can see the browser DRM lifecycle."
+outcome: "The player can attach MediaKeys and update a ClearKey session for compatible encrypted samples."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/MediaKeySession"
+---
+
+## Keep DRM Optional
+
+DRM support varies by browser, OS, and security context. Treat the DRM lesson as an optional branch of the player, not as a requirement for the rest of playback.
+
+ClearKey uses JSON Web Key Set data, which makes it suitable for a tutorial. The structure is not how production services should expose keys.
+
+Both kid and k in a ClearKey JWK must be base64url (no padding) of the raw 16-byte key ID and key. If you hold them as 32-character hex strings, as most packaging tools print them, convert with the hexToBase64Url helper. Plain base64 or hex in those fields makes the CDM reject the licence.
+
+- Request key system access, with both video and audio capabilities, before attaching encrypted media.
+- Attach MediaKeys to the video element.
+- Audio and video each fire encrypted, often with identical initData, so create one session per distinct initData (keyed by its base64) rather than per event.
+- In the session's message handler, parse the request JSON (\{ kids, type \}) and update the session with a JWK set containing only the requested keys: \{ keys: \[\{ kty: "oct", kid, k \}\], type: "temporary" \}.
+
+<Diagram visual="packets" />
+
+<Snippet title="drm.js" explain="This is the smallest useful EME shape. It creates one session per distinct initData, answers the license request with only the keys the CDM asked for, and requests both video and audio capabilities. Production DRM replaces createClearKeyLicense with a license server fetch." file="drm-practical/drm.js" />
+
+<Checkpoint slug="drm-practical" files={["drm.js"]} note="No runnable page yet: a ClearKey-encrypted test asset arrives in a later DRM chunk. For now this checkpoint is a module you can exercise from the console.">
+
+- node --check passes on drm.js, and it imports cleanly as an ES module in the browser console on localhost or HTTPS.
+- hexToBase64Url("00112233445566778899aabbccddeeff") returns "ABEiM0RVZneImaq7zN3u_w": 22 characters, no padding, no + or /.
+- hexToBase64Url throws for anything that is not 32 hex characters.
+- createClearKeyLicense returns JSON bytes shaped like \{"keys":\[\{"kty":"oct","kid":...,"k":...\}\],"type":"temporary"\} for a requested kid it knows, and throws for an unknown kid.
+
+</Checkpoint>
+
+<Exercise title="Test The License Builder">
+
+In a scratch module or the browser console, import drm.js and build a key table with one kid and key using hexToBase64Url. Encode a request message with TextEncoder as \{"kids":\[\<base64url kid>\],"type":"temporary"\}.
+
+Call createClearKeyLicense and decode the result. Then request an unknown kid and confirm it throws, and explain why filtering to known kids matters.
+
+<Hint>keyTable is a Map from base64url kid to base64url key, exactly as installClearKey builds it. new TextDecoder().decode(result) gives you the JSON to read.</Hint>
+
+</Exercise>
+
+<Demo title="EME Lifecycle" mode="packets">The encrypted event bridges media bytes to a key session while the video element stays the playback surface.</Demo>

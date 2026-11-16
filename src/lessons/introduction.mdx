@@ -1,0 +1,32 @@
+---
+slug: "introduction"
+title: "What You Will Build"
+kind: "Theory"
+summary: "An interactive tutorial to help learn the fundamentals of media playback. Follow the theory and and then implement a basic MSE-based DASH player."
+outcome: "You understand the learning path and how each theory topic supports the player you will build."
+reference: "https://developer.mozilla.org/en-US/docs/Web/Media"
+---
+
+## The Destination
+
+By the end of the tutorial you will have built a small browser media player from scratch. It will use the video element for presentation, Media Source Extensions for feeding media bytes, and a minimal DASH parser for discovering segments.
+
+The goal is not to recreate dash.js or a production player. The goal is to learn the browser APIs and the media concepts that those libraries normally hide.
+
+- First you will learn what video and audio actually describe.
+- Then you will learn how media files package encoded samples.
+- After that you will connect files, segments, manifests, buffers, and playback APIs.
+
+<Diagram visual="timeline" />
+
+## The Tutorial Arc
+
+The early lessons are intentionally theory-heavy. MSE is easier to understand when you already know what a frame, codec, container, segment, timeline, and buffer mean.
+
+The practical lessons build one browser ESM project step by step: first fixed MSE appends, then DASH VOD, then live refresh, subtitles, and an optional ClearKey DRM flow.
+
+- Theory lessons explain the vocabulary before it appears in code.
+- Practical lessons keep the implementation small enough to inspect.
+- Each code sample is plain HTML and JavaScript modules that can run directly in a browser dev server.
+
+<Demo title="Learning Path" mode="timeline">The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming.</Demo>

@@ -1,0 +1,71 @@
+---
+slug: "players-timelines-buffers"
+title: "Players, Timelines, And Buffers"
+kind: "Theory"
+summary: "Build the mental model for playback state before using Media Source Extensions."
+outcome: "You understand media timelines, playheads, buffered ranges, seekable ranges, ready state, and stalls."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement"
+---
+
+## The Media Timeline
+
+A media element presents audio and video on a timeline measured in seconds. The playhead is the current playback position, exposed as currentTime. Duration is the known length for VOD, while live content may have a moving timeline instead of a fixed end.
+
+Decoded output must be scheduled against this timeline. Video frames have presentation times. Audio samples fill precise intervals. Synchronization means the browser advances both tracks using the same media clock.
+
+- currentTime is the playhead position.
+- duration is stable for VOD but can be Infinity or shifting for live.
+- PlaybackRate changes how quickly the playhead advances through media time.
+
+<Diagram visual="buffer" />
+
+<Diagram visual="av-sync" />
+
+<Snippet title="Inspecting Timeline State" explain="These properties are the foundation for the player decisions used later in the tutorial.">
+
+```js
+function describeRanges(label, ranges) {
+  for (let i = 0; i < ranges.length; i += 1) {
+    console.log(label, ranges.start(i), ranges.end(i));
+  }
+}
+
+const video = document.querySelector("video");
+console.log("playhead", video.currentTime);
+describeRanges("buffered", video.buffered);
+describeRanges("seekable", video.seekable);
+```
+
+</Snippet>
+
+## One Timeline, Multiple Buffers
+
+A media element has one currentTime even when audio and video arrive through separate SourceBuffers. The browser synchronizes decoded audio samples and video frames against that shared media timeline.
+
+That means the player must keep both tracks fed. If video is buffered to 20 seconds but audio is only buffered to 8 seconds, playback can still stall around 8 seconds because the media element cannot present complete synchronized output.
+
+- Separate SourceBuffers do not create separate playheads.
+- Audio and video timestamps must describe the same media timeline.
+- A healthy buffer means the playhead has enough audio and video ahead of it.
+
+## Buffered Ranges
+
+The buffered property is a TimeRanges object. It does not say how many bytes are downloaded; it says which time intervals the media element can play without more network data.
+
+Buffers can contain gaps. A player may have 0-10 seconds and 20-30 seconds buffered, but it will still stall when the playhead reaches 10 seconds unless the missing range is filled or the user seeks.
+
+- Buffer depth usually means buffered end minus currentTime.
+- Appending bytes does not guarantee a continuous range if timestamps do not line up.
+- Eviction removes old data so memory does not grow forever.
+
+## Seekable Ranges And Live Windows
+
+Seekable ranges describe where the browser or player believes seeking is allowed. For a normal MP4 file, that may be most of the file once metadata is known. For live streams, it is usually a sliding window of recent media.
+
+A live player tracks the live edge, which is the newest available media time. It usually plays behind that edge by a target latency so downloads, decode, and small network delays have room to recover.
+
+- Seekable is about what can be requested or reached, not only what is already buffered.
+- Live windows move forward as old segments expire and new segments appear.
+- A stall happens when the playhead reaches a time that is not buffered and cannot be decoded yet.
+
+<Demo title="Timed Queues" mode="buffer">A player succeeds when the playhead stays inside buffered, seekable, decodable media time.</Demo>

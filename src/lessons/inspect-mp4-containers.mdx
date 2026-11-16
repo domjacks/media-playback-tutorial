@@ -1,0 +1,64 @@
+---
+slug: "inspect-mp4-containers"
+title: "Inspect MP4 Containers"
+kind: "Practical"
+summary: "Use FFprobe and Bento4 mp4dump to inspect tracks, packets, timestamps, keyframes, and MP4 box structure."
+outcome: "You can inspect an MP4 as streams, packets, frames, timestamps, keyframes, and a concrete MP4 box tree."
+reference: "https://ffmpeg.org/ffprobe.html"
+---
+
+## Inspect The Container, Not Just The Codec
+
+The previous labs created encoded audio and video. This lab looks at how the MP4 container describes those encoded samples as tracks, packets, timestamps, durations, and byte-addressed payload.
+
+FFprobe is excellent for stream, packet, frame, and timing inspection. Bento4's mp4dump complements it by showing the MP4 box tree directly, which is how you inspect ftyp, moov, trak, mdia, and mdat as container structures.
+
+- Streams are logical tracks such as video and audio.
+- Packets are encoded chunks with timestamps and sizes.
+- Frames are decoded pictures or audio frames exposed by the demuxer/decoder path.
+- mp4dump exposes the MP4 box hierarchy that FFprobe abstracts away.
+
+<Snippet title="Check The Tools" explain="This lab expects FFmpeg, FFprobe, and Bento4's mp4dump to be available on your command line." file="inspect-mp4-containers/lab.sh" region="check-tools" />
+
+<Snippet title="Create A Fast-Start MP4" explain="The +faststart flag places the moov metadata near the start, which helps progressive download startup." file="inspect-mp4-containers/lab.sh" region="create-faststart" />
+
+<Snippet title="Show Format And Streams" explain="This is the high-level view: one container with video and audio streams." file="inspect-mp4-containers/lab.sh" region="show-format" />
+
+<Snippet title="Inspect Packets" explain="Packets expose encoded payload timing. Look for stream_index, pts_time, dts_time, duration_time, size, and flags. The compact format labels each field, because ffprobe prints fields in its own order rather than the -show_entries order." file="inspect-mp4-containers/lab.sh" region="inspect-packets" />
+
+<Snippet title="Inspect Frames And Keyframes" explain="Frame inspection helps connect MP4 timing with codec structure. Keyframes are the safe random access points. Fields are labelled because ffprobe ignores the -show_entries order; the first frame may also print extra encoder side data such as an x264 SEI message." file="inspect-mp4-containers/lab.sh" region="inspect-frames" />
+
+## Box Tree Inspection
+
+FFprobe gives you stream and packet information. mp4dump gives you the MP4 box tree. Use both views together: FFprobe shows what the media means to a demuxer, while mp4dump shows how the file is actually structured.
+
+Box dumps are useful when you need to debug malformed MP4s, metadata placement, timescales, missing track metadata, or fragmented output.
+
+- ftyp identifies brands and compatibility.
+- moov contains movie and track metadata.
+- trak/tkhd/mdia describe individual tracks.
+- mdat carries encoded sample bytes.
+
+<Snippet title="Inspect The MP4 Box Tree" explain="This prints the MP4 box tree. Look for ftyp, moov, mvhd, trak, tkhd, mdia, and mdat." file="inspect-mp4-containers/lab.sh" region="box-tree" />
+
+<Checkpoint slug="inspect-mp4-containers" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe. If mp4dump is not installed, the box-tree steps print a notice and are skipped.">
+
+- Format: format_name=mov,mp4,m4a,3gp,3g2,mj2, nb_streams=2, duration=6.000000.
+- Video stream nb_frames=150 (6 s x 25 fps); audio nb_frames=283 (AAC frames of 1024 samples).
+- The first video packet has flags=K\_\_ (keyframe) and dts_time=-0.080000 before pts_time=0.000000: B-frame reordering shows up as DTS earlier than PTS.
+- Packets in decode order have non-monotonic pts_time (0.000, 0.080, 0.040 ...).
+- The box tree lists ftyp, moov (mvhd, trak, tkhd, mdia) and mdat. Without Bento4 the lab prints "mp4dump not found; skipping box tree (install Bento4)" and carries on.
+
+</Checkpoint>
+
+<Exercise title="Find The Keyframes">
+
+List only the video keyframe packets in lab/container-faststart.mp4 with their timestamps, and work out the keyframe interval in seconds.
+
+Then explain why that interval follows from -g 50 and the 25 fps frame rate, and what it means for where a player can start or seek.
+
+<Hint>Use -show_packets -show_entries packet=pts_time,flags -of csv=p=0 and filter for lines containing K. You should find keyframes at 0, 2 and 4 seconds.</Hint>
+
+</Exercise>
+
+<Demo title="Container Evidence" mode="packets">A container maps encoded packets to tracks, timestamps, byte sizes, keyframes, and presentation order.</Demo>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Captions, Loader2, Play, RotateCcw } from "lucide-react";
 import {
   chooseRuntimeRepresentation,
@@ -16,9 +16,8 @@ const BUFFER_GOAL_SECONDS = 30;
 const BACK_BUFFER_SECONDS = 30;
 const WAIT_MS = 250;
 
-const imscCues = parseImscCues(showcaseTtml);
-
 export function PlayerShowcase() {
+  const imscCues = useMemo(() => parseImscCues(showcaseTtml), []);
   const videoRef = useRef(null);
   const objectUrlRef = useRef("");
   const abortRef = useRef(null);

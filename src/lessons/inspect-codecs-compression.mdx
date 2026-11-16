@@ -1,0 +1,61 @@
+---
+slug: "inspect-codecs-compression"
+title: "Inspect Codecs And Compression"
+kind: "Practical"
+summary: "Encode the same source with different H.264 settings and inspect how CRF, bitrate, GOP size, and frame types change the output."
+outcome: "You can use FFmpeg and FFprobe to compare H.264 CRF, bitrate, GOP, and frame-type behavior."
+reference: "https://ffmpeg.org/ffmpeg-codecs.html#libx264"
+---
+
+## One Source, Several Encodes
+
+Codec concepts are easiest to reason about when the source stays fixed. This lab uses FFmpeg's test pattern source and encodes it several ways with libx264 so you can compare file size, bitrate, GOP structure, and frame types.
+
+The commands deliberately use H.264 because that is the main codec model in this tutorial. The same inspection habits apply when you later compare HEVC, VP9, or AV1.
+
+- CRF targets quality rather than an exact bitrate.
+- Bitrate settings target delivery size or rate.
+- GOP and B-frame settings affect prediction dependencies.
+
+<Snippet title="Create A Reusable Source" explain="Use a lossless-ish intermediate source for comparisons so each encode starts from the same frames." file="inspect-codecs-compression/lab.sh" region="create-source" />
+
+<Snippet title="Compare CRF Values" explain="Lower CRF generally means higher quality and larger output. The codec is still H.264 in both files." file="inspect-codecs-compression/lab.sh" region="compare-crf" />
+
+<Snippet title="Inspect Codec And Bitrate" explain="Use FFprobe to compare codec name, profile, pixel format, and reported bitrate." file="inspect-codecs-compression/lab.sh" region="inspect-bitrate" />
+
+<Snippet title="Force A Bitrate Target" explain="This creates a more delivery-oriented encode. The maxrate and bufsize options constrain bitrate variation." file="inspect-codecs-compression/lab.sh" region="bitrate-target" />
+
+<Snippet title="Inspect Frame Types" explain="The pict_type values show I, P, and B frames. Key frames are the random access points used for startup and seeking. pkt_pts_time was removed in FFmpeg 5 and prints nothing, so use pts_time. ffprobe prints fields in its own order, not the order you list in -show_entries, so the compact format is used here to label every value. Note that B-frames mean decode order differs from presentation order." file="inspect-codecs-compression/lab.sh" region="frame-types" />
+
+<Snippet title="Change GOP And B-Frames" explain="This encode uses a shorter GOP and disables B-frames. It is easier to decode and reason about, but usually less efficient." file="inspect-codecs-compression/lab.sh" region="gop-no-bframes" />
+
+## Quality Metrics In Practice
+
+PSNR, SSIM, and VMAF are normally used by comparing an encoded file against a reference source. FFmpeg can calculate PSNR and SSIM with built-in filters. VMAF support depends on whether your FFmpeg build includes libvmaf.
+
+Treat these metrics as engineering signals, not truth. They are useful for comparing encodes, but visual inspection and product constraints still matter.
+
+- PSNR is easy to compute but weak as a perceptual metric.
+- SSIM is more perceptual and still widely available.
+- VMAF is common for ladder tuning when the tooling is available.
+
+<Checkpoint slug="inspect-codecs-compression" files={["lab.sh"]} note="Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe.">
+
+- ls -lh shows lab/h264-crf18.mp4 at about 4.1M and lab/h264-crf32.mp4 at about 900K: same source, same codec, roughly 4.5x size difference.
+- bit_rate for the CRF 18 encode is around 4.1 Mbps (4100631 here) against around 0.8 Mbps (788351) for CRF 32. Both report codec_name=h264 and profile=High.
+- Frame types for the default encode start I, B, P, P: B-frames are present, so pts_time order differs from decode order.
+- The GOP 25 / -bf 0 encode prints only I and P frames, with a key frame (key_frame=1) every 25 frames.
+
+</Checkpoint>
+
+<Exercise title="Find The CRF Sweet Spot">
+
+Encode lab/source.mkv at CRF 23 and CRF 28 (keep -g 50 and the AAC settings), then compare file size and video bit_rate with the CRF 18 and 32 results.
+
+Plot or tabulate size against CRF. Decide which value you would ship for this test pattern, and say what you would check before trusting that choice on real content.
+
+<Hint>Reuse the Compare CRF command with a different -crf and output name. On this source expect roughly 2.8 MB at CRF 23 and 1.5 MB at CRF 28. Read bit_rate with -show_entries stream=bit_rate. A synthetic test pattern compresses unlike real footage, so size ratios will not transfer.</Hint>
+
+</Exercise>
+
+<Demo title="Encode Tradeoffs" mode="packets">Changing codec settings changes file size, bitrate, prediction structure, random access points, and visual quality.</Demo>

@@ -1,0 +1,69 @@
+---
+slug: "webcodecs-playback"
+title: "Decode Samples With WebCodecs"
+kind: "Practical"
+summary: "Use your DASH and demuxing knowledge to decode H.264 and AAC samples and schedule synchronized video and audio output."
+outcome: "You can connect DASH segment fetching, fMP4 sample extraction, WebCodecs decoding, and synchronized canvas/audio output."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API"
+---
+
+## The Decoder Boundary
+
+WebCodecs accepts encoded chunks plus codec configuration. It does not fetch DASH segments, parse MP4, create a media timeline, or present a complete movie for you. The player connects those pieces: MPD, segment fetch, demuxed samples, decoders, and output scheduling.
+
+The example uses VideoDecoder output frames drawn to a canvas and AudioDecoder output scheduled through AudioContext. Both tracks use timestamps derived from their fMP4 timescales, so audio and video follow one playback clock.
+
+- Check VideoDecoder and AudioDecoder configuration support before decoding.
+- Send compressed samples in decode order and label video keyframes correctly.
+- Use decoded timestamps for presentation and apply backpressure to decoder queues.
+- Close VideoFrame and AudioData objects when they are no longer needed.
+
+<Snippet title="Configure A Video Decoder" explain="The H.264 sample entry provides the codec string and avcC decoder configuration needed by WebCodecs.">
+
+```js
+const support = await VideoDecoder.isConfigSupported({
+  codec: track.config.codec,
+  description: track.config.description
+});
+if (!support.supported) throw new Error("This device cannot decode this H.264 profile");
+
+decoder.configure(support.config);
+decoder.decode(new EncodedVideoChunk({
+  type: sample.key ? "key" : "delta",
+  timestamp: presentationTimeUs,
+  duration: sampleDurationUs,
+  data: sample.data
+}));
+```
+
+</Snippet>
+
+## Scheduling And Controls
+
+The sample player schedules audio buffers against AudioContext.currentTime and draws the video frame whose timestamp is due. Pausing suspends the audio clock, which also pauses video presentation. Replay rebuilds the decoder session from the first sample.
+
+The example requests a fixed DASH quality and buffers the tutorial's bounded VOD segment list. It demonstrates the decoding and synchronization boundary, not adaptive switching, live edge management, seeking, or production memory policies.
+
+## When To Choose WebCodecs
+
+MSE is a good fit when the browser should own demuxing and presentation while JavaScript supplies media segments. WebCodecs is useful when an application needs control over decoded frames or custom processing, and accepts responsibility for parsing, scheduling, synchronization, and resource cleanup.
+
+<Checkpoint slug="webcodecs-playback" run files={["index.html","webcodecs-player.js","mp4-demuxer.js","dash.js"]} note="Needs a browser with WebCodecs (VideoDecoder and AudioDecoder) and a secure context: localhost or HTTPS.">
+
+- The status line moves from Reading the DASH manifest... through Fetching DASH fragments... to Ready: \<n> timed samples extracted. Press Play.
+- Press Play: the canvas shows Big Buck Bunny, audio plays in sync, and the status reads Playing decoded samples.
+- Pause freezes the picture and silences audio together (the AudioContext clock is the playback clock); Play resumes from the same point.
+- At the end the status reads Playback ended. Press Replay to start again, and Replay restarts from the first sample.
+- There is no video element and no MediaSource: DevTools Elements shows only a canvas.
+
+</Checkpoint>
+
+<Exercise title="Draw The Media Clock">
+
+In drawFrame, draw the current mediaTime onto the canvas as text each time a frame is shown, for example with context.fillText.
+
+Press Pause and confirm the number stops advancing, then press Play and confirm it resumes without a jump.
+
+<Hint>mediaTime is already computed in drawFrame as audioContext.currentTime - audioOrigin. Call fillText after drawImage, so the text is not painted over.</Hint>
+
+</Exercise>

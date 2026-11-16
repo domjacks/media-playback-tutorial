@@ -1,0 +1,95 @@
+---
+slug: "video-fundamentals"
+title: "Video Fundamentals"
+kind: "Theory"
+summary: "Understand the properties that define what a viewer sees before you think about files or streaming."
+outcome: "You can explain pixels, raster frames, resolution, RGB versus YCbCr, bit depth, chroma subsampling, frame rate, scan type, colour gamut, and dynamic range in player terms."
+reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs"
+---
+
+## Pixels And Raster Images
+
+Digital video is a sequence of raster images shown over time. A raster image is a grid of picture elements, or pixels. Each pixel stores values that describe the colour and brightness at one point in the picture.
+
+A single video frame is one raster image. Playback works by presenting many frames on a timeline quickly enough that the viewer perceives motion.
+
+- Pixels are spatial samples of a picture.
+- Frames are raster images placed at times on the media timeline.
+- Video quality starts with how many samples exist and how accurately each sample describes light.
+
+<Diagram visual="video" />
+
+## Resolution And Aspect Ratio
+
+Resolution is the number of pixels in each frame. A 1920 by 1080 video has 2,073,600 luma sample positions per frame, while a 1280 by 720 video has 921,600. More samples can preserve more spatial detail, but they also increase decode work and usually need more bitrate.
+
+Aspect ratio is the shape of the picture, such as 16:9 or 4:3. Player layout should respect the encoded display shape so the image is not stretched, squeezed, or cropped by accident.
+
+- Resolution affects sharpness, decode cost, and bandwidth.
+- Display size and device pixel density decide whether extra resolution is visible.
+- Aspect ratio belongs to presentation; it is not the same thing as file size or bitrate.
+
+<Snippet title="Reading Video Metadata" explain="The video element exposes decoded presentation dimensions after metadata loads.">
+
+```js
+const video = document.querySelector("video");
+
+video.addEventListener("loadedmetadata", () => {
+  console.log(video.videoWidth, video.videoHeight);
+  console.log(video.duration);
+});
+```
+
+</Snippet>
+
+## RGB And YCbCr
+
+Screens often display colour as RGB: red, green, and blue light values. Video systems commonly store colour as YCbCr instead. Y carries luma, which is brightness detail. Cb and Cr carry chroma difference information, which describes colour relative to luma.
+
+YCbCr is useful because human vision is more sensitive to brightness detail than colour detail. Video can keep full luma resolution while storing less chroma detail, saving data with less visible damage than reducing every component equally.
+
+- RGB is convenient for displays and canvas-style pixel work.
+- YCbCr is common in encoded video and broadcast workflows.
+- Colour conversion and metadata help the browser map encoded values to the display.
+
+## Bit Depth
+
+Bit depth is the number of bits used for each component sample. 8-bit video gives each component 256 possible values. 10-bit video gives each component 1,024 possible values, which allows smoother gradients and gives HDR workflows more precision.
+
+Higher bit depth increases raw data size before compression. A 10-bit stream is not automatically better than an 8-bit stream, but it gives the codec and display pipeline more precision to work with.
+
+- 8-bit SDR video is common and broadly compatible.
+- 10-bit video is common for HDR and higher-quality distribution.
+- Browser support depends on codec, profile, operating system, GPU, and display.
+
+## Chroma Subsampling
+
+Chroma subsampling stores colour at a lower resolution than luma. The notation describes how chroma samples are shared across nearby pixels. 4:4:4 keeps full chroma detail. 4:2:2 halves chroma horizontally. 4:2:0 halves chroma horizontally and vertically across a two-line area.
+
+Most web video is 4:2:0 because it compresses well and usually looks good for natural images. Text, graphics, and sharp colour edges can suffer more because their chroma detail matters.
+
+- 4:4:4 keeps one Cb and one Cr sample for every luma sample.
+- 4:2:2 keeps full luma but shares chroma across pairs of horizontal samples.
+- 4:2:0 keeps full luma but shares chroma across a small block of neighbouring samples.
+
+## Frame Rate And Scan Type
+
+Frame rate is how many pictures are shown per second. Common values include 24 fps for film-like motion, 25 or 30 fps for broadcast and web video, and 50 or 60 fps for sport, games, and very smooth motion.
+
+Progressive video stores each frame as a complete picture. Interlaced video stores each picture as alternating fields, traditionally one field for odd lines and one for even lines. Interlacing helped older broadcast systems reduce bandwidth, but modern web playback usually prefers progressive video.
+
+- A 60 fps stream has twice as many frame times as a 30 fps stream.
+- The media timeline is continuous even though video frames are discrete.
+- Interlaced sources usually need deinterlacing before clean progressive display.
+
+## Colour And Brightness
+
+Colour gamut describes the range of colours a video can represent. SDR web video often uses Rec.709, while wider-gamut HDR content may use Rec.2020 signalling with colours that many older displays cannot fully show.
+
+Dynamic range describes the difference between dark and bright image detail. SDR targets a narrower range. HDR formats carry extra signalling so compatible displays can render brighter highlights and more shadow detail.
+
+- Colour metadata helps the browser and display map encoded values to visible colours.
+- HDR playback depends on the codec, container metadata, browser, OS, and display.
+- A player should surface compatibility failures clearly instead of pretending every rendition is equivalent.
+
+<Demo title="Picture Properties" mode="timeline">Resolution, frame rate, colour, and dynamic range shape the media experience before the first network request happens.</Demo>

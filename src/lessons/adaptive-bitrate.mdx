@@ -1,0 +1,105 @@
+---
+slug: "adaptive-bitrate"
+title: "Adaptive Bitrate"
+kind: "Practical"
+summary: "Use the DASH representations you parsed to choose a quality level from network and buffer signals."
+outcome: "The DASH player selects an initial video representation, then uses runtime ABR concepts to choose future segments from throughput and buffer signals."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/Network_Information_API"
+---
+
+## What ABR Decides
+
+Adaptive bitrate is the player logic that decides which representation to request. DASH gives the player a ladder of representations; ABR chooses a rung based on current conditions.
+
+The main tradeoff is simple: higher bitrate can look better, but it takes longer to download. A player should prefer smooth playback over visual quality because a stall is more disruptive than a temporary quality drop.
+
+- Throughput says how quickly recent media requests downloaded.
+- Buffer depth says how much time the player has before it stalls.
+- Representation bandwidth says roughly how many bits per second that quality needs.
+
+<Diagram visual="timeline" />
+
+<Snippet title="Expose Representations From The Parser" explain={"Replace parseAdaptation and loadDashVod from the previous lesson with these versions. Each Representation now carries id, bandwidth, mimeType, codecs, the combined mime string, its init URL, and segments with start and end times. loadDashVod accepts options for the startup choice and returns { video, audio, representations }. The rest of dash.js (findAdaptation, resolveBaseUrl, format, chooseHighest, parseIsoDuration, and TUTORIAL_SEGMENT_LIMIT) stays as it was."} file="adaptive-bitrate/dash.js" region="expose-representations" />
+
+## A Basic Algorithm
+
+A useful first algorithm chooses the highest representation whose declared bandwidth fits inside a conservative throughput budget. The safety margin protects against network variation and request overhead.
+
+Buffer depth changes how aggressive the player can be. If there is a large buffer, the player can use more of the measured throughput. If the buffer is shallow, it should be more cautious.
+
+- Sort representations by bandwidth from low to high.
+- Estimate throughput from downloaded segment bytes divided by download time.
+- Pick the highest representation below throughput multiplied by a safety factor.
+
+<Snippet title="ABR Helpers In dash.js" explain="The parser module also exports the small startup ABR helpers used by the player. chooseRepresentation replaces chooseLowest for the video startup choice, and its defaults let loadDashVod(mpdUrl) work with no options. It also drops Representations the browser reports as unsupported by MediaSource.isTypeSupported before choosing." file="adaptive-bitrate/dash.js" region="startup-abr" />
+
+## Startup ABR Versus Switching
+
+This tutorial updates the player with startup ABR: it chooses the video representation before playback begins, then uses that selected representation to build the segment queue. That avoids the extra complexity of switching SourceBuffer streams mid-playback.
+
+A full player repeats the decision throughout playback. It can switch at aligned segment boundaries, but it must handle codec compatibility, buffered ranges, quality oscillation, and audio/video coordination.
+
+- Startup ABR is simple and still useful.
+- Mid-stream ABR needs aligned segments and careful append scheduling.
+- Avoid switching up too quickly and switch down before the buffer becomes dangerous.
+
+<Snippet title="Update The Player" explain="loadDashVod now takes the options object and returns the startup video choice, so choose it before creating SourceBuffers. In the finished player.js, playDash then creates the SourceBuffers and replaces the old video appendTrack call with the runtime ABR loop shown below; audio keeps its own sequential loop." file="adaptive-bitrate/player.js" region="startup-choice" />
+
+## Runtime ABR
+
+Runtime ABR repeats the decision while playback is already running. Instead of building one segment queue for one selected video Representation, the player chooses a representation for each future segment request. The decision uses measured throughput, current buffer depth, the current representation, and switching rules.
+
+The goal is stability, not always maximum quality. A runtime algorithm should switch down quickly when throughput or buffer depth becomes risky, and switch up more slowly so it does not oscillate between qualities.
+
+- Measure every segment download and smooth the result.
+- Use buffer depth to decide how much risk is acceptable.
+- Only switch between compatible, aligned representations.
+- Avoid switching up unless the higher representation has been affordable for multiple decisions.
+
+<Snippet title="Smooth Throughput With EWMA" explain="A single segment download can be noisy. EWMA gives recent measurements more weight while preserving some history." file="adaptive-bitrate/dash.js" region="ewma" />
+
+<Snippet title="Measure Buffer Depth" explain="Runtime ABR needs playable seconds ahead of currentTime, not downloaded bytes." file="adaptive-bitrate/player.js" region="buffer-depth" />
+
+<Snippet title="Runtime Representation Choice" explain="This keeps the startup selector but adds switch-down urgency, switch-up caution, and a compatibility filter. canSwitchTo only allows candidates with the same mimeType and either identical codecs or a browser that supports SourceBuffer.changeType(). Both functions are exported from dash.js so the player can import chooseRuntimeRepresentation." file="adaptive-bitrate/dash.js" region="runtime-choice" />
+
+<Snippet title="Segment-By-Segment ABR Loop" explain="The player waits until the buffer is below its goal, chooses the video representation, appends the new representation's init segment whenever the representation changes (calling changeType first if the codec string differs), then fetches and appends the media segment and measures the result. appendBufferChecked comes from the Guard Append Operations snippet in the MSE debugging lesson, and createEwma and bufferAhead come from the snippets above." file="adaptive-bitrate/player.js" region="abr-loop" />
+
+## Runtime Switching Constraints
+
+The loop assumes every Representation has aligned segment timing. It also has to handle codec configuration. The BBB ladder's video Representations have different codec strings (avc1.640028 for 1080p, avc1.640020 for 720p, and avc1.64001f for 504p), even though they are all H.264 in MP4. A player must either restrict switching to identical codecs or call SourceBuffer.changeType() with the new MIME type before appending the new init segment. That is exactly what canSwitchTo and the loop do.
+
+Switching also means appending the new Representation's init segment before its first media segment, because the SourceBuffer's parser needs that Representation's codec setup. The loop tracks which init segment is currently in the buffer.
+
+The loop also has a buffer goal: before each request it waits while bufferAhead(video) is at or above BUFFER_GOAL_SECONDS (30). Without a goal a fast network just downloads the whole presentation, the buffer is always full, and the buffer signal that drives ABR becomes meaningless. A goal keeps buffer depth responsive to real conditions and bounds memory.
+
+Runtime ABR also coordinates audio and video. Audio often stays on one Representation because it is much cheaper than video, but the player still has to keep audio and video append queues synchronized around the same media time.
+
+- Switch only at aligned segment boundaries.
+- Avoid switching across incompatible codec strings or profiles unless changeType() is available.
+- Append the new init segment on every switch, before the next media segment.
+- Stop fetching once the buffer goal is met.
+- Do not abandon audio buffering while chasing video quality.
+- Keep enough buffer to survive the next request before switching up.
+
+<Checkpoint slug="adaptive-bitrate" run files={["index.html","dash.js","player.js"]} note="This snapshot has no subtitles, so you can inspect ABR behaviour in isolation.">
+
+- The status line reads video \<representation id> segment \<n>, \<kbps> kbps, \<s>s buffered, updating after each video segment.
+- Reload with DevTools throttling set to Fast 3G (or 3G): the status line shows 896x504p25 from the start, the lowest Representation.
+- Reload with no throttling: it starts on a higher Representation (1280x720p25 or 1920x1080p25, depending on navigator.connection.downlink), and then switches down to 896x504p25 when you apply Fast 3G mid-playback. Decisions are made only while the buffer is below 30 s, so the switch can take a few segments.
+- Remove the throttle again: it steps up one Representation at a time (504p to 720p to 1080p), never straight to the top.
+- Network shows an init segment request (IS.mp4) for the new Representation each time the video Representation changes, and the picture keeps playing without a glitch.
+- The buffer reading stops growing near 30 s: the buffer goal is holding downloads back.
+
+</Checkpoint>
+
+<Exercise title="Make Switching Up More Cautious">
+
+Change appendVideoAbr so it only switches up after chooseRuntimeRepresentation has proposed the same higher Representation on 3 consecutive segments. Switching down must still happen immediately.
+
+Verify by throttling to Fast 3G, then removing the throttle: you should see three segments on the old Representation before each step up.
+
+<Hint>Keep a counter in appendVideoAbr: increment it when the proposal has higher bandwidth than current, reset it to 0 otherwise, and only assign current when it reaches 3 (always assign on a downward proposal). Log the counter in the status line to see it.</Hint>
+
+</Exercise>
+
+<Demo title="ABR Decision Loop" mode="timeline">The player compares representation bandwidth with measured throughput and buffer depth before choosing quality.</Demo>

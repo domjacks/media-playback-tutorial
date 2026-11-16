@@ -1,0 +1,100 @@
+---
+slug: "dash-live-timing"
+title: "DASH Live Timing"
+kind: "Theory"
+summary: "Turn a dynamic MPD into live segment availability calculations using wall-clock time, presentation time, and SegmentTemplate timing."
+outcome: "You can derive a simple DASH live segment range from availabilityStartTime, suggestedPresentationDelay, timeShiftBufferDepth, startNumber, duration, and timescale."
+reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
+---
+
+## Dynamic MPDs
+
+A DASH live stream usually uses an MPD with type="dynamic". Unlike a static VOD MPD, a dynamic MPD describes a presentation that is still moving forward. The MPD is a snapshot of rules and currently useful metadata, not a complete list of all media that will ever exist.
+
+The key engineering task is to convert MPD timing fields into segment requests that are likely to exist now. That means combining wall-clock time, availabilityStartTime, Period timing, SegmentTemplate timing, and the service's latency guidance.
+
+- availabilityStartTime anchors the presentation timeline to UTC wall-clock time.
+- publishTime tells you when this MPD snapshot was generated.
+- minimumUpdatePeriod tells you when it is useful to refresh the MPD.
+- suggestedPresentationDelay tells you how far behind live the service expects playback to run.
+
+<Diagram visual="timeline" />
+
+## Wall Clock To Presentation Time
+
+DASH live timing starts by estimating where the live presentation is right now. If the wall clock says it is 12:00:30 and availabilityStartTime was 12:00:00, the live presentation is roughly 30 seconds from the start of the live timeline.
+
+Players then subtract a target latency to avoid requesting media too close to the live edge. If the service suggests 12 seconds of presentation delay, the target playback time is around 18 seconds into the presentation.
+
+- livePresentationTime = now - availabilityStartTime.
+- targetPlaybackTime = livePresentationTime - suggestedPresentationDelay.
+- A segment is available at availabilityStartTime + Period start + the segment's end time (plus availabilityTimeOffset if present), so target latency must be at least one segment duration.
+- DASH-IF services publish a UTCTiming element in the MPD. Players should sync their clock with it (for example by fetching the time source it names and storing an offset) instead of trusting Date.now(), because device clocks are often seconds out. Pass the corrected time as nowMs to the range calculation.
+- For real services, clock synchronization and CDN propagation can make this estimate imperfect.
+
+<Snippet title="Live Presentation Time" explain="This calculation turns wall-clock time into media presentation time, then applies presentation delay.">
+
+```js
+const astMs = Date.parse(mpd.getAttribute("availabilityStartTime"));
+const nowSeconds = Date.now() / 1000;
+const livePresentationTime = nowSeconds - (astMs / 1000);
+
+const suggestedDelay = parseDuration(mpd.getAttribute("suggestedPresentationDelay"));
+const targetPlaybackTime = Math.max(0, livePresentationTime - suggestedDelay);
+```
+
+</Snippet>
+
+## SegmentTemplate Timing
+
+With a fixed-duration SegmentTemplate, each segment covers duration / timescale seconds. The player can convert target playback time into a segment number by dividing by the segment duration and adding startNumber.
+
+This is the easiest live timing mode to teach, but it is not the only one. Streams that use SegmentTimeline should follow explicit S elements because segment durations may vary or include repeats. Streams with multiple Periods must account for Period@start before mapping media time to segment number.
+
+- segmentDurationSeconds = SegmentTemplate@duration / SegmentTemplate@timescale.
+- segmentNumber = startNumber + floor(targetPlaybackTime / segmentDurationSeconds).
+- SegmentTimeline is more precise for variable durations and should not be approximated as fixed duration.
+
+<Snippet title="Fixed Duration Segment Range" explain="This is the core calculation used by the practical lesson for a simple fixed-duration SegmentTemplate live stream.">
+
+```js
+function getLiveSegmentRange(timing, nowMs = Date.now()) {
+  const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
+  // A segment only becomes available at its END time, so latency must be at least one segment.
+  const targetLatency = Math.max(timing.suggestedPresentationDelay || timing.segmentDuration * 3, timing.segmentDuration);
+  const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
+  const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
+
+  const newest = timing.startNumber + Math.floor(targetPlaybackTime / timing.segmentDuration);
+  const first = Math.max(
+    timing.startNumber,
+    newest - Math.floor(windowDepth / timing.segmentDuration)
+  );
+
+  return { first, newest, targetPlaybackTime, livePresentationTime };
+}
+```
+
+</Snippet>
+
+## Time Shift Buffer
+
+timeShiftBufferDepth defines how much live history is available. If the time-shift buffer is 120 seconds and segment duration is 4 seconds, the live window contains roughly the newest 30 segments. Segments older than that can disappear from the manifest or return 404/410 from the server.
+
+A player should keep its seekable UI and request logic inside this window. The MSE buffer can also contain old appended media, but that does not mean the server can still re-fetch it.
+
+- The seekable live window is a server availability concept.
+- The buffered range is local media already appended into MSE.
+- A live player has to manage both ranges and keep them coherent.
+
+## Refresh And Publish Time
+
+minimumUpdatePeriod is the cadence for checking whether the MPD has changed. It does not guarantee that every refresh contains new media. publishTime can help detect whether the response is a newer snapshot or effectively the same MPD.
+
+The player should avoid refreshing too aggressively, but it should also recover if a refresh arrives late or a segment request near the edge fails. That is why live controllers combine MPD refresh, request retries, and target latency.
+
+- Refresh at or after minimumUpdatePeriod unless the service documents a tighter loop.
+- Compare publishTime when deciding whether metadata actually changed.
+- Treat near-edge 404s as a timing signal, not always as a fatal error.
+
+<Demo title="DASH Live Clock" mode="timeline">DASH live timing maps wall-clock time through MPD timing fields into a safe segment range behind the live edge.</Demo>

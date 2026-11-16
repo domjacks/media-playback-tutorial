@@ -2,6 +2,11 @@ import { cpSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import mdx from "@mdx-js/rollup";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkGfm from "remark-gfm";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import rehypeSections from "./src/lib/rehype-sections.js";
 
 function copyCheckpoints() {
   let outDir = "dist";
@@ -22,7 +27,18 @@ function copyCheckpoints() {
 }
 
 export default defineConfig({
-  plugins: [react(), copyCheckpoints()],
+  plugins: [
+    {
+      enforce: "pre",
+      ...mdx({
+        providerImportSource: "@mdx-js/react",
+        remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter, remarkGfm],
+        rehypePlugins: [rehypeSections]
+      })
+    },
+    react(),
+    copyCheckpoints()
+  ],
   build: {
     rollupOptions: {
       input: {

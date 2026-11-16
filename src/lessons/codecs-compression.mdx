@@ -1,0 +1,147 @@
+---
+slug: "codecs-compression"
+title: "Codecs And Compression"
+kind: "Theory"
+summary: "See why raw camera video is enormous and how H.264-style codecs reduce it with spatial compression, temporal prediction, and bitrate control."
+outcome: "You can calculate raw video data rate and explain H.264 spatial compression, temporal prediction, GOP structure, bitrate control, and quality metrics."
+reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Formats/Video_codecs"
+---
+
+## Raw Video Is Huge
+
+A camera does not start with H.264 or AV1. It starts with samples that describe light. This example is a 10-bit 4:2:2 production or camera-style signal at 1920 by 1080 and 25 fps: each frame has a Y plane at 1920 by 1080, a Cb plane at 960 by 1080, and a Cr plane at 960 by 1080.
+
+Y is luma, the brightness detail. Cb and Cr are chroma difference samples. They are 960 pixels wide here because each chroma sample is shared across a pair of horizontal luma samples, so the colour information is sampled at half the horizontal resolution. This is the 4:2:2 pattern from the chroma subsampling section of the video fundamentals lesson.
+
+- Y samples per frame: 1920 x 1080 = 2,073,600.
+- Cb samples per frame: 960 x 1080 = 1,036,800.
+- Cr samples per frame: 960 x 1080 = 1,036,800.
+
+<Diagram visual="codec" />
+
+<Snippet title="Raw Video Data Rate" explain="This calculation shows the uncompressed byte rate for the example camera signal.">
+
+```js
+const y = 1920 * 1080;
+const cb = 960 * 1080;
+const cr = 960 * 1080;
+const bitsPerSample = 10;
+const framesPerSecond = 25;
+const bitsPerByte = 8;
+
+const samplesPerFrame = y + cb + cr;
+const bitsPerFrame = samplesPerFrame * bitsPerSample;
+const bytesPerSecond = (bitsPerFrame * framesPerSecond) / bitsPerByte;
+
+console.log(samplesPerFrame); // 4147200
+console.log(bytesPerSecond);  // 129600000
+```
+
+</Snippet>
+
+## The Maths
+
+Add the three planes together and one frame contains 4,147,200 component samples. At 10 bits per sample, that is 41,472,000 bits for one frame.
+
+At 25 frames per second, the stream is 1,036,800,000 bits per second. Divide by 8 bits in a byte and you get 129,600,000 bytes per second, before audio, headers, metadata, or transport overhead.
+
+- That is about 129.6 MB/s, or about 123.6 MiB/s.
+- It is also about 1.04 Gbit/s.
+- This is why web video is compressed before it is stored, streamed, or played.
+
+## Contrast: 8-Bit 4:2:0 Web Delivery
+
+Typical web delivery is 8-bit 4:2:0, as covered under chroma subsampling in the video fundamentals lesson. Chroma is halved vertically as well as horizontally, so each chroma plane is 960 by 540 instead of 960 by 1080.
+
+That gives 1920 x 1080 luma plus two 960 x 540 chroma planes: 2,073,600 + 518,400 + 518,400 = 3,110,400 samples per frame. At 8 bits per sample and 25 fps, that is 622,080,000 bit/s, about 622 Mbit/s or 77.8 MB/s.
+
+- Dropping from 10-bit 4:2:2 to 8-bit 4:2:0 cuts the raw rate to 60%, before any codec has done anything.
+- Even 622 Mbit/s is far beyond what a viewer's connection can carry, so compression is still essential.
+
+## H.264 As The Main Model
+
+This tutorial uses H.264 as the main codec model because it is widely supported by browsers, devices, and streaming workflows. H.264 is also old enough that its core ideas are well understood: divide pictures into blocks, predict what can be predicted, transform what remains, quantize detail, and code the result efficiently.
+
+HEVC, VP9, and AV1 use many of the same broad ideas with more advanced tools. They can deliver better compression efficiency, but support, licensing, encoding cost, and device decode capability vary.
+
+- H.264 is the practical baseline for broad MP4 playback.
+- HEVC can be efficient but browser/device support is uneven.
+- VP9 and AV1 are common web alternatives, especially in WebM or modern streaming workflows.
+
+## Spatial Compression
+
+Spatial compression reduces detail within a single frame. H.264 first predicts blocks from neighbouring pixels in the same picture where it can. The remaining difference, called the residual, is transformed so visible image energy is concentrated into values that are easier to compress.
+
+A common way to explain this family of techniques is DCT, quantisation, then entropy coding. A transform such as the Discrete Cosine Transform expresses image detail as frequency-like coefficients. Quantisation reduces precision, often throwing away fine detail that viewers are less likely to notice. Entropy coding then stores the resulting values with fewer bits.
+
+- Transform coding turns pixel differences into coefficients.
+- Quantisation is where much of the visible loss is introduced.
+- Entropy coding removes statistical redundancy without changing the decoded values further.
+
+## Temporal Compression
+
+Temporal compression reduces repeated information between frames. Instead of encoding every frame independently, H.264 can encode some frames by referencing other frames. The encoder searches for similar blocks in reference frames, describes motion with motion vectors, and stores only the prediction error that remains.
+
+Motion estimation is the encoder's search for matching image areas. Motion compensation is the decoder's use of those motion vectors and reference frames to rebuild the predicted picture. This is why compressed video can be much smaller than raw frames when motion is predictable.
+
+- Reference frames are previously decoded pictures kept so later pictures can predict from them.
+- Motion vectors describe where matching image detail moved.
+- The residual stores what prediction could not explain.
+
+## I-Frames, P-Frames, B-Frames, And GOPs
+
+A Group of Pictures, or GOP, is a run of frames built around prediction dependencies. I-frames are intra-coded: they can be decoded without other frames. P-frames predict from earlier reference frames. B-frames can predict from frames before and after their presentation time.
+
+I-frames are important for startup, seeking, quality switching, and recovery after errors, but they are larger. P-frames and B-frames usually compress better, but they create dependencies. With B-frames, decode order can differ from presentation order because the decoder may need a future reference before it can display the current frame.
+
+- Shorter GOPs improve random access but usually increase bitrate.
+- Longer GOPs improve compression but make seeking and switching less immediate.
+- Streaming representations should align GOP boundaries so quality switches can happen cleanly.
+
+## Bitrate Control
+
+Bitrate is how many bits are spent per second of encoded media. CBR, or constant bitrate, tries to keep the rate steady. VBR, or variable bitrate, spends more bits on complex scenes and fewer bits on easy scenes. Streaming ladders often describe each Representation with an average or target bitrate so the ABR algorithm has something to compare against network throughput.
+
+CRF, or Constant Rate Factor, is a quality-targeted encoding mode used by tools such as x264. Lower CRF values generally mean higher quality and larger files. CRF is useful when producing files where consistent visual quality matters more than hitting an exact bitrate, while ABR streaming packaging often needs bitrate-controlled outputs for predictable delivery.
+
+- CBR is predictable for networks but may waste bits on easy content.
+- VBR usually gives better quality for a given average size.
+- CRF targets quality rather than a fixed output bitrate.
+
+## Measuring Quality
+
+Video quality is not only a bitrate number. Objective metrics compare an encoded result with a reference source. PSNR measures signal error mathematically, but it often disagrees with human perception. SSIM compares structural similarity and usually tracks perceived quality better than PSNR.
+
+VMAF combines several measurements using a perceptual model and is widely used when building encoding ladders. None of these metrics is perfect, but they help compare codec settings, bitrates, resolutions, and alternative codecs systematically.
+
+- PSNR is simple but not very perceptual.
+- SSIM focuses on structural similarity.
+- VMAF is commonly used to tune streaming ladders and compare encodes.
+
+## Audio Codecs
+
+Audio codecs compress a continuous sampled signal rather than a sequence of pictures. AAC, Opus, and MP3 use psychoacoustic models to spend bits where human hearing is most sensitive.
+
+Audio still has timing, frames, sample rates, channel layouts, and codec configuration. A player must keep audio and video clocks aligned even though their encoded structures are different.
+
+- AAC is common with H.264 in MP4 and DASH streams.
+- Opus is efficient and common in WebM and real-time workflows.
+- Audio buffer underruns are often more noticeable than small video quality drops.
+
+<Snippet title="Codec Support Check" explain="A browser support check needs both the container MIME type and codec identifiers.">
+
+```js
+const h264Aac = 'video/mp4; codecs="avc1.64001f, mp4a.40.2"';
+const hevcAac = 'video/mp4; codecs="hvc1.1.6.L93.B0, mp4a.40.2"';
+const vp9Opus = 'video/webm; codecs="vp09.00.10.08, opus"';
+const av1Opus = 'video/webm; codecs="av01.0.05M.08, opus"';
+
+console.log(MediaSource.isTypeSupported(h264Aac));
+console.log(MediaSource.isTypeSupported(hevcAac));
+console.log(MediaSource.isTypeSupported(vp9Opus));
+console.log(MediaSource.isTypeSupported(av1Opus));
+```
+
+</Snippet>
+
+<Demo title="Compression Pressure" mode="packets">Raw samples quickly become hundreds of megabytes per second, so codecs reduce spatial detail, temporal repetition, and statistical redundancy before streaming.</Demo>

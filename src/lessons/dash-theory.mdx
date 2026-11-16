@@ -1,0 +1,93 @@
+---
+slug: "dash-theory"
+title: "DASH"
+kind: "Theory"
+summary: "Read an MPD as a map from presentation time to track choices, representations, initialization data, and media segments."
+outcome: "You understand the DASH MPD hierarchy, inherited attributes, SegmentTemplate timing, and alternative segment addressing modes."
+reference: "https://dashif.org/docs/DASH-IF-IOP-v4.3.pdf"
+---
+
+## The MPD Is The Map
+
+A DASH manifest is an MPD: a Media Presentation Description. It is XML that describes the media presentation, but it does not usually contain the video or audio bytes itself.
+
+The MPD tells the player how to turn media time into HTTP requests. It can also describe whether the presentation is static VOD or dynamic live, how long the presentation is, how much buffer is recommended, and which profiles or features are in use.
+
+- type="static" usually means VOD; type="dynamic" usually means live.
+- mediaPresentationDuration describes total VOD duration.
+- BaseURL values are resolved with normal URL rules and can appear at several levels.
+
+<Diagram visual="timeline" />
+
+<Snippet title="MPD Structure" explain="This is the hierarchy your parser walks before it can request any media bytes.">
+
+```text
+MPD
+  BaseURL?
+  Period
+    AdaptationSet mimeType="video/mp4" codecs="avc1..."
+      SegmentTemplate initialization="..." media="..."
+      Representation id="v1" bandwidth="..." width="..." height="..."
+      Representation id="v2" bandwidth="..." width="..." height="..."
+
+    AdaptationSet mimeType="audio/mp4" codecs="mp4a..."
+      SegmentTemplate initialization="..." media="..."
+      Representation id="a1" bandwidth="..." audioSamplingRate="..."
+```
+
+</Snippet>
+
+## Period, AdaptationSet, Representation
+
+A Period is a span of the presentation timeline. Many simple VOD streams have one Period. More complex streams can use multiple Periods for ad insertion, programme boundaries, codec changes, or metadata changes.
+
+An AdaptationSet groups interchangeable content for one role, such as video, audio, or subtitles. A Representation is one concrete encoding inside that group. For video, different Representations often mean different resolutions and bitrates. For audio, they may mean different bitrates, languages, channel layouts, or codecs.
+
+- AdaptationSet answers: what kind of media is this track group?
+- Representation answers: which exact encoding can I fetch?
+- Attributes can be inherited, so mimeType or codecs may appear on the AdaptationSet, the Representation, or both.
+
+## Segment Addressing Modes
+
+DASH has several ways to describe where segments live. The simplest for this tutorial is SegmentTemplate: the MPD gives a URL pattern, a start number, a duration, and a timescale. The player fills in values such as $RepresentationID$ and $Number$.
+
+Other MPDs may use SegmentList, where each segment URL is listed explicitly, or SegmentBase, where a Representation points at a resource and byte ranges or indexes describe where subsegments live.
+
+- SegmentTemplate is compact and common for regularly numbered segment URLs.
+- SegmentTimeline handles variable segment durations or explicit segment start times.
+- SegmentList names each segment directly, which is simple but can make large manifests.
+- SegmentBase can use byte ranges and MP4 index data such as sidx to locate subsegments inside a larger file.
+
+<Snippet title="Addressing Modes At A Glance" explain="The practical parser starts with SegmentTemplate. A production player needs to recognize more than one addressing shape.">
+
+```text
+SegmentTemplate
+  initialization="avc1/$RepresentationID$/IS.mp4"
+  media="avc1/$RepresentationID$/$Number%06d$.m4s"
+  startNumber="1"
+  duration="100000"
+  timescale="25000"
+
+SegmentList
+  Initialization sourceURL="init.mp4"
+  SegmentURL media="seg-1.m4s"
+  SegmentURL media="seg-2.m4s"
+
+SegmentBase
+  Initialization range="0-900"
+  media resource plus byte ranges or sidx index data
+```
+
+</Snippet>
+
+## Timing Fields
+
+DASH timing values are often integers in a timescale, not seconds. If duration is 100000 and timescale is 25000, each segment is four seconds. The player converts those values into seconds when deciding what media time a segment covers.
+
+The startNumber tells the player which segment number to request first. For VOD, mediaPresentationDuration lets a simple player estimate how many segments to request. For live, the available segment numbers move over time, which is why live support needs additional rules.
+
+- segmentSeconds = duration / timescale.
+- media URLs often need token replacement before fetch.
+- A/V representations must describe compatible timelines so their segments append into the same media element timeline.
+
+<Demo title="MPD To Segment Requests" mode="timeline">A DASH player reads the MPD, chooses compatible Representations, expands addressing rules into URLs, and fetches the next timed segments.</Demo>

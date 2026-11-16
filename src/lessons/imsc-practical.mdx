@@ -1,0 +1,58 @@
+---
+slug: "imsc-practical"
+title: "Render IMSC Subtitles"
+kind: "Practical"
+summary: "Replace native WebVTT rendering with a small custom IMSC renderer layered over the video."
+outcome: "The tutorial player fetches a simple IMSC document, parses timed paragraphs, and paints active cues."
+reference: "https://www.w3.org/TR/ttml-imsc1.2/"
+---
+
+## Render A Useful Subset
+
+IMSC is large enough that a full implementation should use a dedicated renderer. This lab deliberately does not do that. It parses only the subset needed to understand the moving parts: paragraph timing, region assignment, text content, and a simple overlay.
+
+The renderer listens to timeupdate and seeking events, checks which cues are active at video.currentTime, and updates an absolutely positioned layer above the video.
+
+- Use DOMParser to parse the XML document.
+- Convert begin and end attributes into seconds.
+- Render active p elements into an overlay instead of creating native TextTrack cues.
+
+<Diagram visual="timeline" />
+
+<Snippet title="imsc-renderer.js" explain="This parser walks TTML/IMSC p elements, extracts timing, and renders active cues into a video overlay." file="imsc-practical/imsc-renderer.js" />
+
+<Snippet title="imsc.css" explain="The custom renderer needs a stage around the video and an overlay that does not intercept controls." file="imsc-practical/imsc.css" />
+
+## What This Does Not Implement
+
+This lab ignores most of IMSC: complex styling inheritance, writing modes, ruby text, images, animation, frame-based timing, and full region layout. Those are important in production, but they would hide the core player idea.
+
+The useful pattern is the same as the DASH lesson: parse a standard format conservatively, represent the small subset you need, then wire that representation to playback time.
+
+- Unsupported styling should fail harmlessly.
+- Parsing and rendering stay separate so you can expand the subset later.
+- The overlay should not block video controls or pointer interactions.
+
+<Snippet title="Using The Renderer" explain="Remove the WebVTT track setup and install the custom IMSC overlay instead. In the checkpoint this call sits before playDash starts the adaptive-bitrate player, and index.html links imsc.css." file="imsc-practical/player.js" region="using-renderer" />
+
+<Checkpoint slug="imsc-practical" run files={["index.html","dash.js","player.js","imsc-renderer.js","imsc.css","sample.ttml"]} note="This snapshot is the adaptive-bitrate player with the IMSC overlay in place of WebVTT.">
+
+- Network shows sample.ttml fetched once; there is no sample.vtt request.
+- In the console, video.textTracks.length is 0: the cues are not native text tracks.
+- "Big Buck Bunny starts in a quiet field." appears over the bottom of the video from 1.0 to 4.0 s, and "IMSC cues can carry richer layout information than WebVTT." from 5.5 to 8.0 s.
+- DevTools Elements shows a .video-stage wrapper containing the video and a .imsc-overlay with a .imsc-cue.imsc-region-bottom child while a cue is active, and the overlay empties between cues.
+- Seeking re-renders immediately (the renderer listens to seeking as well as timeupdate).
+
+</Checkpoint>
+
+<Exercise title="Add A Top Region">
+
+Add a third cue to sample.ttml with region="top" between 9 and 12 seconds, and a matching .imsc-region-top rule in imsc.css that pins it to the top of the video.
+
+Confirm in the Elements panel that the cue gets the class imsc-region-top, and that the bottom cues are unaffected.
+
+<Hint>The renderer already emits imsc-region-\<name>. Add \<region xml:id="top" /> to the TTML layout for tidiness, and use align-self: start in the new CSS rule, since the overlay is a grid with align-items: end.</Hint>
+
+</Exercise>
+
+<Demo title="Custom Subtitle Overlay" mode="timeline">The renderer maps active IMSC paragraphs onto HTML above the video instead of using native WebVTT tracks.</Demo>

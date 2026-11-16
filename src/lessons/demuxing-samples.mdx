@@ -1,0 +1,52 @@
+---
+slug: "demuxing-samples"
+title: "Demuxing Media Samples"
+kind: "Theory"
+summary: "Follow fragmented MP4 one level below media segments and see how a demuxer exposes timed encoded samples."
+outcome: "You can explain how fMP4 track metadata and fragment boxes locate encoded samples and map them onto decode and presentation timelines."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API"
+---
+
+## A Segment Contains Samples
+
+MSE accepts a complete initialization segment and media fragments, then the browser demuxes and decodes them internally. WebCodecs gives JavaScript access to the decoder boundary, so a player must do the demuxing work itself.
+
+An fMP4 init segment describes tracks, timescales, and codec setup. Each media fragment pairs moof metadata with mdat bytes. The sample run metadata tells us where each encoded access unit starts, how many bytes it occupies, and where it belongs on the track timeline.
+
+- tfhd identifies the track and can provide default sample fields.
+- tfdt gives the first decode timestamp in a fragment.
+- trun lists sample durations, sizes, flags, and optional composition offsets.
+- mdat stores the encoded sample bytes; sample flags identify random access points.
+
+<Diagram visual="fmp4" />
+
+## Decode Time And Presentation Time
+
+Track timestamps are integer ticks. Divide by that track's timescale to get seconds. Decode time tells the decoder when a sample must be processed; a composition offset maps it to presentation time. With B-frames, decode order can differ from display order.
+
+The demuxer feeds samples to a decoder in decode order and carries presentation timestamps with each chunk. The output frames can then be scheduled on a shared audio/video playback clock.
+
+- Encoded samples are compressed access units, not decoded pixels or PCM audio.
+- Video keyframe flags tell the decoder where independent decoding can begin.
+- Audio and video have different timescales but share one presentation timeline.
+
+<Snippet title="From Fragment Bytes To Samples" explain="The tutorial demuxer reads track setup once, then extracts each sample's bytes and timing from media fragments.">
+
+```js
+const tracks = parseInitSegment(initializationBytes);
+const samples = demuxFragment(mediaSegmentBytes, tracks);
+
+for (const sample of samples) {
+  const decodeSeconds = sample.decodeTime / sample.track.timescale;
+  const presentationSeconds = sample.timestamp / sample.track.timescale;
+  console.log(sample.track.kind, sample.data.byteLength, decodeSeconds, presentationSeconds, sample.key);
+}
+```
+
+</Snippet>
+
+## A Deliberately Small Parser
+
+The hands-on parser supports the H.264 and AAC fragmented MP4 tracks used by this tutorial's single-period DASH VOD example. It reads the sample descriptions, tfhd, tfdt, trun, and mdat boxes needed for that path.
+
+MP4 has many valid layouts and optional fields. This parser reports unsupported structures instead of claiming to handle flat MP4 sample tables, encrypted samples, every codec, or every fMP4 variation.

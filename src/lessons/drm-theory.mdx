@@ -1,0 +1,22 @@
+---
+slug: "drm-theory"
+title: "DRM And EME"
+kind: "Theory"
+summary: "Understand encrypted media at the browser boundary without hiding the moving parts."
+outcome: "You understand init data, key systems, MediaKeys, sessions, licenses, and ClearKey limitations."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/Navigator/requestMediaKeySystemAccess"
+---
+
+## Encrypted Media Extensions
+
+EME does not decrypt media in your JavaScript. It lets JavaScript negotiate with a browser CDM, attach MediaKeys to a media element, and pass license messages between the CDM and a license service.
+
+ClearKey is useful for learning because keys can be provided directly. Production DRM systems such as Widevine, PlayReady, and FairPlay require provider-specific license services and packaging.
+
+- Encrypted samples carry metadata that triggers an encrypted event.
+- A MediaKeySession produces a license request message.
+- Playback can continue only after the session receives usable keys.
+
+<Diagram visual="packets" />
+
+<Demo title="License Round Trip" mode="packets">Encrypted samples cause a key request, the license response unlocks decryption, then decoded frames resume.</Demo>

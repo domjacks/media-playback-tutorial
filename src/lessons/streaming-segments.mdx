@@ -1,0 +1,78 @@
+---
+slug: "streaming-segments"
+title: "Streaming And Segments"
+kind: "Theory"
+summary: "Move from complete files to short timed chunks that a player can request and buffer."
+outcome: "You can explain HTTP delivery, segments, renditions, initialization data, and timed media chunks."
+reference: "https://developer.mozilla.org/en-US/docs/Web/Media/Audio_and_video_delivery"
+---
+
+## From Files To Flows
+
+On the network, media is delivered as bytes over HTTP, usually carried by TCP or by HTTP/3 over QUIC depending on the browser and server. The transport handles packetization, ordering, loss recovery, and congestion control.
+
+In progressive download, the browser decides when to request bytes from one file. In segmented streaming, the player or streaming engine requests explicit timed chunks.
+
+- Network packets are transport details; media segments are player-level units.
+- HTTP caching and CDNs work well when media is split into addressable segment files.
+- Segment duration affects latency, request overhead, cacheability, and recovery time.
+
+<Diagram visual="packets" />
+
+<Snippet title="Segment Request Loop" explain="Before ABR, the core streaming loop is simply request a segment, append it, then move to the next segment. Each append is wrapped in a promise that settles on updateend, so the loop runs one segment at a time and the caller can await it.">
+
+```js
+async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+  return response.arrayBuffer();
+}
+
+function appendBuffer(sourceBuffer, bytes) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      sourceBuffer.removeEventListener("updateend", onEnd);
+      sourceBuffer.removeEventListener("error", onError);
+    };
+    const onEnd = () => { cleanup(); resolve(); };
+    const onError = () => { cleanup(); reject(new Error("appendBuffer failed")); };
+    sourceBuffer.addEventListener("updateend", onEnd);
+    sourceBuffer.addEventListener("error", onError);
+    sourceBuffer.appendBuffer(bytes);
+  });
+}
+
+async function appendSegments(sourceBuffer, segments) {
+  for (const segment of segments) {
+    const bytes = await fetchBytes(segment.url);
+    await appendBuffer(sourceBuffer, bytes);
+  }
+}
+
+// The caller can await the whole loop:
+// await appendSegments(videoBuffer, representation.segments);
+```
+
+</Snippet>
+
+## Segments
+
+A segment covers a timed slice of media, often two to six seconds. It may be a standalone file or a byte range inside a larger file. For fragmented MP4, an initialization segment describes the track setup and media segments carry timed samples.
+
+Segments should begin at useful random access points so playback can start or switch quality without decoding a long chain of missing dependencies.
+
+- Shorter segments can reduce live latency but increase request overhead.
+- Longer segments are efficient but make switching and recovery slower.
+- Aligned segment boundaries let a player switch representations at the same media time.
+
+## Renditions
+
+Streaming media is commonly encoded into multiple renditions. Each rendition represents the same content at a particular resolution, bitrate, codec profile, frame rate, or channel layout.
+
+For now, think of those renditions as available choices. The player will learn how to choose between them after the DASH lesson, once it has a manifest parser that can actually see every Representation.
+
+- A rendition is useful only if its codec and container are supported by the browser.
+- Representations need aligned segment timing before a player can switch cleanly.
+- The manifest is where the player discovers these choices.
+
+<Demo title="Segment Delivery" mode="packets">Streaming players request timed chunks and append enough future media to keep playback moving.</Demo>
