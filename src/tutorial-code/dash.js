@@ -23,7 +23,7 @@ export async function loadDashVod(mpdUrl, options = {}) {
 
 export function chooseRepresentation(representations, { throughputBps = estimateInitialThroughput(), bufferSeconds = 0 } = {}) {
   const playable = representations
-    .filter((representation) => MediaSource.isTypeSupported(representation.mime))
+    .filter((representation) => typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(representation.mime))
     .sort((a, b) => a.bandwidth - b.bandwidth);
   const sorted = playable.length ? playable : [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
   const safety = bufferSeconds > 12 ? 0.85 : bufferSeconds > 6 ? 0.75 : 0.6;
@@ -33,7 +33,7 @@ export function chooseRepresentation(representations, { throughputBps = estimate
 
 export function chooseAudioRepresentation(representations) {
   const playable = representations
-    .filter((representation) => MediaSource.isTypeSupported(representation.mime))
+    .filter((representation) => typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(representation.mime))
     .sort((a, b) => a.bandwidth - b.bandwidth);
   const sorted = playable.length ? playable : [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
   return sorted.at(-1) ?? sorted[0];

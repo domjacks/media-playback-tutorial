@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DASH Samples With WebCodecs</title>
+    <style>
+      body { margin: 2rem; font: 16px/1.5 system-ui, sans-serif; background: #f6f7f4; color: #17201d; }
+      main { max-width: 960px; margin: auto; }
+      canvas { display: block; width: 100%; background: #000; }
+      button { margin: 1rem .5rem 0 0; padding: .55rem 1rem; font: inherit; }
+      #status { color: #4c5752; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>DASH samples with WebCodecs</h1>
+      <canvas id="picture" width="1280" height="720" aria-label="Decoded video"></canvas>
+      <div>
+        <button id="play">Play</button>
+        <button id="pause" disabled>Pause</button>
+        <button id="replay" disabled>Replay</button>
+      </div>
+      <p id="status" role="status">Loading DASH media and reading its samples…</p>
+    </main>
+    <script type="module" src="/src/tutorial-code/webcodecs-player.js"></script>
+  </body>
+</html>

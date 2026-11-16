@@ -63,7 +63,7 @@ function App() {
       <aside className="sidebar" aria-label="Tutorial lessons">
         <a className="brand" href={`#/${lessons[0].slug}`}>
           <span className="brand-mark"><Play size={18} fill="currentColor" /></span>
-          <span>MSE From Scratch</span>
+          <span>Media Playback From Scratch</span>
         </a>
         <div className="progress-box">
           <span>{completedCount} of {lessons.length} complete</span>
@@ -144,6 +144,7 @@ function LessonBlock({ block }) {
   if (block.type === "code") return <CodeSnippet snippet={block} />;
   if (block.type === "diagram") return <Diagram visual={block.visual} />;
   if (block.type === "demo") return <DemoPanel demo={block} />;
+  if (block.type === "link") return <p><a className="secondary lesson-link" href={block.href}><ExternalLink size={18} /> {block.label}</a></p>;
   if (block.type === "showcase" && block.showcase === "player") return <PlayerShowcase />;
   return null;
 }
