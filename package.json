@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-snippets.mjs",
+    "check:snippets": "node scripts/check-snippets.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

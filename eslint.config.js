@@ -24,5 +24,19 @@ export default [
     rules: {
       "no-unused-vars": ["error", { varsIgnorePattern: "^[A-Z]" }]
     }
+  },
+  {
+    files: ["checkpoints/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: globals.browser
+    }
+  },
+  {
+    files: ["scripts/**/*.mjs", "vite.config.js", "eslint.config.js"],
+    languageOptions: {
+      globals: globals.node
+    }
   }
 ];

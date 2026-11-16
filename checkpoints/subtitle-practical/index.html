@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ABR Player With Subtitles</title>
+    <style>
+      body { margin: 2rem; font-family: system-ui, sans-serif; }
+      video { background: #000; display: block; }
+      pre { white-space: pre-wrap; color: #4c5752; }
+    </style>
+  </head>
+  <body>
+    <h1>ABR Player With Subtitles</h1>
+    <video id="video" controls width="900"></video>
+    <p>
+      <button id="subs-en" type="button">English</button>
+      <button id="subs-off" type="button">Off</button>
+    </p>
+    <pre id="log" role="status"></pre>
+    <script type="module" src="./player.js"></script>
+  </body>
+</html>

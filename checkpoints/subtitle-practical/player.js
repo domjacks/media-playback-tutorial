@@ -5,22 +5,26 @@ import {
   loadDashVod,
   measureFetch
 } from "./dash.js";
-import { addSubtitleTrack } from "./subtitles.js";
+import { addSubtitleTrack, showSubtitle } from "./subtitles.js";
 
 const mpdUrl = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd";
 const video = document.querySelector("#video");
 const log = document.querySelector("#log");
-const BUFFER_GOAL_SECONDS = 30;
 
 try {
   const throughputBps = estimateInitialThroughput();
   const dash = await loadDashVod(mpdUrl, { throughputBps, bufferSeconds: 0 });
+  // #region subtitle-wiring
   addSubtitleTrack(video, {
     src: "./sample.vtt",
     label: "English",
     language: "en",
     defaultTrack: true
   });
+
+  document.querySelector("#subs-en").addEventListener("click", () => showSubtitle(video, "en"));
+  document.querySelector("#subs-off").addEventListener("click", () => showSubtitle(video, "off"));
+  // #endregion subtitle-wiring
   await playDash(video, dash);
 } catch (error) {
   log.textContent = error.stack ?? String(error);
@@ -49,6 +53,8 @@ async function playDash(video, dash) {
   if (mediaSource.readyState === "open") mediaSource.endOfStream();
   log.textContent = "Ready: all segments appended";
 }
+
+const BUFFER_GOAL_SECONDS = 30;
 
 // Runtime ABR: choose a video Representation before every segment request.
 async function appendVideoAbr(video, videoBuffer, dash) {
@@ -80,6 +86,19 @@ async function appendVideoAbr(video, videoBuffer, dash) {
   }
 }
 
+// Without a buffer goal a fast network downloads everything and bufferAhead() stops meaning anything.
+async function waitForBufferGoal(video) {
+  while (bufferAhead(video) >= BUFFER_GOAL_SECONDS) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+  return response.arrayBuffer();
+}
+
 // Audio stays on one Representation: append its init segment, then every media segment.
 async function appendAudio(video, audioBuffer, audio) {
   await appendBufferChecked(audioBuffer, await fetchBytes(audio.init), `audio init ${audio.id}`);
@@ -100,19 +119,6 @@ function bufferAhead(video) {
   }
 
   return 0;
-}
-
-// Without a buffer goal a fast network downloads everything and bufferAhead() stops meaning anything.
-async function waitForBufferGoal(video) {
-  while (bufferAhead(video) >= BUFFER_GOAL_SECONDS) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
-
-async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-  return response.arrayBuffer();
 }
 
 // Same helper as the MSE debugging lesson.

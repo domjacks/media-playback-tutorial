@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileCode,
   FlaskConical,
   Play,
   ShieldCheck
@@ -15,6 +16,7 @@ import { lessons } from "./data/lessons.js";
 import { AudioFundamentalsDiagram, AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./components/Diagrams.jsx";
 import { DemoPanel } from "./components/DemoPanel.jsx";
 import { PlayerShowcase } from "./components/PlayerShowcase.jsx";
+import { checkpointUrl, getSnippet } from "./lib/tutorialFiles.js";
 import "./styles.css";
 
 const storageKey = "mse-tutorial-progress";
@@ -119,7 +121,7 @@ function Lesson({ lesson, index, onComplete, progress }) {
       <section className="content-grid">
         <div className="lesson-body">
           {lesson.blocks.map((block, blockIndex) => (
-            <LessonBlock key={`${block.type}-${block.title ?? block.heading ?? block.visual ?? blockIndex}`} block={block} />
+            <LessonBlock key={`${block.type}-${block.title ?? block.heading ?? block.slug ?? block.visual ?? block.file ?? blockIndex}-${blockIndex}`} block={block} />
           ))}
         </div>
         <aside className="lesson-aside">
@@ -142,6 +144,8 @@ function Lesson({ lesson, index, onComplete, progress }) {
 function LessonBlock({ block }) {
   if (block.type === "text") return <TextBlock block={block} />;
   if (block.type === "code") return <CodeSnippet snippet={block} />;
+  if (block.type === "checkpoint") return <Checkpoint block={block} />;
+  if (block.type === "exercise") return <Exercise block={block} />;
   if (block.type === "diagram") return <Diagram visual={block.visual} />;
   if (block.type === "demo") return <DemoPanel demo={block} />;
   if (block.type === "link") return <p><a className="secondary lesson-link" href={block.href}><ExternalLink size={18} /> {block.label}</a></p>;
@@ -176,9 +180,17 @@ function Diagram({ visual }) {
   return null;
 }
 
+function resolveSnippet(snippet) {
+  try {
+    return { code: snippet.file ? getSnippet(snippet.file, snippet.region) : snippet.code.trim() };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
 function CodeSnippet({ snippet }) {
   const [copied, setCopied] = useState(false);
-  const code = useMemo(() => snippet.code.trim(), [snippet.code]);
+  const { code, error } = useMemo(() => resolveSnippet(snippet), [snippet]);
 
   async function copyCode() {
     try {
@@ -190,18 +202,75 @@ function CodeSnippet({ snippet }) {
     }
   }
 
+  const [slug, ...rest] = snippet.file ? snippet.file.split("/") : [];
+
   return (
     <section className="snippet">
       <div className="snippet-head">
         <div>
           <h2>{snippet.title}</h2>
+          {snippet.file && (
+            <a className="file-label" href={checkpointUrl(slug, rest.join("/"))} target="_blank" rel="noreferrer">
+              <FileCode size={14} /> {snippet.file}
+            </a>
+          )}
           <p>{snippet.explain}</p>
         </div>
-        <button className="icon-button" onClick={copyCode} title="Copy code" aria-label="Copy code">
-          {copied ? <Check size={18} /> : <Copy size={18} />}
-        </button>
+        {!error && (
+          <button className="icon-button" onClick={copyCode} title="Copy code" aria-label="Copy code">
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+          </button>
+        )}
       </div>
-      <pre><code>{code}</code></pre>
+      {error ? <div className="snippet-error" role="alert">{error}</div> : <pre><code>{code}</code></pre>}
+    </section>
+  );
+}
+
+function Checkpoint({ block }) {
+  const scripts = block.files.filter((file) => file.endsWith(".sh"));
+  return (
+    <section className="checkpoint-panel">
+      <h2><FlaskConical size={20} /> Checkpoint</h2>
+      {block.run && (
+        <p>
+          <a className="primary lesson-link" href={checkpointUrl(block.slug)} target="_blank" rel="noreferrer">
+            <ExternalLink size={18} /> Open checkpoint
+          </a>
+        </p>
+      )}
+      <ul className="checkpoint-files">
+        {block.files.map((file) => (
+          <li key={file}>
+            <a href={checkpointUrl(block.slug, file)} target="_blank" rel="noreferrer">
+              <FileCode size={14} /> {block.slug}/{file}
+            </a>
+          </li>
+        ))}
+      </ul>
+      {scripts.map((file) => (
+        <p key={file}>Run the lab script: <code>bash checkpoints/{block.slug}/{file}</code></p>
+      ))}
+      <h3>You should now see</h3>
+      <ul className="verify-list">
+        {block.verify.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+      {block.note && <p className="checkpoint-note">{block.note}</p>}
+    </section>
+  );
+}
+
+function Exercise({ block }) {
+  return (
+    <section className="exercise-panel">
+      <h2>Exercise: {block.title}</h2>
+      {block.task.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      {block.hint && (
+        <details>
+          <summary>Hint</summary>
+          <p>{block.hint}</p>
+        </details>
+      )}
     </section>
   );
 }

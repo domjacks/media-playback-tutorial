@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live DASH Player</title>
+    <style>
+      body { margin: 2rem; font-family: system-ui, sans-serif; }
+      video { width: min(100%, 900px); background: #000; display: block; }
+      pre { white-space: pre-wrap; color: #4c5752; }
+    </style>
+  </head>
+  <body>
+    <h1>Live DASH Player</h1>
+    <video id="video" controls autoplay muted></video>
+    <pre id="status" role="status">Loading live manifest...</pre>
+    <script type="module" src="./player.js"></script>
+  </body>
+</html>

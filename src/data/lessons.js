@@ -295,39 +295,22 @@ video.addEventListener("volumechange", () => {
         type: "code",
         title: "Check The Tools",
         explain: "Confirm both tools are installed before starting the lab.",
-        code: `
-ffmpeg -version
-ffprobe -version`
+        file: "inspect-av-with-ffmpeg/lab.sh",
+        region: "check-tools"
       },
       {
         type: "code",
         title: "Generate A Test MP4",
         explain: "Create a five-second MP4 with a 1280x720, 25 fps video test pattern and a 48 kHz sine-wave audio track.",
-        code: `
-mkdir -p lab
-
-ffmpeg -y \\
-  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=5 \\
-  -f lavfi -i sine=frequency=1000:sample_rate=48000:duration=5 \\
-  -c:v libx264 -pix_fmt yuv420p -g 50 -crf 23 \\
-  -c:a aac -b:a 128k -ac 2 \\
-  -movflags +faststart \\
-  lab/fundamentals.mp4`
+        file: "inspect-av-with-ffmpeg/lab.sh",
+        region: "generate-mp4"
       },
       {
         type: "code",
         title: "Inspect Streams",
         explain: "The stream output connects directly to resolution, frame rate, pixel format, sample rate, channels, codec names, and duration.",
-        code: `
-ffprobe -hide_banner \\
-  -show_streams \\
-  -select_streams v:0 \\
-  lab/fundamentals.mp4
-
-ffprobe -hide_banner \\
-  -show_streams \\
-  -select_streams a:0 \\
-  lab/fundamentals.mp4`
+        file: "inspect-av-with-ffmpeg/lab.sh",
+        region: "inspect-streams"
       },
       {
         type: "text",
@@ -347,18 +330,32 @@ ffprobe -hide_banner \\
         type: "code",
         title: "Compact Field View",
         explain: "This version prints only the fields that matter for the early fundamentals lessons.",
-        code: `
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_entries stream=codec_name,profile,width,height,pix_fmt,r_frame_rate,avg_frame_rate,duration \\
-  -of default=noprint_wrappers=1 \\
-  lab/fundamentals.mp4
-
-ffprobe -v error \\
-  -select_streams a:0 \\
-  -show_entries stream=codec_name,sample_rate,channels,channel_layout,duration \\
-  -of default=noprint_wrappers=1 \\
-  lab/fundamentals.mp4`
+        file: "inspect-av-with-ffmpeg/lab.sh",
+        region: "compact-fields"
+      },
+      {
+        type: "checkpoint",
+        slug: "inspect-av-with-ffmpeg",
+        run: false,
+        files: [
+          "lab.sh"
+        ],
+        verify: [
+          "lab/fundamentals.mp4 exists and is a few hundred KB.",
+          "Video stream: codec_name=h264, profile=High, width=1280, height=720, pix_fmt=yuv420p, r_frame_rate=25/1, avg_frame_rate=25/1, duration=5.000000.",
+          "Audio stream: codec_name=aac, sample_rate=48000, channels=2, channel_layout=stereo, duration=5.000000.",
+          "The audio stream reports r_frame_rate=0/0 in the full dump: frame rate is a video-only concept."
+        ],
+        note: "Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe."
+      },
+      {
+        type: "exercise",
+        title: "Change The Source, Predict The Fields",
+        task: [
+          "Edit the generate step to produce a 640x360, 30 fps video with a 44.1 kHz audio track, saving it as lab/variant.mp4.",
+          "Before you run ffprobe, write down the width, height, r_frame_rate and sample_rate you expect. Then run the compact field view and compare."
+        ],
+        hint: "Change size=, rate= and sample_rate= in the lavfi inputs, and the output filename. Remember -g 50 is a frame count, so at 30 fps it is no longer exactly 2 seconds."
       },
       {
         type: "demo",
@@ -576,89 +573,43 @@ console.log(MediaSource.isTypeSupported(av1Opus));`
         type: "code",
         title: "Create A Reusable Source",
         explain: "Use a lossless-ish intermediate source for comparisons so each encode starts from the same frames.",
-        code: `
-mkdir -p lab
-
-ffmpeg -y \\
-  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
-  -f lavfi -i sine=frequency=880:sample_rate=48000:duration=8 \\
-  -c:v ffv1 \\
-  -c:a pcm_s16le \\
-  lab/source.mkv`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "create-source"
       },
       {
         type: "code",
         title: "Compare CRF Values",
         explain: "Lower CRF generally means higher quality and larger output. The codec is still H.264 in both files.",
-        code: `
-ffmpeg -y -i lab/source.mkv \\
-  -c:v libx264 -pix_fmt yuv420p -crf 18 -g 50 \\
-  -c:a aac -b:a 128k \\
-  lab/h264-crf18.mp4
-
-ffmpeg -y -i lab/source.mkv \\
-  -c:v libx264 -pix_fmt yuv420p -crf 32 -g 50 \\
-  -c:a aac -b:a 128k \\
-  lab/h264-crf32.mp4
-
-ls -lh lab/h264-crf18.mp4 lab/h264-crf32.mp4`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "compare-crf"
       },
       {
         type: "code",
         title: "Inspect Codec And Bitrate",
         explain: "Use FFprobe to compare codec name, profile, pixel format, and reported bitrate.",
-        code: `
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_entries stream=codec_name,profile,pix_fmt,bit_rate,avg_frame_rate \\
-  -of default=noprint_wrappers=1 \\
-  lab/h264-crf18.mp4
-
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_entries stream=codec_name,profile,pix_fmt,bit_rate,avg_frame_rate \\
-  -of default=noprint_wrappers=1 \\
-  lab/h264-crf32.mp4`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "inspect-bitrate"
       },
       {
         type: "code",
         title: "Force A Bitrate Target",
         explain: "This creates a more delivery-oriented encode. The maxrate and bufsize options constrain bitrate variation.",
-        code: `
-ffmpeg -y -i lab/source.mkv \\
-  -c:v libx264 -pix_fmt yuv420p \\
-  -b:v 1200k -maxrate 1200k -bufsize 2400k \\
-  -g 50 \\
-  -c:a aac -b:a 128k \\
-  lab/h264-1200k.mp4`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "bitrate-target"
       },
       {
         type: "code",
         title: "Inspect Frame Types",
         explain: "The pict_type values show I, P, and B frames. Key frames are the random access points used for startup and seeking. pkt_pts_time was removed in FFmpeg 5 and prints nothing, so use pts_time. ffprobe prints fields in its own order, not the order you list in -show_entries, so the compact format is used here to label every value. Note that B-frames mean decode order differs from presentation order.",
-        code: `
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_entries frame=pts_time,pict_type,key_frame \\
-  -of compact=p=0 \\
-  lab/h264-crf18.mp4 | head -40`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "frame-types"
       },
       {
         type: "code",
         title: "Change GOP And B-Frames",
         explain: "This encode uses a shorter GOP and disables B-frames. It is easier to decode and reason about, but usually less efficient.",
-        code: `
-ffmpeg -y -i lab/source.mkv \\
-  -c:v libx264 -pix_fmt yuv420p -crf 23 \\
-  -g 25 -bf 0 \\
-  -c:a aac -b:a 128k \\
-  lab/h264-gop25-no-bframes.mp4
-
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_entries frame=pict_type,key_frame \\
-  -of compact=p=0 \\
-  lab/h264-gop25-no-bframes.mp4 | head -40`
+        file: "inspect-codecs-compression/lab.sh",
+        region: "gop-no-bframes"
       },
       {
         type: "text",
@@ -672,6 +623,30 @@ ffprobe -v error \\
           "SSIM is more perceptual and still widely available.",
           "VMAF is common for ladder tuning when the tooling is available."
         ]
+      },
+      {
+        type: "checkpoint",
+        slug: "inspect-codecs-compression",
+        run: false,
+        files: [
+          "lab.sh"
+        ],
+        verify: [
+          "ls -lh shows lab/h264-crf18.mp4 at about 4.1M and lab/h264-crf32.mp4 at about 900K: same source, same codec, roughly 4.5x size difference.",
+          "bit_rate for the CRF 18 encode is around 4.1 Mbps (4100631 here) against around 0.8 Mbps (788351) for CRF 32. Both report codec_name=h264 and profile=High.",
+          "Frame types for the default encode start I, B, P, P: B-frames are present, so pts_time order differs from decode order.",
+          "The GOP 25 / -bf 0 encode prints only I and P frames, with a key frame (key_frame=1) every 25 frames."
+        ],
+        note: "Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe."
+      },
+      {
+        type: "exercise",
+        title: "Find The CRF Sweet Spot",
+        task: [
+          "Encode lab/source.mkv at CRF 23 and CRF 28 (keep -g 50 and the AAC settings), then compare file size and video bit_rate with the CRF 18 and 32 results.",
+          "Plot or tabulate size against CRF. Decide which value you would ship for this test pattern, and say what you would check before trusting that choice on real content."
+        ],
+        hint: "Reuse the Compare CRF command with a different -crf and output name. On this source expect roughly 2.8 MB at CRF 23 and 1.5 MB at CRF 28. Read bit_rate with -show_entries stream=bit_rate. A synthetic test pattern compresses unlike real footage, so size ratios will not transfer."
       },
       {
         type: "demo",
@@ -843,59 +818,36 @@ console.log(MediaSource.isTypeSupported(audioBuffer));`
         type: "code",
         title: "Check The Tools",
         explain: "This lab expects FFmpeg, FFprobe, and Bento4's mp4dump to be available on your command line.",
-        code: `
-ffmpeg -version
-ffprobe -version
-mp4dump --version`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "check-tools"
       },
       {
         type: "code",
         title: "Create A Fast-Start MP4",
         explain: "The +faststart flag places the moov metadata near the start, which helps progressive download startup.",
-        code: `
-mkdir -p lab
-
-ffmpeg -y \\
-  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=6 \\
-  -f lavfi -i sine=frequency=440:sample_rate=48000:duration=6 \\
-  -c:v libx264 -pix_fmt yuv420p -g 50 -crf 23 \\
-  -c:a aac -b:a 128k -ac 2 \\
-  -movflags +faststart \\
-  lab/container-faststart.mp4`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "create-faststart"
       },
       {
         type: "code",
         title: "Show Format And Streams",
         explain: "This is the high-level view: one container with video and audio streams.",
-        code: `
-ffprobe -hide_banner \\
-  -show_format \\
-  -show_streams \\
-  lab/container-faststart.mp4`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "show-format"
       },
       {
         type: "code",
         title: "Inspect Packets",
         explain: "Packets expose encoded payload timing. Look for stream_index, pts_time, dts_time, duration_time, size, and flags. The compact format labels each field, because ffprobe prints fields in its own order rather than the -show_entries order.",
-        code: `
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_packets \\
-  -show_entries packet=stream_index,pts_time,dts_time,duration_time,size,flags \\
-  -of compact=p=0 \\
-  lab/container-faststart.mp4 | head -30`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "inspect-packets"
       },
       {
         type: "code",
         title: "Inspect Frames And Keyframes",
         explain: "Frame inspection helps connect MP4 timing with codec structure. Keyframes are the safe random access points. Fields are labelled because ffprobe ignores the -show_entries order; the first frame may also print extra encoder side data such as an x264 SEI message.",
-        code: `
-ffprobe -v error \\
-  -select_streams v:0 \\
-  -show_frames \\
-  -show_entries frame=key_frame,pict_type,best_effort_timestamp_time,pkt_size \\
-  -of compact=p=0 \\
-  lab/container-faststart.mp4 | head -40`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "inspect-frames"
       },
       {
         type: "text",
@@ -915,8 +867,33 @@ ffprobe -v error \\
         type: "code",
         title: "Inspect The MP4 Box Tree",
         explain: "This prints the MP4 box tree. Look for ftyp, moov, mvhd, trak, tkhd, mdia, and mdat.",
-        code: `
-mp4dump lab/container-faststart.mp4 | head -80`
+        file: "inspect-mp4-containers/lab.sh",
+        region: "box-tree"
+      },
+      {
+        type: "checkpoint",
+        slug: "inspect-mp4-containers",
+        run: false,
+        files: [
+          "lab.sh"
+        ],
+        verify: [
+          "Format: format_name=mov,mp4,m4a,3gp,3g2,mj2, nb_streams=2, duration=6.000000.",
+          "Video stream nb_frames=150 (6 s x 25 fps); audio nb_frames=283 (AAC frames of 1024 samples).",
+          "The first video packet has flags=K__ (keyframe) and dts_time=-0.080000 before pts_time=0.000000: B-frame reordering shows up as DTS earlier than PTS.",
+          "Packets in decode order have non-monotonic pts_time (0.000, 0.080, 0.040 ...).",
+          "The box tree lists ftyp, moov (mvhd, trak, tkhd, mdia) and mdat. Without Bento4 the lab prints \"mp4dump not found; skipping box tree (install Bento4)\" and carries on."
+        ],
+        note: "Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe. If mp4dump is not installed, the box-tree steps print a notice and are skipped."
+      },
+      {
+        type: "exercise",
+        title: "Find The Keyframes",
+        task: [
+          "List only the video keyframe packets in lab/container-faststart.mp4 with their timestamps, and work out the keyframe interval in seconds.",
+          "Then explain why that interval follows from -g 50 and the 25 fps frame rate, and what it means for where a player can start or seek."
+        ],
+        hint: "Use -show_packets -show_entries packet=pts_time,flags -of csv=p=0 and filter for lines containing K. You should find keyframes at 0, 2 and 4 seconds."
       },
       {
         type: "demo",
@@ -1054,37 +1031,22 @@ function logBuffered(video) {
         type: "code",
         title: "Create A Normal MP4",
         explain: "Start with a normal fast-start MP4 so you have something to compare against.",
-        code: `
-mkdir -p lab
-
-ffmpeg -y \\
-  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
-  -f lavfi -i sine=frequency=660:sample_rate=48000:duration=8 \\
-  -c:v libx264 -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 -crf 23 \\
-  -c:a aac -b:a 128k -ac 2 \\
-  -movflags +faststart \\
-  lab/progressive.mp4`
+        file: "create-fragmented-mp4/lab.sh",
+        region: "create-progressive"
       },
       {
         type: "code",
         title: "Create A Fragmented MP4",
         explain: "These movflags produce an MP4 with initialization metadata followed by fragments. The keyframe settings keep fragment boundaries predictable.",
-        code: `
-ffmpeg -y \\
-  -f lavfi -i testsrc2=size=1280x720:rate=25:duration=8 \\
-  -f lavfi -i sine=frequency=660:sample_rate=48000:duration=8 \\
-  -c:v libx264 -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 -crf 23 \\
-  -c:a aac -b:a 128k -ac 2 \\
-  -movflags frag_keyframe+empty_moov+default_base_moof \\
-  lab/fragmented.mp4`
+        file: "create-fragmented-mp4/lab.sh",
+        region: "create-fragmented"
       },
       {
         type: "code",
         title: "Compare High-Level Metadata",
         explain: "FFprobe still sees both as MP4 files with audio and video streams. Fragmentation is mainly a container layout difference.",
-        code: `
-ffprobe -hide_banner -show_format -show_streams lab/progressive.mp4
-ffprobe -hide_banner -show_format -show_streams lab/fragmented.mp4`
+        file: "create-fragmented-mp4/lab.sh",
+        region: "compare-metadata"
       },
       {
         type: "text",
@@ -1103,26 +1065,15 @@ ffprobe -hide_banner -show_format -show_streams lab/fragmented.mp4`
         type: "code",
         title: "Inspect Fragment Boxes",
         explain: "Use mp4dump to inspect the fragmented MP4. Look for ftyp, moov, repeated moof boxes, and mdat payload boxes.",
-        code: `
-mp4dump lab/fragmented.mp4 | head -120`
+        file: "create-fragmented-mp4/lab.sh",
+        region: "fragment-boxes"
       },
       {
         type: "code",
         title: "Optional: Segment With FFmpeg",
         explain: "This creates a DASH-style init segment and numbered media segments. The later DASH lessons use manifests to discover files like these. By default FFmpeg's dash muxer writes a SegmentTimeline, which the parser built later in this course does not read; it only understands SegmentTemplate with a fixed duration and $Number$. -use_template 1 -use_timeline 0 makes FFmpeg write exactly that form, with duration and startNumber.",
-        code: `
-mkdir -p lab/dash
-
-ffmpeg -y -i lab/progressive.mp4 \\
-  -map 0:v:0 -map 0:a:0 \\
-  -c copy \\
-  -f dash \\
-  -use_template 1 \\
-  -use_timeline 0 \\
-  -seg_duration 2 \\
-  -init_seg_name 'init-$RepresentationID$.mp4' \\
-  -media_seg_name 'chunk-$RepresentationID$-$Number%05d$.m4s' \\
-  lab/dash/manifest.mpd`
+        file: "create-fragmented-mp4/lab.sh",
+        region: "dash-segments"
       },
       {
         type: "text",
@@ -1135,6 +1086,31 @@ ffmpeg -y -i lab/progressive.mp4 \\
           "The template duration is nominal; real audio segments land within a frame of it.",
           "Players should position audio by the timestamps inside the segment, not by index x duration."
         ]
+      },
+      {
+        type: "checkpoint",
+        slug: "create-fragmented-mp4",
+        run: false,
+        files: [
+          "lab.sh"
+        ],
+        verify: [
+          "major_brand is isom (compatible isomiso2avc1mp41) for lab/progressive.mp4 and iso5 (compatible iso5iso6mp41) for lab/fragmented.mp4.",
+          "The fragmented file reports nb_frames=N/A and duration=8.080000 for audio; the progressive file reports nb_frames=200 for video.",
+          "ls lab/dash lists init-0.mp4, init-1.mp4, manifest.mpd, 4 video chunks (chunk-0-00001..4.m4s) and 5 audio chunks (chunk-1-00001..5.m4s): audio has one extra short segment.",
+          "manifest.mpd contains no SegmentTimeline (grep -c prints 0) and a template with timescale=\"1000000\" duration=\"2000000\".",
+          "With Bento4 installed, mp4dump lab/fragmented.mp4 shows ftyp, an empty moov, then repeated moof and mdat boxes."
+        ],
+        note: "Run it from the directory where you want the lab/ folder: bash path/to/lab.sh. It creates ./lab/ in your current directory and needs only FFmpeg and FFprobe. If mp4dump is not installed, the fragment-box step prints a notice and is skipped."
+      },
+      {
+        type: "exercise",
+        title: "Change The Segment Duration",
+        task: [
+          "Re-run the DASH segmenting step with -seg_duration 4 into a different folder, such as lab/dash4.",
+          "Count the video and audio chunks, and check the new SegmentTemplate duration. Explain why 4 seconds still works with -g 50 at 25 fps, and what would go wrong with -seg_duration 3."
+        ],
+        hint: "Expect 2 video chunks and 3 audio chunks. Segments must start on keyframes, and keyframes here are 2 s apart, so only multiples of 2 s can be honoured exactly."
       },
       {
         type: "demo",
@@ -1265,16 +1241,8 @@ describeRanges("seekable", video.seekable);`
         type: "code",
         title: "index.html",
         explain: "A progressive player can be this small: the browser sees src and starts its own load algorithm.",
-        code: `
-<video
-  id="video"
-  controls
-  preload="metadata"
-  width="800"
-  src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4">
-</video>
-
-<script type="module" src="./player.js"></script>`
+        file: "progressive-download/index.html",
+        region: "index"
       },
       {
         type: "text",
@@ -1293,28 +1261,7 @@ describeRanges("seekable", video.seekable);`
         type: "code",
         title: "player.js",
         explain: "This code observes what the browser is doing instead of fetching media bytes itself.",
-        code: `
-const video = document.querySelector("#video");
-
-video.addEventListener("loadedmetadata", () => {
-  console.log("duration", video.duration);
-  console.log("size", video.videoWidth, video.videoHeight);
-  logRanges("seekable", video.seekable);
-});
-
-video.addEventListener("progress", () => {
-  logRanges("buffered", video.buffered);
-});
-
-video.addEventListener("canplay", () => {
-  console.log("ready to play", video.readyState);
-});
-
-function logRanges(label, ranges) {
-  for (let i = 0; i < ranges.length; i += 1) {
-    console.log(label, ranges.start(i), ranges.end(i));
-  }
-}`
+        file: "progressive-download/player.js"
       },
       {
         type: "text",
@@ -1340,6 +1287,30 @@ video.src = url
   -> browser detects tracks and codecs
   -> browser decodes audio/video samples
   -> video.currentTime advances on one shared timeline`
+      },
+      {
+        type: "checkpoint",
+        slug: "progressive-download",
+        run: true,
+        files: [
+          "index.html",
+          "player.js"
+        ],
+        verify: [
+          "DevTools Network shows one request for flower.mp4 (status 200, or 206 Partial Content for range requests) and no .m4s segment requests.",
+          "Console prints duration 5.0 and size 960 540 once, then repeated buffered 0 <n> lines as the file downloads.",
+          "Console prints ready to play 3 or 4 (HAVE_FUTURE_DATA or HAVE_ENOUGH_DATA); the native controls play, pause and seek.",
+          "video.buffered in the console reports the same range the progress logs show."
+        ]
+      },
+      {
+        type: "exercise",
+        title: "Watch The Browser Buffer",
+        task: [
+          "Add waiting, seeking and seeked listeners that log currentTime and the buffered ranges. Throttle the network to Slow 3G in DevTools, hard-reload, and press play.",
+          "Note when waiting fires relative to the buffered end, then seek past the buffered end and see what the Network panel does."
+        ],
+        hint: "Use video.addEventListener(\"waiting\", ...) and reuse logRanges. Disable cache in DevTools so the file really re-downloads."
       },
       {
         type: "demo",
@@ -1476,17 +1447,15 @@ async function appendSegments(sourceBuffer, segments) {
         type: "code",
         title: "index.html",
         explain: "This file keeps the user app deliberately small: one video element and one browser ESM entrypoint.",
-        code: `
-<video id="video" controls width="800"></video>
-<script type="module" src="./player.js"></script>`
+        file: "mse-basics/index.html",
+        region: "index"
       },
       {
         type: "code",
         title: "Create MediaSource",
         explain: "MediaSource is the browser object that will receive media bytes from your JavaScript.",
-        code: `
-const video = document.querySelector("#video");
-const mediaSource = new MediaSource();`
+        file: "mse-basics/player.js",
+        region: "create-media-source"
       },
       {
         type: "text",
@@ -1504,40 +1473,16 @@ const mediaSource = new MediaSource();`
       {
         type: "code",
         title: "Attach It To The Video Element",
-        explain: "The object URL lets the video element treat your MediaSource as its media resource.",
-        code: `
-video.src = URL.createObjectURL(mediaSource);
-
-mediaSource.addEventListener("sourceopen", async () => {
-  console.log("MediaSource is open");
-});`
+        explain: "The object URL lets the video element treat your MediaSource as its media resource. Nothing can be appended yet: wait for the sourceopen event, which the final handler below listens for, before adding SourceBuffers.",
+        file: "mse-basics/player.js",
+        region: "attach"
       },
       {
         type: "code",
         title: "Describe The Tracks",
         explain: "This lab uses one video track and one audio track from the BBC Big Buck Bunny DASH stream. The first file for each track is the initialization segment, and it must come from the same Representation as the media segments that follow it, so the audio init and media segments all use 128kbps.",
-        code: `
-const base = "https://vod-dash-ww-rd-live.akamaized.net/bbb/2";
-const tracks = [
-  {
-    mime: 'video/mp4; codecs="avc1.64001f"',
-    files: [
-      \`\${base}/avc1/896x504p25/IS.mp4\`,
-      \`\${base}/avc1/896x504p25/000001.m4s\`,
-      \`\${base}/avc1/896x504p25/000002.m4s\`,
-      \`\${base}/avc1/896x504p25/000003.m4s\`
-    ]
-  },
-  {
-    mime: 'audio/mp4; codecs="mp4a.40.2"',
-    files: [
-      \`\${base}/audio/128kbps/IS.mp4\`,
-      \`\${base}/audio/128kbps/000001.m4s\`,
-      \`\${base}/audio/128kbps/000002.m4s\`,
-      \`\${base}/audio/128kbps/000003.m4s\`
-    ]
-  }
-];`
+        file: "mse-basics/player.js",
+        region: "describe-tracks"
       },
       {
         type: "text",
@@ -1555,41 +1500,16 @@ const tracks = [
       {
         type: "code",
         title: "Add SourceBuffers",
-        explain: "Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append. This step belongs inside the sourceopen handler. The Fetch And Append Bytes snippet below already includes it, so treat this as the same code shown on its own: do not keep both copies, or you will add each SourceBuffer twice.",
-        code: `
-const sourceBuffers = tracks.map((track) => ({
-  ...track,
-  sourceBuffer: mediaSource.addSourceBuffer(track.mime)
-}));`
+        explain: "Create one SourceBuffer for each MIME type. The browser uses the codec string to decide whether it can decode the bytes you append. This single line sits inside the sourceopen handler, once per track, and is shown on its own here. It appears exactly once in the finished player.js, so do not add it a second time.",
+        file: "mse-basics/player.js",
+        region: "add-source-buffer"
       },
       {
         type: "code",
         title: "Append A Queue",
         explain: "appendBuffer is asynchronous. This helper waits for updateend before feeding the next chunk to the same SourceBuffer, and rejects if the SourceBuffer fires an error so a bad segment fails loudly instead of hanging.",
-        code: `
-function appendAll(sourceBuffer, queue) {
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
-      sourceBuffer.removeEventListener("error", onError);
-    };
-    const onUpdateEnd = () => {
-      if (!queue.length) {
-        cleanup();
-        return resolve();
-      }
-      sourceBuffer.appendBuffer(queue.shift());
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("SourceBuffer append failed"));
-    };
-
-    sourceBuffer.addEventListener("updateend", onUpdateEnd);
-    sourceBuffer.addEventListener("error", onError);
-    sourceBuffer.appendBuffer(queue.shift());
-  });
-}`
+        file: "mse-basics/player.js",
+        region: "append-queue"
       },
       {
         type: "text",
@@ -1607,95 +1527,39 @@ function appendAll(sourceBuffer, queue) {
       {
         type: "code",
         title: "Fetch And Append Bytes",
-        explain: "This replaces the placeholder sourceopen handler from earlier. Once the MediaSource is open, it creates the SourceBuffers (the previous step, now in its final home), fetches each init/media segment, appends each track queue, then closes the stream.",
-        code: `
-mediaSource.addEventListener("sourceopen", async () => {
-  await Promise.all(tracks.map(async (track) => {
-    const sourceBuffer = mediaSource.addSourceBuffer(track.mime); // the only addSourceBuffer call
-    const queue = await Promise.all(track.files.map(fetchBytes));
-    await appendAll(sourceBuffer, queue);
-  }));
-
-  mediaSource.endOfStream();
-});
-
-async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  return response.arrayBuffer();
-}`
+        explain: "This is the sourceopen handler. Once the MediaSource is open, it creates the SourceBuffers (the previous step, in its final home), fetches each init and media segment, appends each track queue, then closes the stream. The console.log is a placeholder you can remove.",
+        file: "mse-basics/player.js",
+        region: "fetch-and-append"
       },
       {
         type: "code",
         title: "Complete player.js",
-        explain: "This complete file is runnable as-is beside the index.html from the first snippet.",
-        code: `
-const video = document.querySelector("#video");
-const base = "https://vod-dash-ww-rd-live.akamaized.net/bbb/2";
-
-const tracks = [
-  {
-    mime: 'video/mp4; codecs="avc1.64001f"',
-    files: [
-      \`\${base}/avc1/896x504p25/IS.mp4\`,
-      \`\${base}/avc1/896x504p25/000001.m4s\`,
-      \`\${base}/avc1/896x504p25/000002.m4s\`,
-      \`\${base}/avc1/896x504p25/000003.m4s\`
-    ]
-  },
-  {
-    mime: 'audio/mp4; codecs="mp4a.40.2"',
-    files: [
-      \`\${base}/audio/128kbps/IS.mp4\`,
-      \`\${base}/audio/128kbps/000001.m4s\`,
-      \`\${base}/audio/128kbps/000002.m4s\`,
-      \`\${base}/audio/128kbps/000003.m4s\`
-    ]
-  }
-];
-
-const mediaSource = new MediaSource();
-video.src = URL.createObjectURL(mediaSource);
-
-mediaSource.addEventListener("sourceopen", async () => {
-  await Promise.all(tracks.map(async (track) => {
-    const sourceBuffer = mediaSource.addSourceBuffer(track.mime);
-    const queue = await Promise.all(track.files.map(fetchBytes));
-    await appendAll(sourceBuffer, queue);
-  }));
-
-  mediaSource.endOfStream();
-});
-
-function appendAll(sourceBuffer, queue) {
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
-      sourceBuffer.removeEventListener("error", onError);
-    };
-    const onUpdateEnd = () => {
-      if (!queue.length) {
-        cleanup();
-        return resolve();
-      }
-      sourceBuffer.appendBuffer(queue.shift());
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("SourceBuffer append failed"));
-    };
-
-    sourceBuffer.addEventListener("updateend", onUpdateEnd);
-    sourceBuffer.addEventListener("error", onError);
-    sourceBuffer.appendBuffer(queue.shift());
-  });
-}
-
-async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  return response.arrayBuffer();
-}`
+        explain: "This complete file is runnable as-is beside the index.html from the first snippet. The steps above are excerpts of it.",
+        file: "mse-basics/player.js"
+      },
+      {
+        type: "checkpoint",
+        slug: "mse-basics",
+        run: true,
+        files: [
+          "index.html",
+          "player.js"
+        ],
+        verify: [
+          "DevTools Network shows IS.mp4 then 000001.m4s, 000002.m4s, 000003.m4s for avc1/896x504p25, and the same four files for audio/128kbps.",
+          "Console prints MediaSource is open once.",
+          "After a moment, video.buffered.end(0) in the console is about 11.52 (3 segments x 3.84 s) and video.duration matches.",
+          "The video plays for about 11.5 seconds and then ends; there is no src attribute on the video element, only a blob: URL set by script."
+        ]
+      },
+      {
+        type: "exercise",
+        title: "Append Three More Segments",
+        task: [
+          "Add 000004.m4s, 000005.m4s and 000006.m4s to both tracks' file lists.",
+          "Reload and confirm video.buffered.end(0) grows by 3 x 3.84 s, from about 11.52 to about 23.04, and that the video now plays for about 23 seconds."
+        ],
+        hint: "Only the files arrays in the tracks description change. Segment numbers are zero-padded to six digits. Check the Network panel for six media requests per track."
       },
       {
         type: "demo",
@@ -2051,156 +1915,38 @@ SegmentBase
         type: "code",
         title: "dash.js",
         explain: "This parser intentionally supports the small BBC DASH subset used by the tutorial: one Period, audio/video AdaptationSets, optional BaseURL, and SegmentTemplate. A Representation's mimeType and codecs override the AdaptationSet's, and each Representation keeps mimeType, codecs, and the combined mime string so later lessons can compare them.",
-        code: `
-// ~2.3 minutes of BBB (36 x 3.84 s); keeps memory bounded until buffer management is added.
-const TUTORIAL_SEGMENT_LIMIT = 36;
-
-export async function loadDashVod(mpdUrl) {
-  const response = await fetch(mpdUrl);
-  if (!response.ok) throw new Error(\`Failed to fetch \${mpdUrl}\`);
-  const xml = await response.text();
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  const videoSet = findAdaptation(doc, "video/mp4", "video");
-  const audioSet = findAdaptation(doc, "audio/mp4", "audio");
-  const video = parseAdaptation(videoSet, doc, response.url);
-  const audio = parseAdaptation(audioSet, doc, response.url);
-
-  return {
-    video: chooseLowest(video),
-    audio: chooseHighest(audio),
-    representations: { video, audio }
-  };
-}
-
-function findAdaptation(doc, mimeType, contentType) {
-  return [...doc.querySelectorAll("AdaptationSet")]
-    .find((set) => set.getAttribute("mimeType") === mimeType || set.getAttribute("contentType") === contentType);
-}
-
-function parseAdaptation(adaptation, doc, mpdUrl) {
-  const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
-  const baseUrl = resolveBaseUrl(doc, adaptation, mpdUrl);
-  const totalSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
-
-  return [...adaptation.querySelectorAll(":scope > Representation")].map((representation) => {
-    const template = representation.querySelector(":scope > SegmentTemplate") ?? adaptationTemplate;
-    const timescale = Number(template.getAttribute("timescale") ?? 1);
-    const duration = Number(template.getAttribute("duration"));
-    const startNumber = Number(template.getAttribute("startNumber") ?? 1);
-    const segmentSeconds = duration / timescale;
-    const segmentCount = Math.min(TUTORIAL_SEGMENT_LIMIT, Math.ceil(totalSeconds / segmentSeconds));
-
-    // A Representation attribute overrides the AdaptationSet attribute; never join them.
-    const mimeType = representation.getAttribute("mimeType") ?? adaptation.getAttribute("mimeType");
-    const codecs = representation.getAttribute("codecs") ?? adaptation.getAttribute("codecs");
-
-    return {
-      id: representation.id,
-      bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
-      mimeType,
-      codecs,
-      mime: codecs ? \`\${mimeType}; codecs="\${codecs}"\` : mimeType,
-      init: new URL(format(template.getAttribute("initialization"), representation.id), baseUrl).href,
-      segments: Array.from({ length: segmentCount }, (_, index) => {
-        const number = startNumber + index;
-        return {
-          number,
-          url: new URL(format(template.getAttribute("media"), representation.id, number), baseUrl).href
-        };
-      })
-    };
-  });
-}
-
-// BaseURL is optional at both the MPD and AdaptationSet level.
-function resolveBaseUrl(doc, adaptation, mpdUrl) {
-  const mpdBase = doc.documentElement.querySelector(":scope > BaseURL")?.textContent.trim() ?? "";
-  const adaptationBase = adaptation.querySelector(":scope > BaseURL")?.textContent.trim() ?? "";
-  return new URL(adaptationBase, new URL(mpdBase, mpdUrl)).href;
-}
-
-function format(pattern, id, number = "") {
-  return pattern
-    .replaceAll("$RepresentationID$", id)
-    .replace(/\\$Number%0(\\d+)d\\$/g, (_, width) => String(number).padStart(Number(width), "0"))
-    .replaceAll("$Number$", number);
-}
-
-function chooseLowest(representations) {
-  return [...representations].sort((a, b) => a.bandwidth - b.bandwidth)[0];
-}
-
-function chooseHighest(representations) {
-  return [...representations].sort((a, b) => a.bandwidth - b.bandwidth).at(-1);
-}
-
-function parseIsoDuration(value) {
-  const match = /PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+(?:\\.\\d+)?)S)?/.exec(value ?? "");
-  if (!match) return 0;
-  return Number(match[1] ?? 0) * 3600 + Number(match[2] ?? 0) * 60 + Number(match[3] ?? 0);
-}`
+        file: "dash-vod/dash.js"
       },
       {
         type: "code",
         title: "player.js With DASH",
         explain: "The player no longer knows segment filenames. It asks the manifest parser for selected audio and video representations, then appends each track with an await loop so a failed fetch or append rejects instead of hanging.",
-        code: `
-import { loadDashVod } from "./dash.js";
-
-const mpdUrl = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd";
-const video = document.querySelector("#video");
-const dash = await loadDashVod(mpdUrl);
-
-if (!MediaSource.isTypeSupported(dash.video.mime)) {
-  throw new Error(\`Unsupported video type: \${dash.video.mime}\`);
-}
-if (!MediaSource.isTypeSupported(dash.audio.mime)) {
-  throw new Error(\`Unsupported audio type: \${dash.audio.mime}\`);
-}
-
-const mediaSource = new MediaSource();
-video.src = URL.createObjectURL(mediaSource);
-
-mediaSource.addEventListener("sourceopen", async () => {
-  const videoBuffer = mediaSource.addSourceBuffer(dash.video.mime);
-  const audioBuffer = mediaSource.addSourceBuffer(dash.audio.mime);
-
-  await Promise.all([
-    appendTrack(videoBuffer, [dash.video.init, ...dash.video.segments.map((segment) => segment.url)]),
-    appendTrack(audioBuffer, [dash.audio.init, ...dash.audio.segments.map((segment) => segment.url)])
-  ]);
-
-  mediaSource.endOfStream();
-}, { once: true });
-
-async function appendTrack(sourceBuffer, urls) {
-  for (const url of urls) {
-    await appendBuffer(sourceBuffer, await fetchBytes(url));
-  }
-}
-
-// Resolves on updateend, rejects on error, and removes both listeners once settled.
-function appendBuffer(sourceBuffer, bytes) {
-  return new Promise((resolve, reject) => {
-    const onUpdateEnd = () => settle(resolve);
-    const onError = () => settle(reject, new Error("SourceBuffer append failed"));
-    const settle = (callback, value) => {
-      sourceBuffer.removeEventListener("updateend", onUpdateEnd);
-      sourceBuffer.removeEventListener("error", onError);
-      callback(value);
-    };
-
-    sourceBuffer.addEventListener("updateend", onUpdateEnd);
-    sourceBuffer.addEventListener("error", onError);
-    sourceBuffer.appendBuffer(bytes);
-  });
-}
-
-async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  return response.arrayBuffer();
-}`
+        file: "dash-vod/player.js"
+      },
+      {
+        type: "checkpoint",
+        slug: "dash-vod",
+        run: true,
+        files: [
+          "index.html",
+          "dash.js",
+          "player.js"
+        ],
+        verify: [
+          "DevTools Network shows the MPD first (redirected to vod-dash-ww-rd-live.akamaized.net), then IS.mp4 for avc1/896x504p25 and for audio/160kbps, then numbered .m4s segments.",
+          "36 media segments are requested per track (TUTORIAL_SEGMENT_LIMIT), so video.buffered.end(0) ends near 138.24 (36 x 3.84 s).",
+          "The chosen video Representation is the lowest bandwidth (896x504p25, 1416688 bps) and the audio is the highest (160kbps).",
+          "Playback runs for about 2.3 minutes and ends; no segment URL is hardcoded in player.js."
+        ]
+      },
+      {
+        type: "exercise",
+        title: "Pick The 720p Representation",
+        task: [
+          "Change the video choice so the player requests the 1280x720p25 Representation rather than the lowest one.",
+          "Confirm in the Network panel that the requests are now 1280x720p25/IS.mp4 and 1280x720p25/00000N.m4s, and compare segment sizes with the 504p ones."
+        ],
+        hint: "Replace chooseLowest(video) with video.find((rep) => rep.id === \"1280x720p25\") ?? chooseLowest(video). Representation ids come straight from the MPD, and they are also available through dash.representations.video."
       },
       {
         type: "demo",
@@ -2296,11 +2042,6 @@ for (const sample of samples) {
         ]
       },
       {
-        type: "link",
-        href: "./webcodecs.html",
-        label: "Open the runnable DASH WebCodecs player"
-      },
-      {
         type: "code",
         title: "Configure A Video Decoder",
         explain: "The H.264 sample entry provides the codec string and avcC decoder configuration needed by WebCodecs.",
@@ -2333,6 +2074,34 @@ decoder.decode(new EncodedVideoChunk({
         body: [
           "MSE is a good fit when the browser should own demuxing and presentation while JavaScript supplies media segments. WebCodecs is useful when an application needs control over decoded frames or custom processing, and accepts responsibility for parsing, scheduling, synchronization, and resource cleanup."
         ]
+      },
+      {
+        type: "checkpoint",
+        slug: "webcodecs-playback",
+        run: true,
+        files: [
+          "index.html",
+          "webcodecs-player.js",
+          "mp4-demuxer.js",
+          "dash.js"
+        ],
+        verify: [
+          "The status line moves from Reading the DASH manifest... through Fetching DASH fragments... to Ready: <n> timed samples extracted. Press Play.",
+          "Press Play: the canvas shows Big Buck Bunny, audio plays in sync, and the status reads Playing decoded samples.",
+          "Pause freezes the picture and silences audio together (the AudioContext clock is the playback clock); Play resumes from the same point.",
+          "At the end the status reads Playback ended. Press Replay to start again, and Replay restarts from the first sample.",
+          "There is no video element and no MediaSource: DevTools Elements shows only a canvas."
+        ],
+        note: "Needs a browser with WebCodecs (VideoDecoder and AudioDecoder) and a secure context: localhost or HTTPS."
+      },
+      {
+        type: "exercise",
+        title: "Draw The Media Clock",
+        task: [
+          "In drawFrame, draw the current mediaTime onto the canvas as text each time a frame is shown, for example with context.fillText.",
+          "Press Pause and confirm the number stops advancing, then press Play and confirm it resumes without a jump."
+        ],
+        hint: "mediaTime is already computed in drawFrame as audioContext.currentTime - audioOrigin. Call fillText after drawImage, so the text is not painted over."
       }
     ],
     outcome: "You can connect DASH segment fetching, fMP4 sample extraction, WebCodecs decoding, and synchronized canvas/audio output."
@@ -2365,56 +2134,8 @@ decoder.decode(new EncodedVideoChunk({
         type: "code",
         title: "Expose Representations From The Parser",
         explain: "Replace parseAdaptation and loadDashVod from the previous lesson with these versions. Each Representation now carries id, bandwidth, mimeType, codecs, the combined mime string, its init URL, and segments with start and end times. loadDashVod accepts options for the startup choice and returns { video, audio, representations }. The rest of dash.js (findAdaptation, resolveBaseUrl, format, chooseHighest, parseIsoDuration, and TUTORIAL_SEGMENT_LIMIT) stays as it was.",
-        code: `
-function parseAdaptation(adaptation, doc, mpdUrl) {
-  const adaptationTemplate = adaptation.querySelector(":scope > SegmentTemplate");
-  const baseUrl = resolveBaseUrl(doc, adaptation, mpdUrl);
-  const totalSeconds = parseIsoDuration(doc.documentElement.getAttribute("mediaPresentationDuration"));
-
-  return [...adaptation.querySelectorAll(":scope > Representation")].map((representation) => {
-    const template = representation.querySelector(":scope > SegmentTemplate") ?? adaptationTemplate;
-    const timescale = Number(template.getAttribute("timescale") ?? 1);
-    const duration = Number(template.getAttribute("duration"));
-    const startNumber = Number(template.getAttribute("startNumber") ?? 1);
-    const segmentSeconds = duration / timescale;
-    const segmentCount = Math.min(TUTORIAL_SEGMENT_LIMIT, Math.ceil(totalSeconds / segmentSeconds));
-
-    const mimeType = representation.getAttribute("mimeType") ?? adaptation.getAttribute("mimeType");
-    const codecs = representation.getAttribute("codecs") ?? adaptation.getAttribute("codecs");
-
-    return {
-      id: representation.id,
-      bandwidth: Number(representation.getAttribute("bandwidth") ?? 0),
-      mimeType,
-      codecs,
-      mime: codecs ? \`\${mimeType}; codecs="\${codecs}"\` : mimeType,
-      init: new URL(format(template.getAttribute("initialization"), representation.id), baseUrl).href,
-      segments: Array.from({ length: segmentCount }, (_, index) => {
-        const number = startNumber + index;
-        return {
-          number,
-          start: index * segmentSeconds,
-          end: (index + 1) * segmentSeconds,
-          url: new URL(format(template.getAttribute("media"), representation.id, number), baseUrl).href
-        };
-      })
-    };
-  });
-}
-
-export async function loadDashVod(mpdUrl, options = {}) {
-  const response = await fetch(mpdUrl);
-  if (!response.ok) throw new Error(\`Failed to fetch \${mpdUrl}\`);
-  const doc = new DOMParser().parseFromString(await response.text(), "application/xml");
-  const video = parseAdaptation(findAdaptation(doc, "video/mp4", "video"), doc, response.url);
-  const audio = parseAdaptation(findAdaptation(doc, "audio/mp4", "audio"), doc, response.url);
-
-  return {
-    video: chooseRepresentation(video, options), // startup choice, defined in the next snippet
-    audio: chooseHighest(audio),
-    representations: { video, audio }
-  };
-}`
+        file: "adaptive-bitrate/dash.js",
+        region: "expose-representations"
       },
       {
         type: "text",
@@ -2432,33 +2153,9 @@ export async function loadDashVod(mpdUrl, options = {}) {
       {
         type: "code",
         title: "ABR Helpers In dash.js",
-        explain: "The parser module also exports the small startup ABR helpers used by the player. chooseRepresentation replaces chooseLowest for the video startup choice, and its defaults let loadDashVod(mpdUrl) work with no options.",
-        code: `
-export function estimateInitialThroughput() {
-  const downlinkMbps = navigator.connection?.downlink;
-  return downlinkMbps ? downlinkMbps * 1_000_000 : 2_500_000;
-}
-
-export function chooseRepresentation(representations, { throughputBps = estimateInitialThroughput(), bufferSeconds = 0 } = {}) {
-  const sorted = [...representations].sort((a, b) => a.bandwidth - b.bandwidth);
-  const safety = bufferSeconds > 12 ? 0.85 : bufferSeconds > 6 ? 0.75 : 0.6;
-  const budget = throughputBps * safety;
-
-  return sorted.filter((rep) => rep.bandwidth <= budget).at(-1) ?? sorted[0];
-}
-
-export async function measureFetch(url) {
-  const startedAt = performance.now();
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  const bytes = await response.arrayBuffer();
-  const seconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
-
-  return {
-    bytes,
-    throughputBps: (bytes.byteLength * 8) / seconds
-  };
-}`
+        explain: "The parser module also exports the small startup ABR helpers used by the player. chooseRepresentation replaces chooseLowest for the video startup choice, and its defaults let loadDashVod(mpdUrl) work with no options. It also drops Representations the browser reports as unsupported by MediaSource.isTypeSupported before choosing.",
+        file: "adaptive-bitrate/dash.js",
+        region: "startup-abr"
       },
       {
         type: "text",
@@ -2476,23 +2173,9 @@ export async function measureFetch(url) {
       {
         type: "code",
         title: "Update The Player",
-        explain: "loadDashVod now takes the options object and returns the startup video choice, so choose it before creating SourceBuffers, then append that selected video plus the selected audio representation. This replaces the loadDashVod call and SourceBuffer setup from the previous lesson; appendTrack is unchanged.",
-        code: `
-import { estimateInitialThroughput, loadDashVod } from "./dash.js";
-
-const throughputBps = estimateInitialThroughput();
-const dash = await loadDashVod(mpdUrl, { throughputBps, bufferSeconds: 0 });
-
-const videoBuffer = mediaSource.addSourceBuffer(dash.video.mime);
-const audioBuffer = mediaSource.addSourceBuffer(dash.audio.mime);
-
-const videoQueue = [dash.video.init, ...dash.video.segments.map((segment) => segment.url)];
-const audioQueue = [dash.audio.init, ...dash.audio.segments.map((segment) => segment.url)];
-
-await Promise.all([
-  appendTrack(videoBuffer, videoQueue),
-  appendTrack(audioBuffer, audioQueue)
-]);`
+        explain: "loadDashVod now takes the options object and returns the startup video choice, so choose it before creating SourceBuffers. In the finished player.js, playDash then creates the SourceBuffers and replaces the old video appendTrack call with the runtime ABR loop shown below; audio keeps its own sequential loop.",
+        file: "adaptive-bitrate/player.js",
+        region: "startup-choice"
       },
       {
         type: "text",
@@ -2512,116 +2195,29 @@ await Promise.all([
         type: "code",
         title: "Smooth Throughput With EWMA",
         explain: "A single segment download can be noisy. EWMA gives recent measurements more weight while preserving some history.",
-        code: `
-export function createEwma(initialEstimate, weight = 0.35) {
-  let estimate = initialEstimate;
-
-  return {
-    sample(value) {
-      estimate = estimate * (1 - weight) + value * weight;
-      return estimate;
-    },
-    value() {
-      return estimate;
-    }
-  };
-}`
+        file: "adaptive-bitrate/dash.js",
+        region: "ewma"
       },
       {
         type: "code",
         title: "Measure Buffer Depth",
         explain: "Runtime ABR needs playable seconds ahead of currentTime, not downloaded bytes.",
-        code: `
-function bufferAhead(video) {
-  for (let i = 0; i < video.buffered.length; i += 1) {
-    const start = video.buffered.start(i);
-    const end = video.buffered.end(i);
-    if (start <= video.currentTime && video.currentTime <= end) {
-      return end - video.currentTime;
-    }
-  }
-
-  return 0;
-}`
+        file: "adaptive-bitrate/player.js",
+        region: "buffer-depth"
       },
       {
         type: "code",
         title: "Runtime Representation Choice",
-        explain: "This keeps the startup selector but adds switch-down urgency, switch-up caution, and a compatibility filter. canSwitchTo only allows candidates with the same mimeType and either identical codecs or a browser that supports SourceBuffer.changeType().",
-        code: `
-function canSwitchTo(current, next) {
-  return current.mimeType === next.mimeType && (
-    current.codecs === next.codecs ||
-    (typeof SourceBuffer !== "undefined" && "changeType" in SourceBuffer.prototype)
-  );
-}
-
-function chooseRuntimeRepresentation(representations, current, state) {
-  const sorted = representations
-    .filter((rep) => rep.id === current.id || canSwitchTo(current, rep))
-    .sort((a, b) => a.bandwidth - b.bandwidth);
-  const bufferSeconds = state.bufferSeconds;
-  const budget = state.throughputBps * (bufferSeconds < 6 ? 0.55 : bufferSeconds < 14 ? 0.7 : 0.85);
-  const affordable = sorted.filter((rep) => rep.bandwidth <= budget);
-  const candidate = affordable.at(-1) ?? sorted[0];
-
-  if (candidate.bandwidth < current.bandwidth) {
-    return candidate; // switch down immediately
-  }
-
-  const currentIndex = sorted.findIndex((rep) => rep.id === current.id);
-  const candidateIndex = sorted.findIndex((rep) => rep.id === candidate.id);
-  const maxStepUp = sorted[Math.min(currentIndex + 1, sorted.length - 1)];
-
-  return candidateIndex > currentIndex ? maxStepUp : current;
-}`
+        explain: "This keeps the startup selector but adds switch-down urgency, switch-up caution, and a compatibility filter. canSwitchTo only allows candidates with the same mimeType and either identical codecs or a browser that supports SourceBuffer.changeType(). Both functions are exported from dash.js so the player can import chooseRuntimeRepresentation.",
+        file: "adaptive-bitrate/dash.js",
+        region: "runtime-choice"
       },
       {
         type: "code",
         title: "Segment-By-Segment ABR Loop",
         explain: "The player waits until the buffer is below its goal, chooses the video representation, appends the new representation's init segment whenever the representation changes (calling changeType first if the codec string differs), then fetches and appends the media segment and measures the result. appendBufferChecked comes from the Guard Append Operations snippet in the MSE debugging lesson, and createEwma and bufferAhead come from the snippets above.",
-        code: `
-const BUFFER_GOAL_SECONDS = 30;
-
-async function appendVideoAbr(video, videoBuffer, dash) {
-  const throughput = createEwma(estimateInitialThroughput());
-  let current = dash.video;
-  let initInBuffer = null; // the Representation whose init segment the SourceBuffer last received
-
-  for (let index = 0; index < dash.video.segments.length; index += 1) {
-    await waitForBufferGoal(video);
-
-    current = chooseRuntimeRepresentation(dash.representations.video, current, {
-      throughputBps: throughput.value(),
-      bufferSeconds: bufferAhead(video)
-    });
-
-    if (initInBuffer?.id !== current.id) {
-      if (initInBuffer && initInBuffer.codecs !== current.codecs) {
-        videoBuffer.changeType(current.mime);
-      }
-      await appendBufferChecked(videoBuffer, await fetchBytes(current.init), \`video init \${current.id}\`);
-      initInBuffer = current;
-    }
-
-    const segment = current.segments[index];
-    const result = await measureFetch(segment.url);
-    throughput.sample(result.throughputBps);
-    await appendBufferChecked(videoBuffer, result.bytes, \`video segment \${segment.number}\`);
-  }
-}
-
-async function waitForBufferGoal(video) {
-  while (bufferAhead(video) >= BUFFER_GOAL_SECONDS) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
-
-async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-  return response.arrayBuffer();
-}`
+        file: "adaptive-bitrate/player.js",
+        region: "abr-loop"
       },
       {
         type: "text",
@@ -2640,6 +2236,34 @@ async function fetchBytes(url) {
           "Do not abandon audio buffering while chasing video quality.",
           "Keep enough buffer to survive the next request before switching up."
         ]
+      },
+      {
+        type: "checkpoint",
+        slug: "adaptive-bitrate",
+        run: true,
+        files: [
+          "index.html",
+          "dash.js",
+          "player.js"
+        ],
+        verify: [
+          "The status line reads video <representation id> segment <n>, <kbps> kbps, <s>s buffered, updating after each video segment.",
+          "Reload with DevTools throttling set to Fast 3G (or 3G): the status line shows 896x504p25 from the start, the lowest Representation.",
+          "Reload with no throttling: it starts on a higher Representation (1280x720p25 or 1920x1080p25, depending on navigator.connection.downlink), and then switches down to 896x504p25 when you apply Fast 3G mid-playback. Decisions are made only while the buffer is below 30 s, so the switch can take a few segments.",
+          "Remove the throttle again: it steps up one Representation at a time (504p to 720p to 1080p), never straight to the top.",
+          "Network shows an init segment request (IS.mp4) for the new Representation each time the video Representation changes, and the picture keeps playing without a glitch.",
+          "The buffer reading stops growing near 30 s: the buffer goal is holding downloads back."
+        ],
+        note: "This snapshot has no subtitles, so you can inspect ABR behaviour in isolation."
+      },
+      {
+        type: "exercise",
+        title: "Make Switching Up More Cautious",
+        task: [
+          "Change appendVideoAbr so it only switches up after chooseRuntimeRepresentation has proposed the same higher Representation on 3 consecutive segments. Switching down must still happen immediately.",
+          "Verify by throttling to Fast 3G, then removing the throttle: you should see three segments on the old Representation before each step up."
+        ],
+        hint: "Keep a counter in appendVideoAbr: increment it when the proposal has higher bandwidth than current, reset it to 0 otherwise, and only assign current when it reaches 3 (always assign on a downward proposal). Log the counter in the status line to see it."
       },
       {
         type: "demo",
@@ -2934,174 +2558,104 @@ function getLiveSegmentRange(timing, nowMs = Date.now()) {
         type: "code",
         title: "Parse Live MPD Timing",
         explain: "Start by extracting the fields that connect wall-clock time, media time, refresh cadence, and the live window.",
-        code: `
-export function parseLiveTiming(doc, template) {
-  const mpd = doc.documentElement;
-  const timescale = Number(template.getAttribute("timescale") ?? 1);
-  const duration = Number(template.getAttribute("duration"));
-
-  return {
-    type: mpd.getAttribute("type"),
-    availabilityStartTimeMs: Date.parse(mpd.getAttribute("availabilityStartTime")),
-    publishTimeMs: Date.parse(mpd.getAttribute("publishTime") ?? ""),
-    minimumUpdatePeriodMs: parseDuration(mpd.getAttribute("minimumUpdatePeriod")) * 1000,
-    timeShiftBufferDepth: parseDuration(mpd.getAttribute("timeShiftBufferDepth")),
-    suggestedPresentationDelay: parseDuration(mpd.getAttribute("suggestedPresentationDelay")),
-    startNumber: Number(template.getAttribute("startNumber") ?? 1),
-    segmentDuration: duration / timescale
-  };
-}`
+        file: "live/live.js",
+        region: "parse-live-timing"
+      },
+      {
+        type: "code",
+        title: "Read The Live MPD",
+        explain: "A deliberately small live MPD reader: one Period, one audio and one video AdaptationSet, the first Representation of each, and a SegmentTemplate with $Number$. It builds the init URL and a segmentUrl(number) function per track, reuses parseLiveTiming, and picks up the UTCTiming URL when it is an http-xsdate or http-iso source. The target stream is the public DASH-IF livesim2 test stream, which loops a short clip and has availabilityStartTime 1970, 2 second segments, startNumber 0 and no timescale (so 1).",
+        file: "live/dash-live.js"
       },
       {
         type: "code",
         title: "Calculate The Available Segment Range",
         explain: "For fixed-duration SegmentTemplate streams, convert wall-clock time into the segment numbers that are likely requestable.",
-        code: `
-export function getLiveSegmentRange(timing, nowMs = Date.now()) {
-  const livePresentationTime = Math.max(0, (nowMs - timing.availabilityStartTimeMs) / 1000);
-  // A segment only becomes available at its END time, so latency must be at least one segment.
-  const targetLatency = Math.max(timing.suggestedPresentationDelay || timing.segmentDuration * 3, timing.segmentDuration);
-  const targetPlaybackTime = Math.max(0, livePresentationTime - targetLatency);
-  const windowDepth = timing.timeShiftBufferDepth || timing.segmentDuration * 12;
-
-  const newest = timing.startNumber + Math.floor(targetPlaybackTime / timing.segmentDuration);
-  const first = Math.max(
-    timing.startNumber,
-    newest - Math.floor(windowDepth / timing.segmentDuration)
-  );
-
-  return { first, newest, targetPlaybackTime, livePresentationTime };
-}`
+        file: "live/live.js",
+        region: "segment-range"
+      },
+      {
+        type: "code",
+        title: "Sync To The Server Clock",
+        explain: "The MPD's UTCTiming element points at a server clock. Segment numbers depend on wall-clock time, so a local clock that is wrong by a few seconds requests segments that do not exist yet or have already gone. Measure the offset once, assuming the reply took half the round trip, and add it to Date.now() wherever the live range is computed.",
+        file: "live/player.js",
+        region: "clock-sync"
       },
       {
         type: "code",
         title: "Live Refresh Controller",
-        explain: "The controller refreshes the MPD, calculates the current window, and appends segments from a nextNumber cursor. It starts at the live edge rather than the start of the time-shift window, jumps back to the edge if the cursor falls out of the window, and on a near-edge 404 stops for this tick without advancing so the same segment is retried. fetchBytes attaches the HTTP status to the error it throws, which is what isNearLiveEdge404 inspects. Initialisation segments are appended once by the caller before start().",
-        code: `
-export async function fetchBytes(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    const error = new Error(\`HTTP \${response.status} for \${url}\`);
-    error.status = response.status;
-    throw error;
-  }
-  return response.arrayBuffer();
-}
-
-export function createLiveController({ refreshManifest, appendSegment, segmentUrl, onStarted, onError = console.error, retryDelayMs = 750 }) {
-  let nextNumber = null; // the next segment number to append
-  let started = false;
-  let stopped = false;
-  let timer = 0;
-
-  return {
-    async start() {
-      await tick();
-    },
-    stop() {
-      stopped = true;
-      clearTimeout(timer);
-    }
-  };
-
-  async function tick() {
-    if (stopped) return;
-    const { timing } = await refreshManifest();
-    const range = getLiveSegmentRange(timing);
-    let nextDelayMs = Math.max(timing.minimumUpdatePeriodMs || 1000, 500);
-
-    // First tick: start at the live edge. Later: if we fell out of the window, jump back to the edge.
-    if (nextNumber === null || nextNumber < range.first) nextNumber = range.newest;
-
-    while (nextNumber <= range.newest) {
-      try {
-        await appendSegment(segmentUrl(nextNumber));
-      } catch (error) {
-        if (isNearLiveEdge404(error, nextNumber, range.newest)) {
-          nextDelayMs = retryDelayMs; // do not advance; try this segment again next tick
-          break;
-        }
-        throw error;
-      }
-
-      nextNumber += 1;
-      if (!started) {
-        started = true;
-        await onStarted?.();
-      }
-    }
-
-    if (!stopped) timer = setTimeout(() => tick().catch(onError), nextDelayMs);
-  }
-}`
+        explain: "The controller refreshes the MPD, calculates the current window, and calls appendSegment(number) from a nextNumber cursor; that callback must fetch and append every track for that number. It starts at the live edge rather than the start of the time-shift window, jumps back to the edge if the cursor falls out of the window, and on a near-edge 404 stops for this tick without advancing so the same segment is retried. getNow lets the caller supply a server-corrected clock. fetchBytes attaches the HTTP status to the error it throws, which is what isNearLiveEdge404 inspects. Initialisation segments are appended once by the caller before start().",
+        file: "live/live.js",
+        region: "live-controller"
       },
       {
         type: "code",
         title: "Near-Edge Retry",
         explain: "A segment close to live edge can briefly 404 while it propagates through packaging and CDN layers. The check relies on error.status, which fetchBytes sets; fetch itself does not throw on a 404, so without that helper nothing would ever carry a status.",
-        code: `
-function isNearLiveEdge404(error, number, newest) {
-  return error.status === 404 && number >= newest - 1;
-}`
+        file: "live/live.js",
+        region: "near-edge-retry"
       },
       {
         type: "code",
         title: "Start At The Live Media",
-        explain: "Appending media does not move the playhead. The first segment appended near the live edge starts at a large presentation time, so currentTime 0 is empty and the video waits forever. onStarted runs after the first append and moves currentTime to the start of the buffered range. Setting mediaSource.duration to Infinity marks the stream as live, and setLiveSeekableRange exposes the live window to the seek bar. Call it again as the window moves, and when audio and video are in separate SourceBuffers, call it once both have data.",
-        code: `
-// Call once the first media is appended: expose the live window and move the playhead onto it.
-export function seekToLiveStart(video, mediaSource) {
-  if (!video.buffered.length) return;
-  const start = video.buffered.start(0);
-  const end = video.buffered.end(video.buffered.length - 1);
-
-  if (mediaSource.readyState === "open") {
-    mediaSource.duration = Infinity; // live: there is no known end
-    mediaSource.setLiveSeekableRange?.(start, end);
-  }
-  video.currentTime = start;
-}
-
-// Wiring (init segments are appended before start()):
-const controller = createLiveController({
-  refreshManifest,
-  segmentUrl,
-  appendSegment: async (url) => appendBufferChecked(videoBuffer, await fetchBytes(url), url),
-  onStarted: () => seekToLiveStart(video, mediaSource)
-});
-await controller.start();`
+        explain: "Appending media does not move the playhead. The first segment appended near the live edge starts at a large presentation time (here, seconds since 1970), so currentTime 0 is empty and the video waits forever. onStarted runs after the first append and moves currentTime to the start of the buffered range. Setting mediaSource.duration to Infinity marks the stream as live, and setLiveSeekableRange exposes the live window to the seek bar. Call it again as the window moves, and when audio and video are in separate SourceBuffers, call it once both have data.",
+        file: "live/live.js",
+        region: "seek-to-live-start"
+      },
+      {
+        type: "code",
+        title: "Wire The Live Player",
+        explain: "The real wiring: both SourceBuffers already exist and both init segments are appended. appendSegment fetches both tracks for a segment number before appending either, so a 404 on one track never leaves the other half-appended, and onStarted seeks to the live start. Appends and removals go through a small exclusive() queue so they never overlap on a SourceBuffer.",
+        file: "live/player.js",
+        region: "live-wiring"
       },
       {
         type: "code",
         title: "Catch Up To Target Latency",
         explain: "A small playbackRate increase can gently reduce excess live latency without a visible seek.",
-        code: `
-export function updateLiveCatchup(video, { livePresentationTime, targetLatency }) {
-  const currentLatency = livePresentationTime - video.currentTime;
-  const drift = currentLatency - targetLatency;
-
-  if (drift > 6) {
-    video.playbackRate = 1.06;
-  } else if (drift < 1) {
-    video.playbackRate = 1;
-  }
-}`
+        file: "live/live.js",
+        region: "live-catchup"
       },
       {
         type: "code",
         title: "Prune Old Buffers",
         explain: "Live players must remove old media, but not too close to the playhead.",
-        code: `
-export async function removeOldBuffer(sourceBuffer, currentTime, keepBehind = 30) {
-  const removeEnd = currentTime - keepBehind;
-  if (removeEnd <= 0 || sourceBuffer.updating) return;
-
-  await new Promise((resolve, reject) => {
-    sourceBuffer.addEventListener("updateend", resolve, { once: true });
-    sourceBuffer.addEventListener("error", reject, { once: true });
-    sourceBuffer.remove(0, removeEnd);
-  });
-}`
+        file: "live/live.js",
+        region: "prune-buffer"
+      },
+      {
+        type: "code",
+        title: "Run The Live Maintenance Tick",
+        explain: "A one-second tick keeps the live player healthy: it applies catch-up, prunes both SourceBuffers behind the playhead, refreshes the seekable range, and reports latency, which is livePresentationTime minus currentTime.",
+        file: "live/player.js",
+        region: "live-maintenance"
+      },
+      {
+        type: "checkpoint",
+        slug: "live",
+        run: true,
+        files: [
+          "index.html",
+          "live.js",
+          "dash-live.js",
+          "player.js"
+        ],
+        verify: [
+          "Network shows Manifest.mpd re-requested about every 2 s, A48/init.mp4 and V300/init.mp4 once each, then A48/<n>.m4s and V300/<n>.m4s pairs with n increasing by 1 every 2 s (numbers around 897 million, because availabilityStartTime is 1970).",
+          "The status line shows segment <n> increasing every 2 s and latency settling around 6 to 8 s (target 6.0 s, three 2 s segments), with rate 1 and a small clock offset.",
+          "video.buffered.start(0) in the console is about 1.79 billion (seconds since 1970), and after a minute it trails currentTime by about 30 s as old media is pruned.",
+          "The video starts muted and plays continuously; the seek bar shows a live window rather than a fixed duration (mediaSource.duration is Infinity)."
+        ],
+        note: "Plays the public DASH-IF livesim2 stream, so it needs network access to livesim2.dashif.org and time.akamai.com (both allow CORS)."
+      },
+      {
+        type: "exercise",
+        title: "Chase The Edge",
+        task: [
+          "Reduce the target latency in getLiveSegmentRange from three segments to one, and add 1000 ms to the getNow passed to createLiveController, as if the local clock ran fast.",
+          "Watch the Network panel: segments are now requested slightly before they exist, so you should see 404s followed by a 200 about 750 ms later for the same segment number. Explain why the controller retries instead of skipping."
+        ],
+        hint: "Change timing.segmentDuration * 3 to timing.segmentDuration * 1 in live.js. Latency of 2 segments is safe on this stream; one segment sits exactly on the availability boundary, which is why clock error shows up as 404s."
       },
       {
         type: "demo",
@@ -3248,23 +2802,42 @@ Captions are synchronized to media time.`
         type: "code",
         title: "subtitles.js",
         explain: "Track elements let the browser fetch, parse, synchronize, and render WebVTT.",
-        code: `
-export function addSubtitleTrack(video, { src, label, language, defaultTrack = false }) {
-  const track = document.createElement("track");
-  track.kind = "subtitles";
-  track.label = label;
-  track.srclang = language;
-  track.src = src;
-  track.default = defaultTrack;
-  video.append(track);
-  return track;
-}
-
-export function showSubtitle(video, language) {
-  for (const track of video.textTracks) {
-    track.mode = track.language === language ? "showing" : "disabled";
-  }
-}`
+        file: "subtitle-practical/subtitles.js"
+      },
+      {
+        type: "code",
+        title: "Wire It Into The Player",
+        explain: "Add the track before playback starts and connect the English and Off buttons from index.html. showSubtitle disables every track whose language does not match, so asking for a language that does not exist (off) hides all subtitles.",
+        file: "subtitle-practical/player.js",
+        region: "subtitle-wiring"
+      },
+      {
+        type: "checkpoint",
+        slug: "subtitle-practical",
+        run: true,
+        files: [
+          "index.html",
+          "dash.js",
+          "player.js",
+          "subtitles.js",
+          "sample.vtt"
+        ],
+        verify: [
+          "Network shows sample.vtt fetched once with status 200.",
+          "In the console, video.textTracks.length is 1 and video.textTracks[0].mode is \"showing\".",
+          "\"Big Buck Bunny starts in a quiet field.\" appears from 1.0 to 4.0 s, and \"Captions are synchronized to media time.\" from 5.5 to 8.0 s, rendered by the browser.",
+          "Off hides the cue and sets mode to \"disabled\"; English shows it again. Seeking back to 0 replays the cues at the right times."
+        ],
+        note: "This snapshot is the adaptive-bitrate player plus subtitles.js, sample.vtt and two buttons."
+      },
+      {
+        type: "exercise",
+        title: "Add A Second Language",
+        task: [
+          "Write a sample.fr.vtt file with the same two cue times and French text, add it with addSubtitleTrack using language fr, and add a French button to index.html.",
+          "Confirm that only one language shows at a time and that video.textTracks.length is 2."
+        ],
+        hint: "Call addSubtitleTrack twice (only the English track should set defaultTrack) and wire a third button to showSubtitle(video, \"fr\")."
       },
       {
         type: "demo",
@@ -3303,94 +2876,13 @@ export function showSubtitle(video, language) {
         type: "code",
         title: "imsc-renderer.js",
         explain: "This parser walks TTML/IMSC p elements, extracts timing, and renders active cues into a video overlay.",
-        code: `
-export async function installImscRenderer(video, url) {
-  const cues = await loadImscCues(url);
-  const overlay = createOverlay(video);
-
-  function render() {
-    const now = video.currentTime;
-    const active = cues.filter((cue) => cue.begin <= now && now < cue.end);
-    overlay.replaceChildren(...active.map(renderCue));
-  }
-
-  video.addEventListener("timeupdate", render);
-  video.addEventListener("seeking", render);
-  video.addEventListener("emptied", () => overlay.replaceChildren());
-  render();
-}
-
-async function loadImscCues(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(\`Failed to fetch \${url}\`);
-
-  const xml = await response.text();
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  return [...doc.getElementsByTagNameNS("*", "p")].map((node) => ({
-    begin: parseClock(node.getAttribute("begin")),
-    end: parseClock(node.getAttribute("end")),
-    region: node.getAttribute("region") ?? "default",
-    text: node.textContent.trim().replace(/\\s+/g, " ")
-  }));
-}
-
-function createOverlay(video) {
-  let stage = video.parentElement;
-  if (!stage?.classList.contains("video-stage")) {
-    stage = document.createElement("div");
-    video.before(stage);
-    stage.append(video);
-  }
-  stage.classList.add("video-stage");
-
-  const overlay = document.createElement("div");
-  overlay.className = "imsc-overlay";
-  stage.append(overlay);
-  return overlay;
-}
-
-function renderCue(cue) {
-  const element = document.createElement("div");
-  element.className = \`imsc-cue imsc-region-\${cue.region}\`;
-  element.textContent = cue.text;
-  return element;
-}
-
-function parseClock(value) {
-  const match = /^(\\d+):(\\d{2}):(\\d{2}(?:\\.\\d+)?)$/.exec(value ?? "");
-  if (!match) return 0;
-  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-}`
+        file: "imsc-practical/imsc-renderer.js"
       },
       {
         type: "code",
         title: "imsc.css",
         explain: "The custom renderer needs a stage around the video and an overlay that does not intercept controls.",
-        code: `
-.video-stage {
-  position: relative;
-  width: fit-content;
-}
-
-.imsc-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  align-items: end;
-  justify-items: center;
-  padding: 5%;
-  pointer-events: none;
-}
-
-.imsc-cue {
-  max-width: 80%;
-  padding: 0.35rem 0.6rem;
-  border-radius: 0.25rem;
-  background: rgba(0, 0, 0, 0.78);
-  color: white;
-  font: 600 1.1rem/1.35 system-ui, sans-serif;
-  text-align: center;
-}`
+        file: "imsc-practical/imsc.css"
       },
       {
         type: "text",
@@ -3408,12 +2900,39 @@ function parseClock(value) {
       {
         type: "code",
         title: "Using The Renderer",
-        explain: "Remove the WebVTT track setup and install the custom IMSC overlay instead.",
-        code: `
-import { installImscRenderer } from "./imsc-renderer.js";
-
-const video = document.querySelector("#video");
-await installImscRenderer(video, "./sample.ttml");`
+        explain: "Remove the WebVTT track setup and install the custom IMSC overlay instead. In the checkpoint this call sits before playDash starts the adaptive-bitrate player, and index.html links imsc.css.",
+        file: "imsc-practical/player.js",
+        region: "using-renderer"
+      },
+      {
+        type: "checkpoint",
+        slug: "imsc-practical",
+        run: true,
+        files: [
+          "index.html",
+          "dash.js",
+          "player.js",
+          "imsc-renderer.js",
+          "imsc.css",
+          "sample.ttml"
+        ],
+        verify: [
+          "Network shows sample.ttml fetched once; there is no sample.vtt request.",
+          "In the console, video.textTracks.length is 0: the cues are not native text tracks.",
+          "\"Big Buck Bunny starts in a quiet field.\" appears over the bottom of the video from 1.0 to 4.0 s, and \"IMSC cues can carry richer layout information than WebVTT.\" from 5.5 to 8.0 s.",
+          "DevTools Elements shows a .video-stage wrapper containing the video and a .imsc-overlay with a .imsc-cue.imsc-region-bottom child while a cue is active, and the overlay empties between cues.",
+          "Seeking re-renders immediately (the renderer listens to seeking as well as timeupdate)."
+        ],
+        note: "This snapshot is the adaptive-bitrate player with the IMSC overlay in place of WebVTT."
+      },
+      {
+        type: "exercise",
+        title: "Add A Top Region",
+        task: [
+          "Add a third cue to sample.ttml with region=\"top\" between 9 and 12 seconds, and a matching .imsc-region-top rule in imsc.css that pins it to the top of the video.",
+          "Confirm in the Elements panel that the cue gets the class imsc-region-top, and that the bottom cues are unaffected."
+        ],
+        hint: "The renderer already emits imsc-region-<name>. Add <region xml:id=\"top\" /> to the TTML layout for tidiness, and use align-self: start in the new CSS rule, since the overlay is a grid with align-items: end."
       },
       {
         type: "demo",
@@ -3487,69 +3006,31 @@ await installImscRenderer(video, "./sample.ttml");`
         type: "code",
         title: "drm.js",
         explain: "This is the smallest useful EME shape. It creates one session per distinct initData, answers the license request with only the keys the CDM asked for, and requests both video and audio capabilities. Production DRM replaces createClearKeyLicense with a license server fetch.",
-        code: `
-// keys: [{ kid: "<32 hex chars>", key: "<32 hex chars>" }, ...] (16-byte key IDs and keys)
-export async function installClearKey(video, keys) {
-  if (!window.isSecureContext) {
-    throw new Error("EME requires a secure context or localhost.");
-  }
-
-  const config = [{
-    initDataTypes: ["cenc"],
-    videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.64001f"' }],
-    audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }]
-  }];
-
-  const access = await navigator.requestMediaKeySystemAccess("org.w3.clearkey", config);
-  const mediaKeys = await access.createMediaKeys();
-  await video.setMediaKeys(mediaKeys);
-
-  const keyTable = new Map(keys.map(({ kid, key }) => [hexToBase64Url(kid), hexToBase64Url(key)]));
-  const seenInitData = new Set();
-
-  video.addEventListener("encrypted", async (event) => {
-    // Audio and video each fire "encrypted", often with identical initData: one session per distinct value.
-    const id = bytesToBase64(new Uint8Array(event.initData));
-    if (seenInitData.has(id)) return;
-    seenInitData.add(id);
-
-    try {
-      const session = mediaKeys.createSession();
-      session.addEventListener("message", async (messageEvent) => {
-        await session.update(createClearKeyLicense(messageEvent.message, keyTable));
-      });
-      await session.generateRequest(event.initDataType, event.initData);
-    } catch (error) {
-      seenInitData.delete(id);
-      console.error("ClearKey session failed", error);
-    }
-  });
-}
-
-// The request message is JSON: { "kids": ["<base64url key id>", ...], "type": "temporary" }.
-export function createClearKeyLicense(message, keyTable) {
-  const request = JSON.parse(new TextDecoder().decode(message));
-  const keys = request.kids
-    .filter((kid) => keyTable.has(kid))
-    .map((kid) => ({ kty: "oct", kid, k: keyTable.get(kid) }));
-
-  if (!keys.length) throw new Error(\`No ClearKey key for requested kids: \${request.kids.join(", ")}\`);
-  return new TextEncoder().encode(JSON.stringify({ keys, type: "temporary" }));
-}
-
-// ClearKey wants kid and k as base64url (no padding) of the raw 16 bytes.
-export function hexToBase64Url(hex) {
-  if (!/^(?:[0-9a-f]{2}){16}$/i.test(hex)) throw new Error("Expected 32 hex characters (16 bytes)");
-  const bytes = hex.match(/../g).map((pair) => parseInt(pair, 16));
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
-}
-
-function bytesToBase64(bytes) {
-  return btoa(String.fromCharCode(...bytes));
-}`
+        file: "drm-practical/drm.js"
+      },
+      {
+        type: "checkpoint",
+        slug: "drm-practical",
+        run: false,
+        files: [
+          "drm.js"
+        ],
+        verify: [
+          "node --check passes on drm.js, and it imports cleanly as an ES module in the browser console on localhost or HTTPS.",
+          "hexToBase64Url(\"00112233445566778899aabbccddeeff\") returns \"ABEiM0RVZneImaq7zN3u_w\": 22 characters, no padding, no + or /.",
+          "hexToBase64Url throws for anything that is not 32 hex characters.",
+          "createClearKeyLicense returns JSON bytes shaped like {\"keys\":[{\"kty\":\"oct\",\"kid\":...,\"k\":...}],\"type\":\"temporary\"} for a requested kid it knows, and throws for an unknown kid."
+        ],
+        note: "No runnable page yet: a ClearKey-encrypted test asset arrives in a later DRM chunk. For now this checkpoint is a module you can exercise from the console."
+      },
+      {
+        type: "exercise",
+        title: "Test The License Builder",
+        task: [
+          "In a scratch module or the browser console, import drm.js and build a key table with one kid and key using hexToBase64Url. Encode a request message with TextEncoder as {\"kids\":[<base64url kid>],\"type\":\"temporary\"}.",
+          "Call createClearKeyLicense and decode the result. Then request an unknown kid and confirm it throws, and explain why filtering to known kids matters."
+        ],
+        hint: "keyTable is a Map from base64url kid to base64url key, exactly as installClearKey builds it. new TextDecoder().decode(result) gives you the JSON to read."
       },
       {
         type: "demo",
