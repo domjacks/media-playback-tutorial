@@ -1,0 +1,86 @@
+---
+slug: "measure-qoe"
+title: "Measure Playback Quality"
+kind: "Practical"
+summary: "Instrument the adaptive-bitrate player to record startup, rebuffering, switching, bitrate, dropped frames and per-request throughput, and tag every segment request with CMCD."
+outcome: "The player shows a live QoE panel, derives throughput from Resource Timing (and detects when the browser hides it), and attaches a valid CMCD query argument to each request."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/Performance_API/Resource_timing"
+---
+
+## What We Are Adding
+
+The adaptive-bitrate player already decides which Representation to fetch. It cannot yet tell you whether those decisions were good. This checkpoint adds two small modules and wires them into the same BBB player:
+
+- `qoe.js` records what the viewer experienced: startup time, rebuffers, switches, average bitrate, dropped frames.
+- `cmcd.js` serialises CMCD version 1 keys and appends them to each request as a `CMCD=` query argument.
+- The segment loop now measures each download with Resource Timing, feeds that to ABR, and reports the last value back to the CDN as `mtp`.
+
+`dash.js` is unchanged from the adaptive-bitrate checkpoint. `player.js` keeps the same ABR loop but fetches through a CMCD-aware helper.
+
+<Diagram visual="timeline" />
+
+## Record The Experience
+
+Startup time is measured from player creation to the first frame the compositor presents. `requestVideoFrameCallback` is the precise signal, because the `playing` event can fire before a frame is visible; it is used where available, with `playing` as a fallback.
+
+A rebuffer is a `waiting` event that is followed by `playing`, with two exclusions: the initial wait before the first frame, and any wait caused by a seek. Both fire `waiting` too, and counting them would make every seek look like a stall.
+
+Switches are detected when consecutive video segments have different declared bandwidths. Average bitrate is weighted by media seconds actually played, not by how many segments were downloaded, so a segment that is buffered but not yet played does not count.
+
+<Snippet title="Record Startup, Stalls And Switches" explain="Listeners and counters. waiting events are ignored before the first frame and while seeking, and a stall is closed by the next playing event. recordSegment is called once per video segment in order, and any change of bandwidth between neighbours is a switch." file="measure-qoe/qoe.js" region="qoe-recorder" />
+
+<Snippet title="Derive The Metrics" explain="Pure functions over the recorded state, so they can be tested without a browser. The rebuffer ratio is stalled time divided by playing plus stalled time. Oscillation counts switches that reverse the direction of the previous switch. getVideoPlaybackQuality supplies dropped and total frames." file="measure-qoe/qoe.js" region="qoe-metrics" />
+
+## Measure Each Request
+
+The adaptive-bitrate loop measured throughput with wall-clock time around `fetch()`, which includes DNS, TLS and server think time. The Resource Timing API separates those phases, so body bytes divided by `responseEnd - responseStart` is closer to the real transfer rate.
+
+There is a catch. For cross-origin requests the browser hides the detailed timing and sizes unless the response carries `Timing-Allow-Origin` naming your origin (or `*`). Without it `transferSize`, `encodedBodySize` and `responseStart` are all 0. The BBB CDN sends `Timing-Allow-Origin: https://www.bbc.co.uk, https://www.bbc.com, https://emp.bbc.co.uk`, so from `localhost` you will see the fallback path. The code detects this and labels each request `resource-timing` or `fetch-fallback` so the panel is honest about its source.
+
+<Snippet title="Resource Timing With A Fallback" explain="readResourceTiming polls for the entry because it is queued just after the body completes. describeTiming treats an entry with transferSize 0 and responseStart 0 as hidden and falls back to the wall-clock time of the fetch. timedFetch returns the bytes plus a timing record." file="measure-qoe/qoe.js" region="request-timing" />
+
+## Tag Requests With CMCD
+
+CMCD lets the player tell the CDN what it knows: buffer length, measured throughput, the bitrate being requested, whether it is in startup. Version 1 keys are simple scalars. Strings are quoted, tokens such as `ot=v` are not, booleans are the bare key, and keys are sorted alphabetically.
+
+For a browser the transmission choice is easy. Request headers (`CMCD-Request`, `CMCD-Object` and so on) are custom headers, so every request would need a CORS preflight, and the server would have to list them in `Access-Control-Allow-Headers`. The BBB CDN lists only `Origin,Range,Accept-Encoding,Referer`. A query argument needs neither, and BBB still returns 200 with the extra `?CMCD=` parameter.
+
+<Snippet title="Serialise CMCD" explain="Drops undefined and false values, sorts keys, renders numbers as integers, quotes strings and escapes quotes and backslashes. The output is the structured-field dictionary that CTA-5004 requires." file="measure-qoe/cmcd.js" region="cmcd-serialize" />
+
+<Snippet title="Append As A Query Argument" explain="The whole payload is URL-encoded as the value of a single CMCD parameter, joined with & when the URL already has a query string." file="measure-qoe/cmcd.js" region="cmcd-query" />
+
+<Snippet title="A CMCD Session" explain="Constant keys (sid, cid, sf, st) live in the session; per-request keys arrive as fields. bl and dl are rounded to 100 ms and mtp to 100 kbps as the spec requires, and the enabled flag lets the page switch CMCD off." file="measure-qoe/cmcd.js" region="cmcd-session" />
+
+## Wire It Into The Player
+
+fetchWithCmcd builds the field set from the live player state, fetches with timing, remembers the last throughput for the next request's `mtp`, and keeps recent requests for the panel. The ABR loop is the one from the previous lesson with two changes: it fetches through this helper, and the EWMA is fed the Resource Timing throughput.
+
+<Snippet title="Fetch With CMCD And Timing" explain="su stays true until the buffer first reaches 10 s. bs is sent once after a rebuffer. The top bitrate is only attached to video requests, because tb must match the object type being requested." file="measure-qoe/player.js" region="cmcd-fetch" />
+
+<Snippet title="ABR Loop With Metrics" explain="Same decision logic as the adaptive-bitrate lesson. Each video segment is fetched with its bitrate, duration and a guess at the next object (nor), then recorded for the QoE panel." file="measure-qoe/player.js" region="abr-loop" />
+
+<Snippet title="Render The Metrics Panel" explain="A text panel refreshed twice a second. It prints the current CMCD payload, the last few requests, and a warning when any of them used the fetch fallback." file="measure-qoe/player.js" region="metrics-panel" />
+
+<Checkpoint slug="measure-qoe" run files={["index.html","dash.js","cmcd.js","qoe.js","player.js"]} note="Serve the checkpoint folder from localhost. It needs network access to the BBB R&D CDN (vod-dash-ww-rd-live.akamaized.net).">
+
+- The panel shows a startup time in milliseconds once the first frame appears, then a rebuffer count of 0 on a healthy connection.
+- Every segment request in the Network panel has a query string like `?CMCD=bl%3D12300%2Cbr%3D1417%2Ccid%3D%22bbb-avc1-high%22%2C...`. Decoding it gives alphabetically ordered keys such as `bl`, `br`, `cid`, `d`, `dl`, `mtp`, `ot=v`, `sf=d`, `sid`, `st=v`, `tb`. The request still returns 200.
+- Init segment requests carry `ot=i` and no `br`. The first requests include `su` with no value; it disappears once the buffer is over 10 s.
+- Each recent request line ends with `fetch-fallback` and a warning appears under the list: from localhost the BBB `Timing-Allow-Origin` does not name your origin, so Resource Timing hides sizes and the player used wall-clock time.
+- Throttle to Fast 3G mid-playback: bitrate switches goes up, the average bitrate falls below the starting value, and a long enough stall increments rebuffers and the next request carries `bs`.
+- Seek backwards in the video: the rebuffer count does not change, because seeking waits are excluded.
+- Untick the CMCD box: the next requests have no query string and the panel shows CMCD off.
+
+</Checkpoint>
+
+<Exercise title="Send CMCD As Headers">
+
+Change the player to send CMCD in request headers instead of the query argument: put `sid`, `cid`, `sf` and `st` in a `CMCD-Session` header and `br`, `d`, `ot`, `tb` in `CMCD-Object` (the rest go in `CMCD-Request` and `CMCD-Status`), passed as the `headers` option to `fetch`.
+
+Open DevTools and compare. Which request fails, why, and what would the CDN have to change to make it work?
+
+<Hint>The browser sends an OPTIONS preflight with `Access-Control-Request-Headers: cmcd-object,...` first. The BBB response lists only `Origin,Range,Accept-Encoding,Referer`, so the real GET is blocked and the console reports a CORS error. The fix is on the server: add `CMCD-Request, CMCD-Object, CMCD-Status, CMCD-Session` to `Access-Control-Allow-Headers`, which is exactly what CTA-5004 asks servers to do. Each unique URL then costs an extra round trip, which is why the spec prefers query arguments for browsers.</Hint>
+
+</Exercise>
+
+<Demo title="Quality Of Experience" mode="timeline">Startup, stalls and quality switches are measured against the same timeline the viewer sees.</Demo>

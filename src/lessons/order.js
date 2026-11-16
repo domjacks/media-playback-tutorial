@@ -40,6 +40,10 @@ export const lessonSections = [
     slugs: ["live-theory", "dash-live-timing", "live"]
   },
   {
+    title: "Delivery And Quality",
+    slugs: ["http-delivery", "qoe-and-cmcd", "measure-qoe", "low-latency-theory", "low-latency-practical"]
+  },
+  {
     title: "Subtitles",
     slugs: ["subtitle-theory", "subtitle-practical", "imsc-practical"]
   },

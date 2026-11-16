@@ -1,0 +1,118 @@
+---
+slug: "low-latency-theory"
+title: "Low-Latency Streaming"
+kind: "Theory"
+summary: "Where live latency comes from, and how chunked CMAF, LL-DASH and LL-HLS cut it to a few seconds, with the throughput-estimation problem that comes with them."
+outcome: "You can break glass-to-glass latency into its parts, explain chunked CMAF delivery, read the LL-DASH and LL-HLS signalling, and explain why bandwidth estimation and catch-up need different logic at low latency."
+reference: "https://dashif.org/dash.js/pages/usage/low-latency.html"
+---
+
+## Where Latency Comes From
+
+Glass-to-glass latency is the time from light hitting the camera to light leaving the viewer's screen. Each stage adds some.
+
+- Capture and encode: encoder lookahead, B-frames and rate-control buffers. Anywhere from tens of milliseconds for a tuned hardware encoder to a few seconds for a quality-first software one.
+- Contribution: moving the feed to the packager over RTMP, SRT, WebRTC or similar.
+- Packaging: a segment can only be published once it is complete, so segment duration is a hard floor in classic streaming. A 6 s segment cannot reach the CDN before its last frame exists.
+- Origin and CDN: publication, propagation to the edge and a cache fill on the first request.
+- Manifest and availability: the player learns a segment exists by refreshing the manifest, or by computing availability from a clock.
+- Player buffer: players hold several segments to ride out variation. RFC 8216 tells HLS clients not to start closer than three target durations from the end of a live playlist, which with 6 s segments is already 18 s.
+- Decode and render: usually small, but hardware decode queues and display pipelines add tens to hundreds of milliseconds.
+
+For classic segmented streaming, latency is roughly the packager delay plus several segment durations. That is why 6 to 10 s segments give 20 to 40 s end to end, and why shortening segments to 2 s gives roughly 6 to 10 s. The remaining gain has to come from not waiting for whole segments.
+
+<Diagram visual="av-sync" />
+
+## Typical Figures
+
+These are approximate and depend on tuning, so treat them as orders of magnitude.
+
+- Classic HLS and DASH, 6 to 10 s segments: 20 to 40 s.
+- Tuned segmented streaming with 2 s segments: 6 to 10 s.
+- LL-HLS and LL-DASH with chunked CMAF: commonly 2 to 5 s in production, with demonstrations lower. The DASH-IF livesim2 test stream used in the practical lesson advertises a target of 3.5 s.
+- WebRTC: typically well under a second, at the cost of scale, CDN caching and ABR flexibility.
+
+## Chunked CMAF
+
+CMAF defines a segment as a sequence of fragments, and a fragment as one or more chunks, each a `moof` + `mdat` pair. A 2 to 6 s segment can therefore be cut into chunks of 0.5 to 1 s, or even a single frame or GOP. Each chunk is decodable on its own once earlier chunks of the segment have been seen.
+
+The packager does not wait for the segment to finish. As each chunk completes it is written to the response, using HTTP/1.1 `Transfer-Encoding: chunked`, or the streaming body of HTTP/2 or HTTP/3 (which have no chunked encoding but send data frames incrementally). The URL for segment N is requested early. The origin holds the response open and emits chunks at the media rate, and the player reads the body as a stream and appends each chunk to its SourceBuffer.
+
+This also means the whole chain has to cooperate. The ingest from the packager to the origin must itself be streamed, the CDN must forward bytes to waiting clients while it is still receiving them from the origin (instead of buffering the whole object before replying), and request collapsing must let many clients share one in-progress upstream response. Any hop that buffers the whole segment brings the latency back.
+
+Because chunk boundaries are not necessarily random access points, a player joining mid-segment normally starts at a segment boundary or at a signalled resync point; only the first chunk of a GOP starts with a keyframe.
+
+## LL-DASH
+
+The DASH-IF low-latency guidelines (built on the DASH specification and CMAF) add signalling so a player can request segments early and behave sensibly.
+
+- `SegmentTemplate@availabilityTimeOffset`: seconds by which a segment is available before its normal availability time. Normal availability is the segment end; with `availabilityTimeOffset="1.5"` on a 2 s segment, the first chunk can be requested 0.5 s after the segment starts.
+- `SegmentTemplate@availabilityTimeComplete="false"`: the segment is not complete when it becomes available; a request may be answered progressively and the final size is unknown.
+- `ServiceDescription` with `Latency` (`target`, `min`, `max` in milliseconds) and `PlaybackRate` (`min`, `max`, for example 0.96 and 1.04). These are the operator's intent: aim for this latency, never drift outside these bounds, and adjust playback speed within this range to get there.
+- `ProducerReferenceTime`: ties media time to the encoder's wall-clock time so a player can measure true latency, not just distance from its own idea of live.
+- `UTCTiming`: a server clock; low-latency playback is sensitive to clock error, as a request that is too early gets a 404 (livesim2 returns 425 Too Early) and one that is too late adds latency.
+- `Resync` elements signal positions within segments where a player may begin or resynchronise at finer granularity than a segment boundary.
+- The MPD uses `SegmentTemplate` with `$Number$` or `$Time$` and does not need to be refreshed for each segment, since the player can compute availability from the clock.
+
+<Snippet title="LL-DASH MPD Fragments From livesim2" explain="The MPD for chunkdur_0.5/ato_1.5/testpic_2s: a ServiceDescription with a 3.5 s target and a 0.96 to 1.04 rate range, and a video SegmentTemplate with 2 s segments (180000 / 90000) that are available 1.5 s early and incomplete when first requested.">
+
+```xml
+<ServiceDescription id="0">
+  <Latency referenceId="0" target="3500" max="7000" min="2625"/>
+  <PlaybackRate max="1.04" min="0.96"/>
+</ServiceDescription>
+...
+<SegmentTemplate media="$RepresentationID$/$Number$.m4s"
+                 initialization="$RepresentationID$/init.mp4"
+                 duration="180000" startNumber="0" timescale="90000"
+                 availabilityTimeOffset="1.5" availabilityTimeComplete="false"/>
+```
+
+</Snippet>
+
+## LL-HLS
+
+Apple's Low-Latency HLS reaches the same goal with playlist tags and server behaviour instead of availability arithmetic.
+
+- Partial segments: `#EXT-X-PART-INF:PART-TARGET=0.5` declares the part duration, and each `#EXT-X-PART:DURATION=0.5,URI="...",INDEPENDENT=YES` lists a part. `INDEPENDENT=YES` marks a part that starts with a keyframe. Parts are CMAF chunks, and once a segment completes it is listed as a normal `#EXTINF` segment.
+- `#EXT-X-PRELOAD-HINT:TYPE=PART,URI="..."`: names the next part before it exists. The player requests it immediately and the server holds the response until the part is produced.
+- Blocking playlist reload: `#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES`. The player requests the playlist with `_HLS_msn=<media sequence number>` and optionally `_HLS_part=<part index>`, and the server holds the response until that segment or part is in the playlist. This replaces polling, and removes the latency from refresh timing.
+- Delta updates: with `CAN-SKIP-UNTIL`, the player sends `_HLS_skip=YES` and the server replies with `#EXT-X-SKIP`, omitting older segments, which keeps frequent playlist reloads small.
+- Rendition reports: `#EXT-X-RENDITION-REPORT` in a playlist gives the last media sequence number and part of the other renditions, so a player switching renditions can request the right part without first reloading that playlist.
+- `PART-HOLD-BACK` and `HOLD-BACK` in `EXT-X-SERVER-CONTROL` tell the player how far from the live edge to stay, in terms of parts and target durations. The spec requires the part hold-back to be a few times the part target; the player is not meant to sit closer.
+
+The held requests mean a server has many idle connections, so Apple's guidance is to serve LL-HLS over HTTP/2 or later. CMSD's `ht` (held time) key exists so a server can report how long it held a blocking response, helping players correct their throughput estimates.
+
+## The Bandwidth Estimation Problem
+
+Classic ABR measures throughput as bytes divided by download time. With chunked delivery that calculation is wrong. If a segment is produced in real time, the response takes about as long as the media lasts: a 2 s segment of 4 Mbps video takes about 2 s to arrive. The measured throughput is therefore about 4 Mbps whether the link can carry 5 Mbps or 50 Mbps. The player cannot see headroom, so it never switches up. It can see a drop, but only once throughput falls below the media bitrate.
+
+The useful signal is hidden in the bursts. When chunks have already been produced, they flow at link speed, and between chunks the connection is idle waiting for the packager. Chunk-aware estimators therefore measure only the periods when data is actually flowing, or compare the time to receive each chunk with the time since it was produced.
+
+- dash.js records timestamps and byte counts as data arrives during each segment download and offers estimation modes that ignore the idle gaps.
+- ACTE (ABR for Chunked Transfer Encoding; Bentaleb, Timmerer and Beğen, MMSys 2019) measures bandwidth from chunk-level samples in a sliding window and predicts it with an adaptive filter.
+- LoL+ and L2A-LL are low-latency ABR algorithms shipped as options in dash.js, combining throughput estimates with latency and buffer constraints.
+
+Even good estimators are noisy, which is why low-latency players keep small, strict buffers and prefer conservative decisions. Server hints such as CMSD `etp` (the server's estimate of throughput) and `rd` (response delay) can help.
+
+## Catch-Up With playbackRate
+
+A low-latency player runs with only a second or two of buffer, so any hiccup causes either a stall or a latency increase. Recovering latency by seeking is jarring, so players change `video.playbackRate` by a few percent instead. The MPD's `PlaybackRate` element gives the allowed range, commonly 0.96 to 1.04.
+
+- Latency above target: play slightly faster. At 4 % faster, each second of playback recovers 0.04 s, so removing a 2 s excess takes about 50 s.
+- Latency below target or buffer thin: play slightly slower to rebuild buffer.
+- A dead band around the target avoids constant adjustment.
+- For large errors, such as after a long stall, seek to the live edge rather than speeding up for minutes.
+
+Audio pitch is preserved by browsers at small rate changes, and rate changes of a few percent are rarely noticeable.
+
+## Beyond Chunked HTTP
+
+Chunked CMAF reaches a few seconds on the same CDN infrastructure as ordinary streaming. For lower latency the transport changes.
+
+- WebRTC, with WHIP (RFC 9725) for ingest and the WHEP draft for playback, delivers sub-second latency using RTP over UDP. It trades away cacheability, so it scales through specialised media servers rather than a CDN, and it has little room for client-side buffering or ABR beyond simulcast.
+- Media over QUIC (MoQ), an IETF effort, aims for sub-second delivery that can still fan out through relays. It is not yet a finished standard.
+
+For most broadcast-style live events, a few seconds on chunked CMAF is the practical trade-off. The next lesson builds exactly that.
+
+<Demo title="Chunked Delivery" mode="packets">Chunks of a segment reach the player while the segment is still being produced, which removes the wait for a whole segment.</Demo>

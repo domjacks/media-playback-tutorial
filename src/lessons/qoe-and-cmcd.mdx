@@ -1,0 +1,131 @@
+---
+slug: "qoe-and-cmcd"
+title: "Quality Of Experience And CMCD"
+kind: "Theory"
+summary: "The metrics that describe how playback felt to the viewer, how ABR choices trade them off, and how CMCD and CMSD carry player and server data to and from the CDN."
+outcome: "You can define and compute the standard QoE metrics, explain the trade-offs between them, and read, build and reason about CMCD request data and CMSD response data."
+reference: "https://cta-wave.github.io/Resources/common-media-client-data--cta-5004-b.html"
+---
+
+## What Quality Of Experience Means
+
+Quality of Service describes the network and servers: throughput, error rates, latency. Quality of Experience (QoE) describes what the viewer actually got: how long they waited, whether it stalled, how sharp it looked. The two are related but not the same. A fast CDN with a poor ABR algorithm still delivers a bad experience.
+
+A player should record QoE itself, because it is the only component that sees stalls, frames and the viewer's actions. Server logs see requests, not experience.
+
+<Diagram visual="timeline" />
+
+## The Core Metrics
+
+- Startup time (time to first frame): from the viewer's play request, or page load, to the first frame rendered. Measure it with `requestVideoFrameCallback` where available; the `playing` event can fire slightly before a frame is visible. It includes manifest fetch, initialisation segments, first media segment, decoder start and, with DRM, licence acquisition.
+- Exits before video start (EBVS): sessions where the viewer leaves before the first frame. This is the cost of long startup, and it is invisible if you only count successful sessions.
+- Rebuffering: the number of stalls and the time spent in them. The rebuffer ratio is stalled time divided by stalled plus playing time. Exclude startup and seeks, otherwise every seek looks like a failure.
+- Average bitrate: the mean of the bitrate that was actually shown. Weight it by media seconds played, not by segments downloaded, and distinguish the declared bandwidth from the delivered bytes.
+- Switch count and oscillation: how often the quality changed, and how often a change reversed the previous one (up then down, down then up). Every switch is a chance for a visible artefact; oscillation usually means ABR is reacting to noise.
+- Dropped frames: the decoder or renderer could not present a frame in time. `video.getVideoPlaybackQuality()` returns `droppedVideoFrames` and `totalVideoFrames`. High values at high bitrates suggest the device cannot cope, which is a reason to cap the ladder rather than a network problem.
+- Latency (live only): wall-clock time between capture and display. See the low-latency lessons.
+- Errors: fatal and recoverable playback errors by code, plus failed segment requests.
+
+Industry shorthand also includes video start failures, video playback failures, average bitrate and percentage of sessions with at least one rebuffer. Define each precisely before comparing numbers across teams or players; "rebuffer ratio" in particular is computed several ways.
+
+## How ABR Trades These Off
+
+Every ABR decision moves several metrics at once, and they pull in different directions.
+
+- Higher bitrate improves picture and raises average bitrate, but each segment takes longer to download, so the buffer drains faster and rebuffer risk rises.
+- A conservative start (low first Representation) shortens startup time and avoids an early stall, at the cost of a few seconds of low quality.
+- Switching down quickly protects against stalls; switching up slowly avoids oscillation. Both are cheap in switch count when the network is stable and expensive when it is noisy.
+- A deeper buffer absorbs variation and reduces stalls, but costs startup time (if the player waits to fill it) and, in live, latency.
+- Chasing the highest sustainable bitrate wastes bandwidth and can push the buffer to a point where one slow segment stalls playback.
+
+Published viewer-behaviour studies generally find that stalls and long startup hurt engagement more than moderate bitrate differences do, so most ABR algorithms avoid stalls first and maximise quality second. The weights differ by content type and audience, so treat any single published number as a hypothesis to test on your own data.
+
+## Reporting QoE Back
+
+Players report QoE in two ways. Beacons to an analytics backend carry session-level summaries such as startup time, rebuffer totals and errors. CMCD, below, carries per-request context to the CDN, which is useful for delivery optimisation and for joining CDN logs to player sessions through a session ID.
+
+## CMCD: Player To CDN
+
+Common Media Client Data (CMCD) is CTA-5004, produced by the CTA WAVE project (with the Streaming Video Technology Alliance). It standardises a small set of key-value pairs a player attaches to its requests, so a CDN can log them and optionally act on them.
+
+Version 1 was published in 2020. Version 2 was published in 2026 as CTA-5004-A, and the current revision is CTA-5004-B (April 2026). The keys below are the version 1 set, still the most deployed:
+
+- `br`: encoded bitrate of the requested object, integer kbps.
+- `bl`: buffer length, integer milliseconds, rounded to 100 ms.
+- `bs`: buffer starvation, a boolean sent only when true since the last report.
+- `cid`: content ID, a string.
+- `d`: object duration, integer milliseconds.
+- `dl`: deadline, ms until the object is needed, rounded to 100 ms.
+- `mtp`: measured throughput, kbps, rounded to 100.
+- `nor`: next object request, a relative path.
+- `nrr`: next range request, a byte range.
+- `ot`: object type, a token: `m` manifest, `a` audio, `v` video, `av` muxed, `i` init, `c` caption, `tt` timed text, `k` key or licence, `o` other.
+- `pr`: playback rate, sent only when not 1.0.
+- `rtp`: requested maximum throughput, kbps rounded to 100. A hint for fair-share delivery; servers are not required to throttle.
+- `sf`: streaming format token: `d` DASH, `h` HLS, `s` Smooth, `o` other (`e` for HESP in later versions).
+- `sid`: session ID, a UUID string, maximum 64 characters.
+- `st`: stream type: `v` VOD, `l` live (`ll` low-latency live in later versions).
+- `su`: startup, a boolean true while the object is needed urgently: startup, seeking or recovery.
+- `tb`: top bitrate in the ladder, for the requested object type, kbps.
+- `v`: version; omitted for version 1.
+
+Values follow RFC 8941 structured fields. Strings are quoted with `"` and escapes, tokens are bare, a true boolean is just the key, and keys are sent in alphabetical order to reduce fingerprinting. Unknown or unavailable values are omitted, never sent as zero. Version 2 additionally makes `v` mandatory, changes `br`, `bl`, `mtp`, `tb` and `nor` to inner lists tagged by object type (for example `br=(3000;v 128;a)`), and moves the next range request into `nor` as a parameter.
+
+<Snippet title="A CMCD Request" explain="The same data in the three transmission shapes. The query-argument form is the whole payload URL-encoded as one CMCD parameter. The header form shards the keys over four headers by how often they change. Both are version 1 syntax for a 3.84 s video segment.">
+
+```text
+Raw keys:
+bl=12300,br=1417,cid="bbb",d=3840,dl=12300,mtp=8100,nor="000011.m4s",ot=v,sf=d,sid="6e2fbf5c-...",st=v,tb=4741
+
+Query argument:
+GET /bbb/2/avc1/896x504p25/000010.m4s?CMCD=bl%3D12300%2Cbr%3D1417%2Ccid%3D%22bbb%22%2C...%2Ctb%3D4741
+
+Request headers (the four shards):
+CMCD-Request: bl=12300,dl=12300,mtp=8100,nor="000011.m4s"
+CMCD-Object:  br=1417,d=3840,ot=v,tb=4741
+CMCD-Status:  (rtp, bs)
+CMCD-Session: cid="bbb",sf=d,sid="6e2fbf5c-...",st=v
+```
+
+</Snippet>
+
+## Transmission Modes
+
+- Query argument: `CMCD=<URL-encoded payload>`, appended with `&` if the URL already has a query. Case-sensitive. No preflight, so it is the usual browser choice. It changes the URL, so the CDN must ignore it for caching.
+- Request headers: `CMCD-Request`, `CMCD-Object`, `CMCD-Status`, `CMCD-Session`. Keys are split by volatility to help HPACK and QPACK compress them. A web page using them triggers a CORS preflight per unique URL, and the CDN must list them in `Access-Control-Allow-Headers`. The spec itself recommends query arguments or batch reporting for browsers.
+- Event mode and batch (versions 2 and later): the player POSTs newline-separated CMCD records, `Content-Type: application/cmcd`, to a separate endpoint. Each record carries `ts` (timestamp) and `e` (event type: play state change, rebuffer, error, bitrate change, response received, time interval and others). This decouples reporting from segment requests and suits third-party analytics. The earlier JSON object mode was replaced by this POST body.
+
+Version 2 therefore has two reporting modes: request mode, mandatory, attaches data to each media object request; event mode, optional, sends reports at events to alternate destinations. For compatibility with CDNs that only understand version 1, the spec says a player should be able to send version 1 syntax in request mode while using version 2 syntax in event mode.
+
+Version 2 adds, among others, `sta` (playback state), `pt` (playhead time), `msd` (media start delay, the startup time metric above), `bsa`, `bsd` and `bsda` (buffer starvation counts and durations), `dfa` (dropped frames), `ltc` (live latency), `ec` (error codes), `ab`, `lb` and `tpb` (aggregate, lowest and top playable bitrates), `sn` (sequence number) and, in `rr` events, response data such as `rc`, `ttfb`, `ttlb` and `url`. Support in players and CDNs for these is still arriving, so check what your pipeline ingests before relying on them.
+
+## What A CDN Does With It
+
+Most CDNs simply log CMCD, joined by `sid`, which makes per-session debugging possible without a player SDK. Optional uses include:
+
+- `rtp`: pace the response so a player is not over-served while others starve.
+- `nor`/`nrr`: warm the cache for the next segment. The server may ignore it; the spec says a player must not depend on prefetch.
+- `su` and `dl`: prioritise urgent requests under load.
+
+Servers must ignore unknown keys and invalid values, must handle missing keys, must prefer headers over query arguments when both are present, and should validate values before acting on them because a malicious player can send false data to gain priority.
+
+## CMSD: CDN To Player
+
+Common Media Server Data (CMSD, CTA-5006) is the reverse channel. A server or intermediary adds two response headers, in the same structured-field syntax.
+
+- `CMSD-Static` carries values about the object that do not change along the path: `at` (availability time at the origin, ms since the Unix epoch), `br`, `d`, `ht` (held time, for blocking responses), `n` (intermediary id), `nor`/`nrr`, `ot`, `sf`, `st`, `su`, `v`.
+- `CMSD-Dynamic` carries values that each hop may rewrite. It starts with the identity of the server, then parameters: `etp` (the server's estimate of throughput to this client, kbps), `rd` (response delay, which helps the player compute throughput that excludes server wait), `rtt` (round-trip time estimate), `mb` (maximum suggested bitrate: if the player is above it, it should drop to it or below), and `du` (the server is under duress, a hint to move away).
+
+For a player the useful cases are using `etp` and `rd` as an extra bandwidth signal, honouring `mb` as a server-driven bitrate cap, and using `at` to compute live latency without trusting the player's own timing. CMCD version 2 can echo CMSD data back in `rr` events (`cmsds`, `cmsdd`) for analysis. Cross-origin, these headers must be listed in `Access-Control-Expose-Headers` or the script cannot read them.
+
+## Privacy
+
+CMCD is deliberately limited: no IP address, cookie, location or user identity. It still has privacy impact.
+
+- `sid` and `cid` together with a CDN log identify what a session watched; `sid` should be a fresh random UUID, not derived from a user ID.
+- Fine-grained values such as throughput and buffer are rounded to buckets, and keys are sorted, precisely to reduce fingerprinting. Optional keys such as `tpb` can expose device limits and the spec says not to send them by default.
+- The `url` key in event reports can leak tokens or user paths; players should be able to restrict what part of a URL is reported.
+- Use HTTPS. Data sent to a third party in event mode is subject to the same consent and data-protection rules as any other analytics.
+- Let integrators configure which keys are sent and where, and let servers drop what they do not need.
+
+<Demo title="Measure What The Viewer Felt" mode="timeline">Startup, stalls and quality changes are properties of the playback timeline, not of any single request.</Demo>

@@ -1,0 +1,83 @@
+---
+slug: "low-latency-practical"
+title: "Low-Latency DASH With Chunked Fetch"
+kind: "Practical"
+summary: "Stream a live segment while the server is still producing it, append each CMAF chunk the moment it is complete, and hold latency near a target with playbackRate."
+outcome: "The player requests the in-progress segment using availabilityTimeOffset, splits the response into moof+mdat chunks across arbitrary network boundaries, appends them as they arrive, and reports latency."
+reference: "https://github.com/Dash-Industry-Forum/livesim2/wiki"
+---
+
+## A Segment That Is Still Being Written
+
+The live lesson waits until a 2 s segment is complete, then downloads it. The best case latency is therefore more than one segment duration plus the player buffer. Chunked CMAF removes the first part of that: the packager publishes the segment URL while the segment is still being produced, and the server sends each chunk as soon as it exists.
+
+The test stream is DASH-IF livesim2 with two extra URL elements, `chunkdur_0.5` and `ato_1.5`:
+
+`https://livesim2.dashif.org/livesim2/chunkdur_0.5/ato_1.5/testpic_2s/Manifest.mpd`
+
+- `chunkdur_0.5` cuts each 2 s segment into four 0.5 s CMAF chunks, each one `moof`+`mdat`.
+- `ato_1.5` sets `availabilityTimeOffset="1.5"` and `availabilityTimeComplete="false"` on the SegmentTemplate: segment N may be requested 1.5 s before it is complete, that is 0.5 s after it starts.
+- The MPD also carries a `ServiceDescription` with a latency target of 3500 ms and a playback rate range of 0.96 to 1.04. This player uses both.
+
+You can see the delivery with Node 18 or later, no player required. A request made 0.55 s into a segment returns `transfer-encoding: chunked`, and the body arrives in four steps about 0.5 s apart rather than all at once. Requested 0.3 s into a segment, the same URL returns `425 Too Early`.
+
+<Diagram visual="packets" />
+
+## Know When To Ask
+
+For a normal segment the player computes its availability as the end of the segment. With `availabilityTimeOffset` the first chunk is available that much earlier. The helpers below parse the extra attributes and turn wall-clock time into the newest segment that has at least one chunk.
+
+<Snippet title="Parse Low-Latency Timing" explain="parseLiveTiming now also reads availabilityTimeOffset, availabilityTimeComplete, the ServiceDescription latency target and the PlaybackRate range, with defaults of 3 s and 0.96 to 1.04 when the MPD has none." file="low-latency-practical/live.js" region="ll-timing" />
+
+<Snippet title="Segment Availability With ATO" explain="segmentAvailableAt is the end of the segment minus the offset. getLowLatencyEdge returns the newest in-progress segment, the live presentation time, the target playback time, and the segment that contains the target time, which is where the player starts." file="low-latency-practical/live.js" region="ll-edge" />
+
+## Split The Stream Into Chunks
+
+`fetch` exposes the response as a stream: `response.body.getReader()` yields `Uint8Array` values as bytes arrive. Those network reads have no relationship to media chunk boundaries. One read may hold half a `moof`, or the end of one `mdat` and the start of the next `moof`.
+
+MSE can in fact accept bytes split anywhere, so splitting is not about correctness. Appending only complete `moof`+`mdat` pairs is worth doing for three reasons: you make four appends per segment instead of dozens of tiny ones, each append is a decodable unit you can time and report, and a truncated response is detected instead of silently leaving half a chunk in the parser.
+
+The splitter reads the 8-byte box header (size and four-character type, with a 16-byte form when size is 1), waits until the full box has arrived, and groups leading boxes such as `styp` with the `moof` and `mdat` that follow. An `mdat` closes a unit.
+
+<Snippet title="Split On ISO-BMFF Box Boundaries" explain="push accepts any byte chunk and returns zero or more complete units. Boxes accumulate until an mdat completes a unit, and finish throws if the response ended in the middle of a box. This module has no browser dependencies and was unit tested against real livesim2 segments split at random byte positions." file="low-latency-practical/chunked.js" region="box-splitter" />
+
+<Snippet title="Stream One Segment" explain="Fetches the segment URL and reads the body as it arrives, awaiting onUnit for each complete chunk so a slow SourceBuffer applies back-pressure. It records when each chunk completed relative to the request. A 404 or 425 means the segment is not there yet, so it returns null for the caller to retry." file="low-latency-practical/chunked.js" region="stream-segment" />
+
+## The Streaming Loop
+
+The loop mirrors the live controller but is driven by chunks rather than whole segments. It starts at the segment holding the time `live - target latency`, which is already complete, then waits for each following segment's first-chunk availability time and streams audio and video in parallel into their own SourceBuffers.
+
+Each track has its own append queue, because audio and video chunks complete at different moments and `appendBuffer` calls on one SourceBuffer must not overlap.
+
+<Snippet title="Chunk-By-Chunk Live Loop" explain="Wait until segmentAvailableAt, stream every track for the segment number, and append each unit as it arrives. A null result means the packager disagrees with our clock by a few milliseconds, so the same segment is retried. After the first segment the player seeks to the target playback time and starts maintenance. If one track returns null after the other has already appended, the retry re-appends the same time range, which is harmless." file="low-latency-practical/player.js" region="ll-loop" />
+
+## Hold The Target With playbackRate
+
+Latency is `livePresentationTime - video.currentTime`. The player samples it four times a second. Above the target it plays slightly faster, below it slightly slower, and the rate is clamped to the range the MPD publishes. A 0.15 s dead band stops the rate fluttering, and a buffer under 0.4 s forces the minimum rate whatever the latency says.
+
+<Snippet title="Catch-Up Rate" explain="A proportional controller on the latency error, bounded by the ServiceDescription PlaybackRate range. Unit checks: latency 5 s with a 3.5 s target gives 1.04, 3.4 s gives 1, 2.5 s gives 0.96, and a nearly empty buffer gives 0.96 regardless." file="low-latency-practical/live.js" region="ll-catchup" />
+
+<Snippet title="Maintenance And Status Line" explain="Every 250 ms: compute latency, apply the catch-up rate, prune old buffer and update the live seekable range, then print latency, target, rate, buffer depth and the last chunk report." file="low-latency-practical/player.js" region="latency-status" />
+
+<Checkpoint slug="low-latency-practical" run files={["index.html","dash-live.js","live.js","chunked.js","player.js"]} note="Plays the public DASH-IF livesim2 low-latency stream, so it needs network access to livesim2.dashif.org and time.akamai.com (both allow CORS).">
+
+- Network shows V300/\<n>.m4s and A48/\<n>.m4s requests starting about 0.5 s after each 2 s boundary, not 2 s after. Each response has `transfer-encoding: chunked` (HTTP/1.1) or a streaming body (HTTP/2), and its timing bar shows a long content download of about 1.5 s.
+- The page prints the chunk arrival offsets for the latest segment, in the form `video segment N: +18 ms (12547 B) +508 ms (6320 B) +1008 ms (12054 B) +1508 ms (5921 B)`: four chunks roughly 0.5 s apart, the first immediate because it was already produced.
+- The status line settles near `latency 3.5 s (target 3.5 s)`, with `rate` between 0.96 and 1.04 and buffer around 3 s.
+- Compared with the live lesson, whose latency settles around 6 to 8 s, the latency is roughly half.
+- If you pause the video for a few seconds and resume, the latency rises, the rate sits at 1.04, and the latency falls slowly (4 % faster playback recovers 0.04 s per second) until it returns to the target.
+- Requesting a segment too early in DevTools (copy a future V300 URL into the address bar) returns 425, which the player treats as retry.
+
+</Checkpoint>
+
+<Exercise title="Estimate Throughput From Chunk Bursts">
+
+The arrival log shows why naive throughput is wrong here: a segment of about 38 KB takes 2 s to download, which is 150 kbps, while the link may carry 20 Mbps. The time is spent waiting for the packager, not for the network.
+
+Change the stream loop to estimate throughput per chunk instead. For each unit, divide its bytes by the time between its arrival and the previous unit's arrival, but only when the previous unit arrived less than 100 ms earlier (a burst). Log the estimate and compare it with the `bandwidth` declared in the MPD.
+
+<Hint>Keep the arrival time of the previous unit inside streamSegment and pass the estimate to onUnit. Only the first chunk or two of a segment arrive as a burst, because they already existed when you asked. Later chunks are paced by the packager at one per 0.5 s, so they yield no usable sample. That is the core difficulty of throughput estimation for chunked delivery, and why chunk-aware ABR algorithms only trust the burst portions.</Hint>
+
+</Exercise>
+
+<Demo title="Chunked Delivery" mode="packets">Chunks of a segment reach the player as they are produced, so playback can start behind the packager rather than behind a whole segment.</Demo>

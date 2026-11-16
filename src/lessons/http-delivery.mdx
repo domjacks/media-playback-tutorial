@@ -1,0 +1,138 @@
+---
+slug: "http-delivery"
+title: "HTTP Delivery And CDNs"
+kind: "Theory"
+summary: "How segments and manifests actually reach the player: CDN tiers, cache keys, caching headers, range requests, CORS, HTTP versions, signed URLs and multi-CDN."
+outcome: "You can read the headers on a media response, choose cache policy for manifests and segments, diagnose CORS and Resource Timing limits, and explain what HTTP/2, HTTP/3 and multi-CDN change for a streaming player."
+reference: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching"
+---
+
+## Media Is Just HTTP
+
+Everything so far, from progressive download to DASH and HLS, rides on ordinary HTTP GET requests. That is the design: media delivery reuses web caches and CDNs instead of needing special streaming servers. It also means a media player inherits every property of HTTP delivery, good and bad: caching rules, CORS, connection reuse, head-of-line blocking and authentication.
+
+A request from a player normally takes this path:
+
+- The player asks for a manifest or segment URL.
+- An edge server near the viewer answers from its cache if it has a fresh copy.
+- On a miss, the edge asks a parent tier or origin shield. A shield is a small set of mid-tier caches that sits in front of the origin so that hundreds of edges missing on the same segment cause one origin fetch, not hundreds.
+- On a miss there too, the shield asks the origin: the packager, object storage or a media server.
+
+Good CDNs also coalesce concurrent misses (sometimes called request collapsing): if ten thousand viewers ask for a brand-new live segment in the same second, the edge sends one upstream request and holds the others until it completes. That is what keeps a live origin alive.
+
+<Diagram visual="packets" />
+
+## Cache Keys
+
+A cache stores objects under a cache key, typically the host plus path plus some or all of the query string, and sometimes selected request headers named by `Vary`. Two requests with different keys are different objects, whatever the bytes.
+
+This matters for media in three ways:
+
+- Query strings are often part of the key. A per-user token or a CMCD parameter such as `?CMCD=...` makes every request unique unless the CDN is configured to ignore it. CTA-5004 notes this explicitly: caching proxies should consider excluding CMCD query arguments from the cache key.
+- `Vary` splits the cache. A response with `Vary: Origin`, as the BBC bucket's redirect shows below, is stored once per distinct `Origin` value. Echoing a different `Access-Control-Allow-Origin` per site forces this; a constant `*` does not.
+- Keep segment URLs stable and unique per content. If the same URL ever serves different bytes, caches will mix them.
+
+## Caching Headers
+
+Caching is controlled by `Cache-Control` (RFC 9111). The right policy differs sharply between object types.
+
+- VOD segments never change. Give them a long lifetime, for example `Cache-Control: public, max-age=31536000, immutable`. The BBC test stream sends `max-age=7200` (two hours), which is safe but means a re-fetch after two hours.
+- VOD manifests change rarely, but they are small and usually republished when content is edited. A few minutes to an hour is typical.
+- Live manifests change every segment or faster. Use a short `max-age` of roughly one to two seconds, or half the `minimumUpdatePeriod`, so an edge never serves a manifest older than the player expects. `stale-while-revalidate` and `stale-if-error` (RFC 5861) let an edge answer instantly while refreshing in the background, or keep serving if the origin fails.
+- Live segments behave like VOD segments once complete, so long lifetimes are fine. The failure case is an incomplete or missing segment: a cached 404 for a segment that will exist in 100 ms makes the player fail for as long as the 404 is cached. Give error responses a very short or zero TTL.
+
+Revalidation uses validators. A response carries `ETag` (and often `Last-Modified`); the cache or client later sends `If-None-Match` and receives `304 Not Modified` with no body if the object is unchanged. That is cheap for manifests that rarely change. Segments seldom need it because they are fresh for long.
+
+Not every origin sets any of this. livesim2, a test origin, sends no `Cache-Control` or `ETag` at all, so what a downstream cache does with it is up to heuristics and configuration.
+
+<Snippet title="Headers Observed With curl" explain="Responses from the BBC R&D test stream (served by Akamai) and DASH-IF livesim2. They were fetched with an Origin header, which is what a browser adds to cross-origin requests. Values are trimmed to the interesting ones.">
+
+```text
+$ curl -I -H "Origin: http://localhost:5173" \
+    https://vod-dash-ww-rd-live.akamaized.net/bbb/2/avc1/896x504p25/000010.m4s
+HTTP/1.1 200 OK
+Content-Type: video/mp4
+Content-Length: 642854
+ETag: "8a216c9dc235c7578ad2d7860cd90162"
+Cache-Control: max-age=7200
+Accept-Ranges: bytes
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Origin,Range,Accept-Encoding,Referer
+Access-Control-Expose-Headers: Server,Range,Content-Length,Content-Range,...,Date,Location
+Timing-Allow-Origin: https://www.bbc.co.uk, https://www.bbc.com, https://emp.bbc.co.uk
+
+$ curl -I https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profile.mpd
+HTTP/1.1 301 Moved Permanently
+Location: https://vod-dash-ww-rd-live.akamaized.net/bbb/2/...mpd
+Access-Control-Allow-Origin: *
+Vary: Origin
+X-Cache: Miss from cloudfront
+
+$ curl -I https://livesim2.dashif.org/livesim2/testpic_2s/V300/897432856.m4s
+HTTP/2 200
+Content-Type: video/mp4
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Headers: Content-Type, Accept
+Access-Control-Expose-Headers: *
+Timing-Allow-Origin: *
+```
+
+</Snippet>
+
+## Range Requests
+
+A client can ask for part of a resource with `Range: bytes=0-99`. A server that supports it (advertised by `Accept-Ranges: bytes`) replies `206 Partial Content` with `Content-Range: bytes 0-99/642854` and just those bytes. The BBC segment above does exactly that. A server that ignores the header returns `200` and the whole body, which a player must be ready for.
+
+Range requests are how byte-addressed DASH works. With `SegmentBase` or `SegmentList` plus `mediaRange`, a Representation is one file, and the MPD gives byte ranges for the initialisation data (`Initialization@range`) and for the `sidx` box (`SegmentBase@indexRange`), which in turn indexes each subsegment. The player fetches each subsegment with a ranged GET. HLS has the same idea with `#EXT-X-BYTERANGE`.
+
+Two practical points: every ranged URL is the same URL, so the cache must support range requests or fetch and slice the whole object (most CDNs do); and a `Range` header is not always CORS-safelisted, which is why the BBC CDN lists `Range` in `Access-Control-Allow-Headers`.
+
+## CORS For Media
+
+A page at `https://player.example` that calls `fetch()` or `XMLHttpRequest` against `https://cdn.example` is cross-origin. The browser only lets scripts read the response if the CDN opts in. Playing a plain `<video src>` does not need CORS, but MSE players always fetch with script and always need it.
+
+- `Access-Control-Allow-Origin` must be `*` or the exact requesting origin. Sending a specific origin requires `Vary: Origin`.
+- `Access-Control-Expose-Headers` controls which response headers script can read. Only a short list (`Cache-Control`, `Content-Language`, `Content-Length`, `Content-Type`, `Expires`, `Last-Modified`, `Pragma`) is readable by default. `Date`, `ETag` and `Content-Range` are not, so a player that reads `Date` for clock sync, or `Content-Range` for byte ranges, needs them exposed. A value of `*` works for non-credentialed requests; the BBC CDN lists names explicitly.
+- A request that is not "simple" triggers a preflight: an `OPTIONS` request with `Access-Control-Request-Method` and `Access-Control-Request-Headers`, answered by `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` and optionally `Access-Control-Max-Age` to cache the result. Custom request headers always trigger it. The BBC CDN allows `Origin,Range,Accept-Encoding,Referer`, so a request carrying `CMCD-Object` would be blocked. DASH-IF livesim2 allows only `Content-Type, Accept`.
+- Credentials (cookies, `Authorization`) make the rules stricter: `*` is no longer accepted for origin, methods, headers or exposed headers.
+
+Preflight is not free. Browsers cache a preflight result per URL, so segment URLs that are unique per request pay it every time. Prefer query arguments over custom headers for per-request data, and set a long `Access-Control-Max-Age`.
+
+## Measuring A Request
+
+The Resource Timing API gives each request `startTime`, `requestStart`, `responseStart`, `responseEnd` and sizes (`transferSize`, `encodedBodySize`, `decodedBodySize`). That is the right input for throughput: bytes divided by `responseEnd - responseStart`, which leaves out DNS, connection setup and server wait.
+
+For cross-origin responses the browser zeroes most of these values unless the response includes `Timing-Allow-Origin` containing your origin or `*`. The BBC CDN lists three BBC origins, so a page from `localhost` sees zeros. livesim2 sends `*` so it is fully visible. Server-side timing can be added with the `Server-Timing` header, which also needs TAO to be readable cross-origin. The practical lesson that follows uses this API and detects when the values are hidden.
+
+## HTTP/1.1, HTTP/2 And HTTP/3
+
+- HTTP/1.1 carries one request per connection at a time, so browsers open several connections per host (typically six). A player fetching audio, video and subtitles in parallel competes for them. The BBC test host answers over HTTP/1.1 when fetched with curl.
+- HTTP/2 multiplexes many requests on one TCP connection, with header compression (HPACK). It makes parallel segment, audio and subtitle fetches cheap. Its weakness is TCP head-of-line blocking: one lost packet stalls every stream on the connection. livesim2 is served over HTTP/2.
+- HTTP/3 runs over QUIC (UDP). Streams are independent, so a lost packet only delays the stream it belongs to, connection setup is faster (one round trip, or zero when resuming), and connections survive a network change such as Wi-Fi to mobile. For segment fetching the gains are largest on lossy mobile networks and at startup; on good fixed networks the difference is small.
+
+A player cannot choose the HTTP version; the browser negotiates it. What the player controls is how it uses the connection: fewer requests, no needless preflights and, for chunked low-latency delivery, a server and CDN that stream rather than buffer.
+
+## Authentication And Signed URLs
+
+Public segments are cheap to serve and cheap to steal. The common patterns for restricting access:
+
+- Signed URLs: the URL carries an expiry and an HMAC of path and expiry, for example `?exp=1763330400&sig=...`. The edge verifies it without calling anywhere.
+- Signed cookies: one cookie authorises a whole path prefix, so segment URLs stay clean. Cookies need `credentials: "include"` and a specific, non-wildcard CORS configuration.
+- Token in the path: keeps the token out of the query string, so the cache key is unaffected, but relative URLs inside manifests must still resolve to the token path.
+- Authorization headers: simple on servers, but they force a preflight on every cross-origin request.
+
+For every scheme, make sure the cache key ignores or normalises the token, or every viewer misses the cache. Short expiries limit sharing; the player must then refresh the manifest or token before it expires, and treat 401 and 403 as a prompt to re-authorise instead of a plain failure. Tokens are not DRM: they protect delivery, not what happens to the bytes afterwards.
+
+## Multiple CDNs
+
+Large services use more than one CDN for resilience, cost and performance. DASH expresses alternatives with several `BaseURL` elements, each with a `serviceLocation`; the DVB-DASH profile defines how a player picks and fails over between them. DASH Content Steering and HLS content steering add a steering server: the manifest names a URL, the player polls it, and it returns a priority-ordered list of pathways. livesim2 can emulate steering to test this.
+
+Switching strategies, from simplest to most capable:
+
+- Failover: on a timeout, 5xx or repeated 404, retry on the next CDN.
+- Weighted or sticky assignment chosen server-side when the manifest is generated, for cost steering.
+- Client-driven selection from measured throughput and error rate per CDN. CMCD event reports can carry the current hostname (`h`), and CMSD (CTA-5006) lets a CDN tell the player it is under duress.
+
+Switching CDNs mid-stream means cold caches, new TLS connections and different token schemes, so do it deliberately.
+
+<Demo title="Delivery Path" mode="packets">Every segment is an HTTP response whose headers decide whether it is cached, readable and measurable by the player.</Demo>

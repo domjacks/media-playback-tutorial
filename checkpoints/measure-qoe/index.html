@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QoE Metrics Player</title>
+    <style>
+      body { margin: 2rem; font-family: system-ui, sans-serif; }
+      video { width: min(100%, 900px); background: #000; display: block; }
+      pre { white-space: pre-wrap; color: #4c5752; }
+      #metrics { font-family: ui-monospace, monospace; background: #f3f6f4; padding: 0.75rem 1rem; max-width: 900px; }
+      label { display: block; margin: 0.75rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>QoE Metrics Player</h1>
+    <video id="video" controls autoplay muted></video>
+    <label><input id="cmcd-toggle" type="checkbox" checked /> Attach CMCD query argument to segment requests</label>
+    <pre id="metrics" role="status">Waiting for playback...</pre>
+    <pre id="log" role="log"></pre>
+    <script type="module" src="./player.js"></script>
+  </body>
+</html>
