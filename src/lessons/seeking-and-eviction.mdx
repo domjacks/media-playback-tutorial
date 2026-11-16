@@ -1,0 +1,90 @@
+---
+slug: "seeking-and-eviction"
+title: "Seeking And Eviction"
+kind: "Practical"
+summary: "Play the whole Big Buck Bunny stream with a buffer goal, back-buffer eviction, abortable requests, seeking, gap jumping and endOfStream."
+outcome: "The player plays all 9:32 of the stream, keeps about 30 s ahead and 30 s behind the playhead, and recovers cleanly from seeks, gaps and quota errors."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer/remove"
+---
+
+## What Changes From Adaptive Bitrate
+
+The previous checkpoint capped playback at 36 segments (about 2.3 minutes) because it never removed anything and never reacted to the playhead moving. This one plays the full stream: 150 segments of 3.84 s, the last one short, for 572.52 s. To make that safe it adds the policy from [Buffer Management And Seeking](#/buffer-management) in code.
+
+- The segment index is derived from `currentTime` and the buffered ranges on every iteration, not counted up from zero.
+- A forward goal of 30 s stops fetching; media more than 30 s behind the playhead is removed.
+- Every request has an `AbortController` signal, and a `seeking` event cancels in-flight work and restarts the loops.
+- Small gaps are jumped, a quota error is handled, and `endOfStream()` is called when both tracks finish.
+- A readout under the video shows buffered ranges, buffer ahead, the current Representation and the last action.
+
+<Diagram visual="buffer" />
+
+<Snippet title="dash.js: Full-Length Segment Lists" explain="TUTORIAL_SEGMENT_LIMIT is gone: segmentCount is Math.ceil(totalSeconds / segmentSeconds), which is 150 for BBB. Each Representation also exposes segmentSeconds for index arithmetic, the last segment's end is clamped to the presentation duration, and loadDashVod returns duration. measureFetch (further down in dash.js) now takes { signal } and passes it to fetch." file="seeking-and-eviction/dash.js" region="expose-representations" />
+
+## Configuration And Buffer Helpers
+
+The constants are the whole policy. `?goal=600` in the page URL raises the forward goal to 10 minutes, which is a quick way to push a browser toward `QuotaExceededError`.
+
+<Snippet title="Policy Constants" explain="Goal and back buffer are in seconds of media. MAX_GAP_SECONDS is the largest hole the player will jump. END_TOLERANCE_SECONDS lets the player treat 'buffered to within half a second of the duration' as finished, because the video track ends a little before the audio track and before the manifest's duration." file="seeking-and-eviction/player.js" region="config" />
+
+<Snippet title="Read Buffered Ranges Relative To The Playhead" explain="bufferedEnd returns the end of the contiguous range containing the time, or null when the time is not buffered. The 0.1 s slack on the start lets a playhead sitting just before a range count as inside it. bufferAhead is derived from that." file="seeking-and-eviction/player.js" region="buffer-helpers" />
+
+## The Playhead-Driven Loop
+
+Each track runs its own loop. Every pass it reads `currentTime` and that track's own `buffered`, so the loop does not need to know whether the last event was playback, a seek, or an eviction. If it is within half a second of the end, it marks the track done. If the buffer ahead has reached the goal, it sleeps. Otherwise it computes the segment index, runs ABR for video, appends the init segment if the Representation changed (calling `changeType()` for a new codec string), fetches the segment with the abort signal, and appends.
+
+<Snippet title="Per-Track Loop" explain="The index is floor((bufferedTo + 0.1) / segmentSeconds) when the playhead is buffered, otherwise floor(now / segmentSeconds). So after a seek to 480 s with nothing buffered there it asks for index 125 (segment number 126) directly. signal.throwIfAborted() at the top and the catch at the bottom make an aborted loop leave quietly." file="seeking-and-eviction/player.js" region="track-loop" />
+
+## Eviction And Quota Errors
+
+Eviction is a single `remove(0, keepFrom)` before each append. Because it starts at zero it removes the back buffer and any stale island far behind the playhead, such as the pre-seek position after a big jump forward. `runOperation` wraps both `appendBuffer` and `remove`: it waits for the SourceBuffer to be idle, starts the operation, and resolves on `updateend`. A synchronous throw such as `QuotaExceededError` rejects the same promise.
+
+<Snippet title="Evict Before Append, Retry On Quota" explain="appendWithQuota first removes everything older than currentTime minus 30 s. If appendBuffer still throws QuotaExceededError it removes down to 5 s behind the playhead and retries once; a second failure propagates and is shown in the log. runOperation serialises operations on a SourceBuffer, which is required because append and remove both set updating." file="seeking-and-eviction/player.js" region="evict" />
+
+## Seeking
+
+The `seeking` handler is the heart of the lesson. It bumps a generation counter, aborts the controller (cancelling fetches and waking sleeping loops), and calls `sourceBuffer.abort()` on any SourceBuffer that is mid-append. It clears `initId` so the new loops re-append the init segment, waits for the old loops to finish, and starts fresh loops. A second seek during the wait wins because of the generation check, so a scrub produces one restart, not a queue.
+
+<Snippet title="Abort, Reset And Restart On Seek" explain="abort() is only called when the MediaSource is open and the SourceBuffer is updating. If the MediaSource had ended, the browser has already reopened it for the seek, and the next append would reopen it anyway. The done flags are reset in startLoops, so reaching the end again calls endOfStream() again." file="seeking-and-eviction/player.js" region="seek-restart" />
+
+## Gaps And End Of Stream
+
+The BBB video segments start about 80 ms after their nominal time (the first presentation timestamp of segment 149 is 568.40 s, not 568.32 s), because of the composition offset behind the first B-frame. A seek that lands exactly on a segment boundary can therefore sit just before the buffered data. The gap jumper steps over holes of up to 0.5 s. It runs on the `waiting` event and from the readout timer. Because the nudge itself fires `seeking`, it sets a flag so the seek handler does not cancel working loops.
+
+<Snippet title="Jump Small Gaps" explain="Only video.buffered (the intersection of both tracks) matters for playback. If a range starts within MAX_GAP_SECONDS after the playhead, set currentTime to its start plus 1 ms. The nudging flag makes the next seeking event a no-op." file="seeking-and-eviction/player.js" region="gap-jump" />
+
+<Snippet title="End The Stream And Reopen On Seek Back" explain="endOfStream() is called only when every track is done, the MediaSource is still open and no SourceBuffer is updating. After it, readyState is ended. Seeking back sets it to open again, the loops restart with done reset, and the tail is fetched again if it was evicted." file="seeking-and-eviction/player.js" region="end-of-stream" />
+
+## The Readout
+
+The readout is plain text rewritten every 250 ms. It is deliberately simple, because reading buffered ranges directly is the best way to learn how MSE behaves.
+
+<Snippet title="Live Readout" explain="Buffered ranges are printed per SourceBuffer, not through video.buffered, so you can see video and audio drift. 'last action' is the most recent fetch, eviction, seek, gap jump or quota event." file="seeking-and-eviction/player.js" region="readout" />
+
+- The loops re-read state every pass, so none of the handlers has to patch state in place.
+- Aborting is a cooperative protocol: abort the signal, call `abort()` on the SourceBuffer, then wait for the old loops to exit before starting the new ones.
+- A seek into already-buffered media still restarts the loops, which cancels an in-flight request for the next segment and immediately re-requests it. Skipping that is an optimisation worth measuring.
+
+<Checkpoint slug="seeking-and-eviction" run files={["index.html","dash.js","player.js"]} note="Open DevTools, Network tab (filter on m4s), and the Console, which logs each action.">
+
+- The readout shows the playhead against 572.5 s and the scrubber covers the whole 9:32 from the start.
+- Let it play for a minute: buffer ahead for video and audio hovers near 30 s and never grows beyond about 34 s, and the first range's start moves forward as the back buffer is evicted (it stays about 30 s behind the playhead).
+- Drag the scrubber to 8:00: Network shows requests jumping to segments around 126 (480 s divided by 3.84 s), the old buffered range disappears, and a single new range near [480 - 514] appears. The Console shows `seeking`, `evict` and `fetch` actions.
+- Seek back to 1:00: a range starts near 60 s while the island at 8:00 is still buffered ahead, so for a moment there are two islands. The island ahead is kept until the playhead passes it.
+- Drag the scrubber repeatedly and quickly: cancelled requests show as red (cancelled) in Network, and playback resumes from the last position with no console errors.
+- Seek to the very end, wait for it to finish, then check that `last action` shows `endOfStream()` and MediaSource reads `ended`. Seek back to 5:00: MediaSource returns to `open`, playback resumes, and it reaches the end and calls `endOfStream()` again.
+- Open the page with `?goal=600` on a fast connection: you may see `QuotaExceededError` messages in `last action`, followed by a successful retry or an error in the log, depending on the browser's limits. This varies by browser and device.
+
+</Checkpoint>
+
+<Exercise title="Add A Low-Water Mark">
+
+Right now the loop fetches whenever the buffer ahead is below 30 s, so requests arrive one at a time and steadily. Add a low-water mark of 20 s: once the buffer reaches the 30 s goal, stop fetching until it falls below 20 s, then fetch up to the goal again.
+
+Measure the effect by counting requests per 10 s in the Network tab before and after. You should see bursts of about three segments (roughly 10 s of media) with idle periods between them.
+
+<Hint>Add a per-track `filling` boolean. In runTrack, set it to false when `ahead >= BUFFER_GOAL_SECONDS` and to true when `ahead < LOW_WATER_SECONDS`; only fetch while `filling` is true. Reset it to true in startLoops so a seek always starts fetching immediately.</Hint>
+
+</Exercise>
+
+<Demo title="Seek Cleanly" mode="timeline">A seek cancels in-flight work, resets the parser, recomputes the segment from the new playhead and restarts, while eviction keeps memory bounded.</Demo>

@@ -20,11 +20,11 @@ export const lessonSections = [
   },
   {
     title: "Playback In The Browser",
-    slugs: ["players-timelines-buffers", "progressive-download", "streaming-segments", "mse-basics", "mse-debugging"]
+    slugs: ["players-timelines-buffers", "progressive-download", "streaming-segments", "mse-basics", "mse-debugging", "mse-in-depth"]
   },
   {
     title: "DASH And Adaptive Streaming",
-    slugs: ["protocols", "dash-theory", "dash-vod", "adaptive-bitrate"]
+    slugs: ["protocols", "dash-theory", "dash-vod", "adaptive-bitrate", "buffer-management", "seeking-and-eviction"]
   },
   {
     title: "Decoding With WebCodecs",

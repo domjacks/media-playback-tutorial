@@ -1,0 +1,89 @@
+---
+slug: "buffer-management"
+title: "Buffer Management And Seeking"
+kind: "Theory"
+summary: "How a DASH player decides what to fetch, how much to keep, what to evict, and how to recover when the viewer jumps somewhere else."
+outcome: "You can describe the player loop, set buffer goal, low-water and back-buffer policies, and handle seeks, gaps and end of stream correctly with MSE."
+reference: "https://www.w3.org/TR/media-source-2/"
+---
+
+## The Player Loop
+
+A DASH VOD player is a loop that runs for the life of the session. Each iteration looks at the playhead and the buffered ranges, decides whether more data is needed and which segment, fetches and appends it, and trims what is no longer useful. [Adaptive Bitrate](#/adaptive-bitrate) added the quality decision to this loop; this lesson is about the rest of it.
+
+- Where is the playhead (`video.currentTime`)?
+- How much contiguous media is buffered ahead of it?
+- Which segment comes next, and which Representation?
+- Is there anything behind the playhead that can be removed?
+- Has everything been fetched, so the stream can end?
+
+Because the browser owns decoding and rendering ([Players, Timelines And Buffers](#/players-timelines-buffers)), the loop works only from `currentTime`, `buffered`, `readyState` and events. Everything else is the player's own state.
+
+<Diagram visual="buffer" />
+
+## Buffer Goal, Low-Water Mark And Back Buffer
+
+Three numbers describe the policy.
+
+- Buffer goal (forward buffer target): stop fetching when the contiguous buffer ahead of the playhead reaches this many seconds. Typical VOD values are 20 to 60 s. The in-app player uses 30 s. A larger goal tolerates longer outages and wastes bandwidth if the viewer abandons; a smaller one saves memory and leaves less protection against stalls.
+- Low-water mark (or rebuffer threshold): the level below which fetching resumes, if you do not fetch continuously. Resuming only below a low-water mark, say 20 s of a 30 s goal, makes requests bursty: several segments in a row, then idle, which can be friendlier to radio power states and CDNs. Fetching whenever below the goal gives smooth, one-segment-at-a-time requests. A separate panic level (around one or two segments) is where ABR should drop quality immediately.
+- Back buffer: how much already-played media to keep for instant rewind. 30 s is common, and the in-app player keeps 30 s. Everything older is eligible for removal.
+
+Without a goal, a fast connection downloads the entire presentation, memory use climbs, and the buffer-depth signal that ABR relies on is meaningless.
+
+## How Much Can The Browser Hold
+
+The spec does not set a size. It defines a coded frame eviction algorithm that browsers run on append: they may evict data, and if they cannot free enough space `appendBuffer()` throws `QuotaExceededError` (the spec calls this the "buffer full flag" and advises the application to call `remove()` and/or append less). Actual limits depend on browser, platform, device memory and track type, and have changed over releases, so budget in seconds and treat the error as a signal rather than a failure.
+
+Two practical consequences follow. A 1080p stream at 4.7 Mbps (the BBB top Representation) costs about 35 MB per minute, so a 30 s goal plus a 30 s back buffer is a few tens of megabytes. And the browser may evict data you wanted, which is why you should recompute what is buffered from `sourceBuffer.buffered` every iteration rather than trusting your own bookkeeping.
+
+## Segment Index From The Playhead
+
+With a fixed segment duration, the next segment is arithmetic, not a search. For BBB the segment duration is 3.84 s and there are `ceil(572.52 / 3.84)` = 150 segments (the last is 0.36 s).
+
+- If the playhead is inside a buffered range, find that range's end `e` and fetch index `floor((e + 0.1) / 3.84)`. The 0.1 s tolerance absorbs rounding, because video buffered ends rarely land exactly on a segment boundary.
+- If the playhead is not buffered, fetch index `floor(currentTime / 3.84)`.
+- If you use a `SegmentTimeline` or variable durations, binary-search the segment list by start time instead.
+- Treat the end specially: with a short final segment and track durations that differ slightly (here video buffers to about 572.3 s and audio to 572.5 s), "buffered within about half a second of the duration" is a safer completion test than comparing to a segment boundary.
+
+Video and audio are separate SourceBuffers with their own buffered ranges, so compute the index per track. Their ends differ a little, and the media element's `buffered` is the intersection of the two, which is what playback actually sees.
+
+## Seeking With MSE
+
+The media element does most of seeking: it moves the playhead, fires `seeking`, flushes its decoders, and waits for data at the new time; it fires `seeked` once playback can continue. MSE leaves the player to supply that data. A correct seek handler does the following.
+
+- Cancel in-flight requests (`AbortController.abort()` on every fetch) so the old position does not keep using bandwidth.
+- If a SourceBuffer is `updating`, call `sourceBuffer.abort()` to cancel the append and reset the parser. Only legal while the MediaSource is `open`.
+- Compute the segment from the new `currentTime` and the new buffered ranges, as above. If the target is already buffered, nothing needs to be fetched immediately and the loop simply continues past that range.
+- Append the init segment again if you need to (after `abort()`, when the Representation changed, or after `changeType()`), then the media segment.
+- Restart the loop. The `waiting` event fires while playback is blocked for lack of data, and `canplay` or `playing` when it resumes; these are the events a UI would use to show a spinner.
+
+A fast scrubber produces dozens of `seeking` events. Each restart should cancel the previous one rather than queue behind it, and `seeked` is the event that marks the last one completing.
+
+## Back-Buffer Eviction
+
+Before each append, remove media that is now too far behind: `sourceBuffer.remove(0, currentTime - BACK_BUFFER_SECONDS)`. Removal is asynchronous, so wait for `updateend` before appending. This also cleans up after long seeks: if the viewer jumps from 0:30 to 8:00, the old island near 0:30 is far behind the new playhead and the same `remove(0, ...)` call discards it. Jumping backwards leaves an island ahead of the playhead, which is useful if the viewer returns but will count against memory; stricter players also evict far ahead of the goal.
+
+On `QuotaExceededError`, evict more aggressively (for example keep 5 s behind instead of 30) and retry the same append once. If it still fails, shrink the buffer goal; do not loop.
+
+## Gaps
+
+Gaps appear when media is discontinuous: a seek that lands between buffered ranges, timestamps that do not quite join (audio and video track start times differing by tens of milliseconds, or a few frames' composition offset), a removed range, or a period boundary with an imprecise `appendWindow`. The browser does not skip a gap automatically in every case, so the element can sit in `waiting` just short of buffered data.
+
+A common mitigation is gap jumping: when playback has stalled, if the next buffered range starts within a small distance (0.1 to 0.5 s is typical) ahead of the playhead, set `currentTime` to its start plus a millisecond. Larger gaps are handled by fetching the missing segment, not by jumping. Setting `currentTime` triggers `seeking`, so a player that restarts its loop on every seek should recognise a self-inflicted nudge; the checkpoint lesson does this with a flag.
+
+Audio and video alignment is a related concern. If segments are aligned across tracks, each track simply fetches its own segment for the same index and the media element keeps them in sync using the container timestamps. Misalignment between tracks shows up as the intersection of the two `buffered` ranges having holes where each track alone has none, so measure buffer ahead per track and gate fetching on the lower of the two if you need them in step.
+
+## endOfStream And Seeking Back
+
+When both tracks have appended their final segment, call `mediaSource.endOfStream()` so the media element knows no more data is coming and can fire `ended` instead of waiting. Only do so when `readyState` is `open` and neither SourceBuffer is `updating`.
+
+Seeking after the end is legal. A seek on an `ended` MediaSource moves it back to `open` and fires `sourceopen`, and so does a later append. The loop then needs to treat the seek like any other: reset the per-track `done` flags, work out the index from the new position, and call `endOfStream()` again after the tail is re-buffered. If you remove data near the end and re-append it, the final duration can change slightly, so set `mediaSource.duration` from the manifest rather than trusting what `endOfStream()` left behind.
+
+## How The In-App Player Does It
+
+The Putting It All Together player in this tutorial (`src/components/PlayerShowcase.jsx`) follows the same shape, with one async loop per track. Each iteration it computes the end of buffered media at the playhead (`bufferedEndAt`, with a 0.1 s tolerance), derives the segment index as `floor((nextTime + 0.1) / segmentSeconds)`, and waits when the buffer ahead is at least the 30 s goal. Before every append it removes media older than `currentTime - 30` (`evictBehind`), and if the append throws `QuotaExceededError` it evicts down to 5 s behind and retries once. Because the index comes from the current playhead and buffered ranges each time, a seek mostly takes care of itself: the waiting loop wakes on `seeking` and `timeupdate`, recomputes, and fetches from the new position. It also respects `mediaSource.streaming` for ManagedMediaSource and calls `endOfStream()` when both tracks report done.
+
+What it leaves out is what the next lesson adds: aborting requests that are already in flight when the viewer seeks, calling `sourceBuffer.abort()`, and jumping small gaps. [Seeking And Eviction](#/seeking-and-eviction) builds those and a live readout so you can watch buffered ranges move.
+
+<Demo title="Buffer Policy" mode="buffer">A player keeps a forward goal, a modest back buffer, and recomputes what to fetch from the playhead and buffered ranges every time.</Demo>

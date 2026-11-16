@@ -1,0 +1,121 @@
+---
+slug: "mse-in-depth"
+title: "MSE In Depth"
+kind: "Theory"
+summary: "The parts of Media Source Extensions beyond append and play: timestamp modes, append windows, codec switching, eviction, live ranges, ManagedMediaSource and MediaCapabilities."
+outcome: "You can choose between segments and sequence mode, trim and offset media at period boundaries, switch codecs mid-stream, and explain what ManagedMediaSource and MediaCapabilities change."
+reference: "https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer"
+---
+
+## Beyond Append And Play
+
+[MSE Basics](#/mse-basics) covered the happy path: create a `MediaSource`, add a `SourceBuffer`, append an init segment and media segments. Real players use the rest of the surface area. Most of it exists to answer one question: where on the media timeline does this appended data land, and what happens to the old data?
+
+Two things are worth keeping in mind throughout. First, almost every mutating call (`timestampOffset`, `mode`, `appendWindowStart`, `changeType()`, `remove()`) throws `InvalidStateError` if `sourceBuffer.updating` is true, so a robust player serialises operations per SourceBuffer. Second, the `MediaSource` must be in the `open` state for most of them. [MSE Debugging](#/mse-debugging) shows how to inspect both.
+
+## Segments Mode And Sequence Mode
+
+`SourceBuffer.mode` controls how timestamps inside the appended bytes are interpreted.
+
+- `"segments"` (the default for fMP4, WebM and MPEG-2 TS): each coded frame is placed on the timeline using its own timestamps. For fMP4 these come from `baseMediaDecodeTime` in `tfdt` plus the sample durations and composition offsets in `trun`. Order of appends does not matter, which is why seeking to segment 125 and appending it works.
+- `"sequence"`: the timestamps are ignored for placement. Each new coded frame group is placed immediately after the end of the previous one, and `timestampOffset` is updated automatically to make that true. Use it for content with no usable timestamps.
+
+The spec fixes the mode for byte stream formats that have no timestamps: when the format's "generate timestamps flag" is set (raw `audio/mpeg` MP3 and `audio/aac` ADTS streams), the buffer starts in `sequence` mode and setting `"segments"` throws `TypeError`. For DASH or CMAF fMP4 you want `segments`, because the segment index is what maps media to the timeline. Sequence mode on fMP4 is occasionally used to stitch clips whose `tfdt` values all start at zero, but it makes seeking arithmetic your problem: you must remember which offset each clip received.
+
+Changing `mode` is only legal when the SourceBuffer is not `updating` and is not part-way through parsing a media segment.
+
+## timestampOffset
+
+`timestampOffset` is a number of seconds added to every coded frame's timestamps as it is appended. The default is `0`.
+
+It is the tool for stitching: if an ad break is a separate fMP4 file whose first sample is at 0 s and it should play from 120 s, set `sourceBuffer.timestampOffset = 120` before appending it, then set it back (or to the next period's start) for the content that follows. This is also how DASH multi-period players place each Period: the offset is the Period's `@start` minus the earliest presentation time inside its segments (`presentationTimeOffset` in the MPD).
+
+- Set it while `updating` is false; otherwise `InvalidStateError`.
+- Set it before the first media segment of the new period, after `abort()` if a segment is in progress.
+- In `sequence` mode, setting it also sets where the next frame group begins, and the browser then advances it after each append.
+- The offset is a `double`: for long-lived streams compute it from the manifest's integer timescale to avoid drift.
+
+## appendWindowStart And appendWindowEnd
+
+The append window is a filter on presentation time. Coded frames outside `[appendWindowStart, appendWindowEnd]` are dropped instead of being buffered. Both are in seconds after `timestampOffset` has been applied. The defaults are `0` and `Infinity`.
+
+Players use it for two jobs.
+
+- Period boundaries. When a Period ends at 120 s but the last segment extends to 123.84 s, set `appendWindowEnd = 120` so the overhang does not collide with the next Period's media.
+- Trimming leading junk, such as the encoder delay (priming samples) at the start of AAC. Setting `appendWindowStart` slightly above the period start can hide the priming block, and some players use it for clean audio joins.
+
+The caveats matter for frame-accurate splices. The W3C spec says a coded frame is dropped if its presentation timestamp is before `appendWindowStart`, or its end (timestamp plus duration) is after `appendWindowEnd`. A dropped video frame also sets the "need random access point" flag, so the following non-keyframes are discarded until the next keyframe. For video you therefore cannot cut mid-GOP: the window effectively snaps to keyframes. The spec permits, but does not require, implementations to keep a partly overlapping frame and splice or trim it; browsers do this inconsistently for audio, so expect up to one audio frame (1024 samples, about 21.3 ms at 48 kHz for AAC-LC) of difference between browsers at a boundary.
+
+## abort()
+
+`sourceBuffer.abort()` does two things. If an append is in progress it cancels it, firing `abort` then `updateend`. In every case it resets the segment parser to wait for a new media segment and unsets the pending timestamp state. It does not clear buffered data and does not require a new init segment according to the spec, although many players append the init again anyway so the parser state is unambiguous.
+
+Players call it when they cancel an in-flight request part-way through an append, which means seeking ([Buffer Management And Seeking](#/buffer-management)). It throws `InvalidStateError` unless the MediaSource is `open`. Calling `abort()` on an `ended` MediaSource is an error, so check `readyState` first.
+
+## changeType()
+
+`sourceBuffer.changeType(mimeType)` reconfigures an existing SourceBuffer for a new MIME type and codec string. It exists so adaptive streaming can cross codec boundaries without destroying the buffer. It is supported in Chrome 70, Firefox 63 and Safari 12.1 or later.
+
+The BBB ladder in this course is the usual example. The three video Representations are all H.264 in MP4 but their codec strings differ: `avc1.640028` (High profile level 4.0, 1080p), `avc1.640020` (level 3.2, 720p) and `avc1.64001f` (level 3.1, 504p). Even if the browser would decode them all with one decoder, the `SourceBuffer` was created for a specific type, so switching safely means calling `changeType()` and then appending the new Representation's init segment. The [Adaptive Bitrate](#/adaptive-bitrate) lesson does exactly this.
+
+- Call it while not `updating`; the next append must start with an init segment (and, for a new codec, a random access point).
+- The container can change too (for example `video/mp4` to `video/webm`) on browsers that support both.
+- Check support first: the new type must pass `isTypeSupported()`, and `changeType` must exist on `SourceBuffer.prototype`.
+
+## remove(), Eviction And QuotaExceededError
+
+`sourceBuffer.remove(start, end)` asynchronously deletes buffered coded frames in the range and fires `updatestart`, `update`, `updateend`. Frames that depend on removed frames are removed up to the next random access point, so what disappears can extend a little beyond your range.
+
+Memory is finite. The spec defines a "coded frame eviction algorithm": when you append and the buffer is full, the browser may remove frames it considers safe, which are typically data well behind the playhead. If it cannot free enough room, `appendBuffer()` throws `QuotaExceededError` synchronously and the "buffer full flag" is set. The spec's own advice is that the application should use `remove()` to free space and/or reduce the append size. The limits are implementation-defined and differ by browser, device and codec, so do not hard-code a size; budget by seconds and handle the error. A player therefore treats a quota error as normal, evicts and retries once. The in-app player, and the checkpoint in [Seeking And Eviction](#/seeking-and-eviction), do exactly that.
+
+## Duration, Live Ranges And endOfStream
+
+- `mediaSource.duration` sets the length shown by the scrubber. For VOD set it from the manifest once the MediaSource opens. Lowering it below the end of buffered data throws, so use `remove()` first.
+- `setLiveSeekableRange(start, end)` and `clearLiveSeekableRange()` tell the media element what range is seekable for a live stream, which is what `video.seekable` and the native scrubber then show. Live players call it as the DVR window slides. Supported in Chrome 62, Firefox 50 and Safari 10.1 or later.
+- `endOfStream()` declares that nothing more will be appended. The duration is trimmed to the highest buffered end time, `readyState` becomes `ended`, and the browser may complete playback instead of stalling at the end of buffer. `endOfStream("network")` and `endOfStream("decode")` instead flag a fatal error, which surfaces as `MediaError`. Appending again, or seeking, reopens the MediaSource to `open`, a fact the seek-back-after-end logic relies on.
+
+## ManagedMediaSource
+
+`ManagedMediaSource` (MMS) is a Safari-led variant of MSE in which the browser, not the page, owns buffering policy. It shipped in Safari 17 on macOS and iOS 17.1, which matters because iPhone Safari had no `MediaSource` at all before it. At the time of writing, MDN lists it as available only in Safari, so detect it with `"ManagedMediaSource" in window` and fall back to `MediaSource`.
+
+- A `ManagedMediaSource` has a `streaming` attribute and fires `startstreaming` and `endstreaming`. The browser asks the page to start loading data when it wants more and to stop when it has enough, so the page should obey `streaming` instead of running its own goal loop.
+- Its buffers are `ManagedSourceBuffer` objects, which emit `bufferedchange` when the browser evicts data on its own; do not assume your appended ranges are still there.
+- Attach it with an object URL as usual, but set `video.disableRemotePlayback = true` (or provide an alternate source) because MMS content cannot be sent to a remote playback device unless you also provide an alternate source.
+
+Players such as hls.js and Shaka use MMS when available. Treat `endstreaming` as "stop fetching", not "stop playing".
+
+## MSE In Workers
+
+Chrome 108 and later (and Safari 18) allow a MediaSource to be created in a dedicated worker. The worker calls `mediaSource.handle` to obtain a `MediaSourceHandle`, which is transferred to the main thread and assigned to `video.srcObject`. Fetching, parsing and appending then run off the main thread, so a long main-thread task no longer starves the buffer. In a worker the `SourceBuffer` track lists (`audioTracks`, `videoTracks`) are not exposed. Firefox does not support it.
+
+## MediaCapabilities Versus isTypeSupported
+
+`MediaSource.isTypeSupported(type)` answers one yes/no question: can this MIME and codec string be used with a SourceBuffer? It says nothing about performance and nothing about DRM.
+
+`navigator.mediaCapabilities.decodingInfo(config)` answers three questions: `supported`, `smooth` (it should decode without dropping frames) and `powerEfficient` (hardware decode). The config includes `type: "media-source"` (or `"file"`), a `video` or `audio` object with `contentType`, `width`, `height`, `bitrate` and `framerate`, and optionally `keySystemConfiguration` for EME, in which case the result includes `keySystemAccess`. It is supported in Chrome 66, Firefox 63 and Safari 13 or later. Use `isTypeSupported` as a cheap gate and `decodingInfo` to rank or drop Representations before ABR runs.
+
+<Snippet title="Filter Representations With MediaCapabilities" explain="isTypeSupported only reports whether the codec can be appended. decodingInfo also predicts smoothness and power use for the actual resolution, frame rate and bitrate, so a player can drop a 1080p Representation on a weak device.">
+
+```js
+async function playable(rep) {
+  if (!MediaSource.isTypeSupported(rep.mime)) return false;
+
+  const info = await navigator.mediaCapabilities.decodingInfo({
+    type: "media-source",
+    video: {
+      contentType: rep.mime,
+      width: rep.width,
+      height: rep.height,
+      bitrate: rep.bandwidth,
+      framerate: 25
+    }
+    // For encrypted content add keySystemConfiguration: { keySystem: "com.widevine.alpha", ... }
+  });
+
+  return info.supported && info.smooth;
+}
+```
+
+</Snippet>
+
+<Demo title="Where Does Appended Data Land" mode="buffer">Timestamps, `timestampOffset` and the append window decide where media sits on the timeline, and `remove()` plus eviction decide what stays.</Demo>

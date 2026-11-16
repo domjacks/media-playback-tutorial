@@ -130,4 +130,6 @@ At that point, inspect media structure. Use ffprobe, mp4dump, or browser DevTool
 - Continuous video without matching audio can still stall.
 - A gap in TimeRanges is usually a timestamp or missing-segment problem.
 
+For the API surface behind these failures (`mode`, `timestampOffset`, append windows, `QuotaExceededError`), see [MSE In Depth](#/mse-in-depth).
+
 <Demo title="Failure Pipeline" mode="buffer">Debug MSE by locating the failed stage: network, MIME support, append sequencing, timestamp continuity, decode, or playback state.</Demo>

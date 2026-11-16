@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seeking And Eviction MSE Player</title>
+    <style>
+      body { margin: 2rem; font-family: system-ui, sans-serif; }
+      video { width: min(100%, 900px); background: #000; display: block; }
+      pre { white-space: pre-wrap; color: #4c5752; }
+      #readout { font: 0.85rem/1.5 ui-monospace, monospace; background: #f1f4f2; padding: 0.75rem; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Seeking And Eviction MSE Player</h1>
+    <video id="video" controls></video>
+    <pre id="readout" role="status"></pre>
+    <pre id="log"></pre>
+    <script type="module" src="./player.js"></script>
+  </body>
+</html>
