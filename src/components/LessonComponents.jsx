@@ -1,7 +1,8 @@
 import React, { Children, isValidElement, useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, FileCode, FlaskConical } from "lucide-react";
+import { Check, Copy, ExternalLink, FileCode, FlaskConical, HelpCircle } from "lucide-react";
 import { AudioFundamentalsDiagram, AvSyncDiagram, BufferQueue, CodecCompressionDiagram, Fmp4CmafDiagram, MediaFileDiagram, PacketFlow, SegmentTimeline, VideoFundamentalsDiagram } from "./Diagrams.jsx";
 import { DemoPanel } from "./DemoPanel.jsx";
+import { MpdExplorer } from "./MpdExplorer.jsx";
 import { PlayerShowcase } from "./PlayerShowcase.jsx";
 import { checkpointUrl, getSnippet } from "../lib/tutorialFiles.js";
 
@@ -125,4 +126,17 @@ export function Hint({ children }) {
   );
 }
 
-export const lessonComponents = { Snippet, Diagram, Demo, Checkpoint, Exercise, Hint, PlayerShowcase };
+export function Question({ prompt, children }) {
+  return (
+    <section className="question-panel">
+      <span className="question-label"><HelpCircle size={16} aria-hidden="true" /> Predict</span>
+      <p className="question-prompt">{prompt}</p>
+      <details>
+        <summary>Think about it, then reveal</summary>
+        <div className="question-answer">{children}</div>
+      </details>
+    </section>
+  );
+}
+
+export const lessonComponents = { Snippet, Diagram, Demo, Question, Checkpoint, Exercise, Hint, PlayerShowcase, MpdExplorer };

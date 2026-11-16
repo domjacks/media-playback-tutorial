@@ -1,24 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { Clock, Lightbulb, Waypoints, Layers } from "lucide-react";
+
+const modeIcons = { timeline: Clock, packets: Waypoints, buffer: Layers };
 
 export function DemoPanel({ demo }) {
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setStep((current) => (current + 1) % 5), 1200);
-    return () => clearInterval(id);
-  }, []);
-
+  const Icon = modeIcons[demo.mode] ?? Lightbulb;
   return (
-    <section className="demo-panel">
+    <aside className={`key-idea ${demo.mode ?? ""}`} aria-label={`Key idea: ${demo.title}`}>
+      <span className="key-idea-icon" aria-hidden="true"><Icon size={22} /></span>
       <div>
+        <span className="key-idea-label">Key idea</span>
         <h2>{demo.title}</h2>
         <p>{demo.text}</p>
       </div>
-      <div className={`mini-sim ${demo.mode}`}>
-        {Array.from({ length: 5 }, (_, index) => (
-          <span key={index} className={index <= step ? "active" : ""}>{index + 1}</span>
-        ))}
-      </div>
-    </section>
+    </aside>
   );
 }

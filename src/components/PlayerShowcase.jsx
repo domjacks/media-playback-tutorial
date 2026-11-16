@@ -15,6 +15,7 @@ const bbbMpd = "https://rdmedia.bbc.co.uk/bbb/2/client_manifest-avc1-high_profil
 const BUFFER_GOAL_SECONDS = 30;
 const BACK_BUFFER_SECONDS = 30;
 const WAIT_MS = 250;
+const LOG_LIMIT = 12;
 
 export function PlayerShowcase() {
   const imscCues = useMemo(() => parseImscCues(showcaseTtml), []);
@@ -29,6 +30,9 @@ export function PlayerShowcase() {
   const [throughput, setThroughput] = useState(0);
   const [bufferAheadSeconds, setBufferAheadSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [abrLog, setAbrLog] = useState([]);
+  const buffersRef = useRef(null);
+  const previousRepRef = useRef(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -49,7 +53,7 @@ export function PlayerShowcase() {
       video.removeEventListener("seeking", syncCue);
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     };
-  }, []);
+  }, [imscCues]);
 
   async function loadPlayer() {
     const video = videoRef.current;
@@ -65,6 +69,9 @@ export function PlayerShowcase() {
     setStatus("Fetching DASH manifest...");
     setActiveCue("");
     setBufferAheadSeconds(0);
+    setAbrLog([]);
+    previousRepRef.current = null;
+    buffersRef.current = null;
 
     try {
       const MediaSourceImpl = getMediaSourceImpl();
@@ -102,6 +109,7 @@ export function PlayerShowcase() {
       mediaSource.duration = manifest.duration;
       const videoBuffer = mediaSource.addSourceBuffer(manifest.video.mime);
       const audioBuffer = mediaSource.addSourceBuffer(manifest.audio.mime);
+      buffersRef.current = { video: videoBuffer, audio: audioBuffer };
 
       const tracks = {
         video: { done: false, initFor: "", codecs: manifest.video.codecs, ready: false, sourceBuffer: videoBuffer },
@@ -149,6 +157,16 @@ export function PlayerShowcase() {
           onSegment: ({ representation, segment, throughputBps: measured }) => {
             const ahead = bufferAhead(video);
             setCurrentVideo(representation);
+            const entry = describeDecision({
+              previous: previousRepRef.current,
+              representation,
+              segment,
+              throughputBps: measured,
+              ahead,
+              time: video.currentTime
+            });
+            previousRepRef.current = representation;
+            setAbrLog((current) => [entry, ...current].slice(0, LOG_LIMIT));
             setThroughput(throughputEstimate.sample(measured));
             setBufferAheadSeconds(ahead);
             markAppended("video");
@@ -191,6 +209,9 @@ export function PlayerShowcase() {
     setCurrentVideo(null);
     setThroughput(0);
     setBufferAheadSeconds(0);
+    setAbrLog([]);
+    previousRepRef.current = null;
+    buffersRef.current = null;
     setError("");
     setLoading(false);
     setStatus("Ready to load the DASH stream.");
@@ -239,6 +260,13 @@ export function PlayerShowcase() {
         </div>
       )}
 
+      {manifestInfo && (
+        <>
+          <BufferVisualiser videoRef={videoRef} buffersRef={buffersRef} duration={manifestInfo.duration} />
+          <AbrLog entries={abrLog} />
+        </>
+      )}
+
       {error && (
         <div className="player-error">
           <AlertTriangle size={18} />
@@ -246,6 +274,128 @@ export function PlayerShowcase() {
         </div>
       )}
     </section>
+  );
+}
+
+function describeDecision({ previous, representation, segment, throughputBps, ahead, time }) {
+  let reason = "hold";
+  if (previous && representation.bandwidth < previous.bandwidth) reason = "switch down";
+  else if (previous && representation.bandwidth > previous.bandwidth) reason = "step up";
+  return {
+    key: `${segment.number}-${representation.id}-${time}`,
+    time,
+    segment: segment.number,
+    rep: representation.id,
+    throughputBps,
+    ahead,
+    reason
+  };
+}
+
+function readRanges(timeRanges) {
+  const ranges = [];
+  try {
+    for (let i = 0; i < timeRanges.length; i += 1) ranges.push([timeRanges.start(i), timeRanges.end(i)]);
+  } catch {
+    // A detached SourceBuffer throws; treat it as empty.
+  }
+  return ranges;
+}
+
+function describeRanges(ranges) {
+  return ranges.length ? ranges.map(([start, end]) => `${start.toFixed(1)}–${end.toFixed(1)} s`).join(", ") : "nothing";
+}
+
+function BufferVisualiser({ videoRef, buffersRef, duration }) {
+  const [snapshot, setSnapshot] = useState(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+    function tick() {
+      setSnapshot({
+        time: video.currentTime,
+        total: readRanges(video.buffered),
+        video: buffersRef.current ? readRanges(buffersRef.current.video.buffered) : [],
+        audio: buffersRef.current ? readRanges(buffersRef.current.audio.buffered) : []
+      });
+    }
+    const events = ["timeupdate", "progress", "seeking", "seeked"];
+    for (const name of events) video.addEventListener(name, tick);
+    const timer = setInterval(tick, 250);
+    return () => {
+      clearInterval(timer);
+      for (const name of events) video.removeEventListener(name, tick);
+    };
+  }, [videoRef, buffersRef]);
+
+  const total = snapshot?.total ?? [];
+  const time = snapshot?.time ?? 0;
+  const pct = (seconds) => `${Math.min(100, Math.max(0, (seconds / duration) * 100))}%`;
+  const lane = (label, ranges, className) => (
+    <div className="buffer-lane">
+      <span>{label}</span>
+      <div className="buffer-bar" aria-hidden="true">
+        {ranges.map(([start, end]) => (
+          <i key={`${start}-${end}`} className={className} style={{ left: pct(start), width: `${Math.max(0.3, ((end - start) / duration) * 100)}%` }} />
+        ))}
+        <b className="playhead" style={{ left: pct(time) }} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="buffer-visualiser">
+      <h3>Buffer</h3>
+      {lane("Media element", total, "range-total")}
+      {lane("Video buffer", snapshot?.video ?? [], "range-video")}
+      {lane("Audio buffer", snapshot?.audio ?? [], "range-audio")}
+      <div className="buffer-scale" aria-hidden="true"><span>0 s</span><span>{duration.toFixed(0)} s</span></div>
+      <p className="visually-hidden" role="status">
+        {`Buffered ${describeRanges(total)}; playhead ${time.toFixed(1)} s of ${duration.toFixed(1)} s`}
+      </p>
+      <p className="buffer-text" aria-hidden="true">
+        {`Buffered ${describeRanges(total)}; playhead ${time.toFixed(1)} s`}
+      </p>
+    </div>
+  );
+}
+
+function AbrLog({ entries }) {
+  return (
+    <div className="abr-log">
+      <h3>ABR decisions</h3>
+      {entries.length === 0 ? (
+        <p>No segments appended yet.</p>
+      ) : (
+        <div className="abr-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Segment</th>
+                <th scope="col">Rep</th>
+                <th scope="col">Measured</th>
+                <th scope="col">Buffer ahead</th>
+                <th scope="col">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.key}>
+                  <td>{entry.time.toFixed(1)} s</td>
+                  <td>{entry.segment}</td>
+                  <td>{entry.rep}</td>
+                  <td>{Math.round(entry.throughputBps / 1000)} kbps</td>
+                  <td>{entry.ahead.toFixed(1)} s</td>
+                  <td><span className={`abr-reason ${entry.reason.replace(" ", "-")}`}>{entry.reason}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -15,7 +15,7 @@ const { lessonOrder, lessonSections } = await import(pathToFileURL(join(lessonsD
 
 const requiredFields = ["slug", "title", "kind", "summary", "outcome", "reference"];
 const kinds = ["Theory", "Practical"];
-const allowedComponents = ["Snippet", "Diagram", "Demo", "Checkpoint", "Exercise", "Hint", "PlayerShowcase"];
+const allowedComponents = ["Snippet", "Diagram", "Demo", "Checkpoint", "Exercise", "Hint", "PlayerShowcase", "Question", "MpdExplorer"];
 
 const errors = [];
 const warnings = [];
@@ -137,7 +137,9 @@ function checkLesson(fileSlug, source) {
     const props = readAttributes(node, where, problems);
     errors.push(...problems);
     if (name === "Snippet") checkSnippet(where, props, node);
-    else if (name === "Checkpoint") checkCheckpoint(where, props);
+    else if (name === "Question") {
+      if (typeof props.prompt !== "string" || !props.prompt.trim()) errors.push(`${where}: Question needs a non-empty prompt`);
+    } else if (name === "Checkpoint") checkCheckpoint(where, props);
   });
 }
 

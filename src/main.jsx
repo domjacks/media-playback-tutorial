@@ -9,7 +9,8 @@ import {
   ExternalLink,
   FlaskConical,
   Play,
-  ShieldCheck
+  ShieldCheck,
+  Undo2
 } from "lucide-react";
 import { MDXProvider } from "@mdx-js/react";
 import { lessons, sections } from "./lessons/index.js";
@@ -31,7 +32,7 @@ function App() {
   const [progress, setProgress] = useState(readProgress);
   const activeIndex = Math.max(0, lessons.findIndex((lesson) => lesson.slug === slug));
   const lesson = lessons[activeIndex] ?? lessons[0];
-  const completedCount = Object.values(progress).filter(Boolean).length;
+  const completedCount = lessons.filter((item) => progress[item.slug]).length;
 
   useEffect(() => {
     const onHashChange = () => setSlug(location.hash.replace("#/", "") || lessons[0].slug);
@@ -49,9 +50,9 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [lesson.slug]);
 
-  function markComplete() {
+  function toggleComplete() {
     setProgress((current) => {
-      const next = { ...current, [lesson.slug]: true };
+      const next = { ...current, [lesson.slug]: !current[lesson.slug] };
       localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     });
@@ -73,7 +74,7 @@ function App() {
         <LessonNav activeSlug={lesson.slug} activeSection={lesson.section} progress={progress} />
       </aside>
       <main className="lesson-page">
-        <Lesson lesson={lesson} index={activeIndex} onComplete={markComplete} progress={progress} />
+        <Lesson lesson={lesson} index={activeIndex} onToggleComplete={toggleComplete} progress={progress} />
       </main>
     </div>
   );
@@ -82,9 +83,11 @@ function App() {
 function LessonNav({ activeSlug, activeSection, progress }) {
   const [expanded, setExpanded] = useState(() => new Set([activeSection]));
 
-  useEffect(() => {
-    setExpanded((current) => (current.has(activeSection) ? current : new Set(current).add(activeSection)));
-  }, [activeSection]);
+  const [seenSection, setSeenSection] = useState(activeSection);
+  if (seenSection !== activeSection) {
+    setSeenSection(activeSection);
+    if (!expanded.has(activeSection)) setExpanded(new Set(expanded).add(activeSection));
+  }
 
   function toggle(title) {
     setExpanded((current) => {
@@ -140,9 +143,10 @@ function LessonNav({ activeSlug, activeSection, progress }) {
   );
 }
 
-function Lesson({ lesson, index, onComplete, progress }) {
+function Lesson({ lesson, index, onToggleComplete, progress }) {
   const previous = lessons[index - 1];
   const next = lessons[index + 1];
+  const completed = Boolean(progress[lesson.slug]);
   const Icon = lesson.kind === "Theory" ? BookOpen : lesson.slug === "drm-practical" ? ShieldCheck : FlaskConical;
 
   return (
@@ -152,8 +156,14 @@ function Lesson({ lesson, index, onComplete, progress }) {
         <h1>{lesson.title}</h1>
         <p>{lesson.summary}</p>
         <div className="hero-actions">
-          <button className="primary" onClick={onComplete}>
-            <Check size={18} /> Mark complete
+          <button
+            type="button"
+            className={`primary${completed ? " is-complete" : ""}`}
+            aria-pressed={completed}
+            onClick={onToggleComplete}
+          >
+            {completed ? <Undo2 size={18} /> : <Check size={18} />}
+            {completed ? "Mark incomplete" : "Mark complete"}
           </button>
           <a className="secondary" href={lesson.reference} target="_blank" rel="noreferrer">
             <ExternalLink size={18} /> Reference

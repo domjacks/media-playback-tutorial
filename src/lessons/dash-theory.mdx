@@ -84,6 +84,10 @@ SegmentBase
 
 DASH timing values are often integers in a timescale, not seconds. If duration is 100000 and timescale is 25000, each segment is four seconds. The player converts those values into seconds when deciding what media time a segment covers.
 
+Try the numbers yourself: change the template, timescale or duration below and watch the segment URLs and times update.
+
+<MpdExplorer />
+
 The startNumber tells the player which segment number to request first. For VOD, mediaPresentationDuration lets a simple player estimate how many segments to request. For live, the available segment numbers move over time, which is why live support needs additional rules.
 
 - segmentSeconds = duration / timescale.
