@@ -1,38 +1,61 @@
 ---
 slug: "introduction"
-title: "What You Will Build"
+title: "What This Course Covers"
 kind: "Theory"
-summary: "An interactive tutorial to help learn the fundamentals of media playback. Follow the theory and and then implement a basic MSE-based DASH player."
-outcome: "You understand the learning path and how each theory topic supports the player you will build."
+summary: "A practical course on how media playback works, for software engineers. It moves from pixels and samples through codecs, containers, MSE, DASH, HLS, live and low-latency streaming, delivery, subtitles and DRM, building and inspecting real players along the way."
+outcome: "You know what each section of the course covers, how theory and practical lessons fit together, and what you need installed before you start."
 reference: "https://developer.mozilla.org/en-US/docs/Web/Media"
 ---
 
-## The Destination
+## What This Course Is
 
-By the end of the tutorial you will have built a small browser media player from scratch. It will use the video element for presentation, Media Source Extensions for feeding media bytes, and a minimal DASH parser for discovering segments.
+This course teaches how media playback actually works, from the numbers that describe a single frame to the requests a streaming player makes every few seconds. It is written for software engineers: it assumes you can read JavaScript and use a terminal, but not that you know anything about video.
 
-The goal is not to recreate dash.js or a production player. The goal is to learn the browser APIs and the media concepts that those libraries normally hide.
+You learn by doing two things. You inspect real media files with FFmpeg and `ffprobe` until terms like GOP, `moov`, `tfdt` and edit list are things you have seen rather than things you have read about. Then you build small browser players, starting with a plain `<video>` element and ending with adaptive, live, low-latency, subtitled and encrypted playback.
 
-- First you will learn what video and audio actually describe.
-- Then you will learn how media files package encoded samples.
-- After that you will connect files, segments, manifests, buffers, and playback APIs.
+The goal is not to rebuild dash.js, hls.js or Shaka Player. It is to understand what those libraries do on your behalf, so you can choose one, configure it, and debug it when playback fails.
 
-<Diagram visual="timeline" />
+## The Route Through The Course
 
-## The Tutorial Arc
+The course has 41 lessons in 12 sections. Later sections build on earlier ones, so work through them in order.
 
-The early lessons are intentionally theory-heavy. MSE is easier to understand when you already know what a frame, codec, container, segment, timeline, and buffer mean.
+- **Getting Started:** this lesson.
+- **Media Fundamentals:** pixels, resolution, colour, frame rate and HDR; PCM audio, sample rate and channels; then a first FFmpeg lab.
+- **Codecs And Containers:** why raw video is huge and how H.264-style compression works; MP4 boxes, codec strings, fragmented MP4 and CMAF, and the timestamps that tie samples to time. Four labs inspect real encodes.
+- **Playback In The Browser:** the media element's timeline and buffers, progressive download, segments, and Media Source Extensions (MSE), from a first append to debugging and the full API.
+- **DASH And Adaptive Streaming:** HLS and DASH compared, reading an MPD, a DASH parser, adaptive bitrate, buffer management, seeking and eviction.
+- **HLS:** multivariant and media playlists, then an HLS player built on MSE.
+- **Decoding With WebCodecs:** demuxing samples yourself and decoding them without MSE.
+- **Live Streaming:** live edges and windows, DASH live timing and clock sync, and a live player.
+- **Delivery And Quality:** HTTP and CDNs, quality-of-experience metrics and CMCD, and low-latency streaming with chunked fetch.
+- **Subtitles:** WebVTT, TTML and IMSC, native text tracks and a custom renderer.
+- **Encrypted Media:** EME, Common Encryption and DRM systems, then a working ClearKey player.
+- **Wrap Up:** the in-app player that combines the pieces.
 
-The practical lessons build one browser ESM project step by step: first fixed MSE appends, then DASH VOD, then live refresh, subtitles, and an optional ClearKey DRM flow.
+## How The Lessons Work
 
-- Theory lessons explain the vocabulary before it appears in code.
-- Practical lessons keep the implementation small enough to inspect.
-- Each code sample is plain HTML and JavaScript modules that can run directly in a browser dev server.
+Lessons are marked Theory or Practical. Theory lessons explain the concepts and end with a prediction question: answer it before you reveal the answer. Practical lessons build on the theory before them.
 
-<Question prompt="The finished player is built from three pieces: the video element, Media Source Extensions and a minimal DASH parser. Which does each job (presenting, feeding bytes, discovering segments), and in what order do the practical lessons add capabilities?">
+Every practical lesson has a checkpoint: the complete code as it stands at the end of the lesson. The code in the lesson is taken from those files, so what you read is what runs.
 
-The video element presents the media, Media Source Extensions feeds it encoded bytes, and the DASH parser reads the manifest to discover which segments to request. The practical lessons start with fixed MSE appends, then add DASH VOD parsing, then live refresh, subtitles and an optional ClearKey DRM flow. The theory lessons come first so that terms like frame, codec, container, segment, timeline and buffer are familiar before they appear in code.
+- **Browser checkpoints** open from the lesson with "Open checkpoint". They are plain HTML and JavaScript modules with no build step.
+- **Lab checkpoints** are `lab.sh` scripts that run FFmpeg and `ffprobe`. They create a `lab/` folder in the directory you run them from.
+- **"You should now see"** lists what to check in the page, the console or DevTools before you move on.
+- **An exercise** with a hint closes each practical lesson.
+
+## What You Need
+
+- **A desktop browser that plays H.264 and AAC:** current Chrome, Edge, Safari or Firefox. Some Linux Chromium builds ship without these codecs and cannot play the course streams. The WebCodecs lessons need a browser with WebCodecs, and the DRM player needs `localhost` or HTTPS.
+- **FFmpeg 5 or later, with `ffprobe`,** for the labs. The labs were written against FFmpeg 8.
+- **A Bash shell** to run the lab scripts: Linux, macOS, or WSL on Windows.
+- **Node.js 20.19 or later** to run the site locally with `npm run dev`, and to run the box-walker script in the media timing lab.
+- **Optional:** Bento4 (`mp4dump`) or GPAC (`MP4Box`) to dump MP4 box trees. The labs skip those steps if neither is installed.
+- **Network access** to the public test streams: the BBC's Big Buck Bunny DASH stream, Apple's fMP4 HLS example, and the DASH-IF live simulator.
+
+<Question prompt="A player shows a black frame and never starts. Using the section list above, which three sections would you look to first, and what would you check from each?">
+
+Start with Playback In The Browser: check the media element's `readyState` and `error`, and whether `addSourceBuffer` or `appendBuffer` threw, because MSE failures stop playback before anything is decoded. Then Codecs And Containers: confirm the codec string the player declared matches the stream, and that an init segment was appended before any media segment. Then Delivery And Quality: look at the Network panel for failed or blocked segment requests, such as a 404 or a missing CORS header. Each section maps to a stage of the pipeline: fetch, then parse, then decode and present.
 
 </Question>
 
-<Demo title="Learning Path" mode="timeline">The tutorial moves from media concepts to browser APIs, then from hardcoded segments to manifest-driven streaming.</Demo>
+<Demo title="Learning Path" mode="timeline">The course moves from what media is, to how it is packaged, to how browsers play it, to how streaming services deliver it at scale.</Demo>
